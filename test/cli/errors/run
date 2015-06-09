@@ -1,0 +1,21 @@
+#!/bin/sh -eu
+
+. $(dirname $0)/../core/runner.sh
+
+banner invoke with errors
+#------------------------
+
+NAME="ABC"
+
+# <project> should not succeed and the return code should be 100
+echo "invoking project with "$NAME" should not succeed"
+$PROJECT $NAME || {
+  RESULT=$?
+
+  if [ $RESULT = 100 ]; then
+    exit_cleanup 0
+  else
+    echo "wrong error code: "$RESULT". Should be 100"
+    exit_cleanup $RESULT
+  fi
+}
