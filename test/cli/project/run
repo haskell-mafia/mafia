@@ -1,0 +1,22 @@
+#!/bin/sh -eu
+
+. $(dirname $0)/../core/runner.sh
+
+NAME="ABC"
+
+# do some setup
+echo "setup"
+
+banner invoke <project>
+#----------------------
+
+RESULT=`$PROJECT $NAME || exit_cleanup $?`
+
+if [ $RESULT == "$NAME" ]; then
+  echo "correct! "$RESULT
+else
+  echo "incorrect! "$RESULT
+  exit_cleanup 1
+fi
+
+exit_cleanup 0

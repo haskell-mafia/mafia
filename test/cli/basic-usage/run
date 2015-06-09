@@ -1,0 +1,35 @@
+#!/bin/sh -eu
+
+# The following should all work in "dry-run" mode. This is basically a
+# test-driver for the combination of command line parsers, and as
+# documentation of commands.
+
+
+PROJECT=${1:-./dist/build/project/project}
+
+banner () {
+    echo
+    echo == "$*" ==
+    echo
+}
+
+banner Display Version
+#---------------------
+
+$PROJECT -v
+
+$PROJECT --version
+
+banner Display Help
+#------------------
+
+$PROJECT -h
+
+$PROJECT --help
+
+PROJECT="$PROJECT --dry-run"
+
+banner do something
+#------------------
+
+$PROJECT NAME

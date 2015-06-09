@@ -1,0 +1,12 @@
+#!/bin/sh -exu
+
+export LC_COLLATE=en_US.UTF-8
+export LANG=en_US.UTF-8
+
+git submodule init
+git submodule sync
+git submodule update
+
+./cabal update
+./cabal build
+./cabal test --log=/dev/stdout
