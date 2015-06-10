@@ -54,7 +54,7 @@ data Command =
 
 renderCommand :: Command -> String
 renderCommand (CommandInputs name) =
-   show $
+   T.unpack $
     T.concat
     [ "CommandInputs("
     , "name=", name, ")"
