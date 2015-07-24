@@ -13,7 +13,7 @@ Commands:
                     across multiple source trees at once.
     watch           Watches filesystem for changes and stays running, compiles and gives quick feedback.
                     Similarly to quick needs an entrypoint.
-                    To run tests use '-T EXPR' i.e. '-T Test.Pure.tests'
+                    To run tests use '-T EXPR' i.e. './cabal watch test/test.hs -T Test.Pure.tests'
     demo            If this project has a demo application, this builds and runs it.
     exec            If this project has an executable, this builds and runs it.
     tags            Generate tags for this project.
@@ -60,24 +60,36 @@ initialize () {
         cabal sandbox ${SANDBOX:-} init
     }
 
-    [ ! -f "$project.submodules" ] || {
-        # submodules initialized if required, the "has it been done before" is pretty crude, but check is useful.
-        cat $project.submodules | while read submodule; do
-            if [ -d "$submodule" ]; then
-               find "$submodule" -maxdepth 2 -name \*.cabal
-            fi
-        done | grep -q . || (
-            cd $(git rev-parse --show-toplevel)
-            git submodule init
-            git submodule update
-        )
+    PROJECT_ROOT=$(git rev-parse --show-toplevel)
 
-        cat $project.submodules | while read submodule; do
-            if ! grep -q "${submodule}\"" ${SANDBOX_DIR}/add-source-timestamps; then
-                cabal sandbox add-source ${SANDBOX:-} "$submodule"
-            fi
-        done
+    # init any submodules that we need. Optional $project.submodules files.
+    MODULE_LIST=$(cd "$PROJECT_ROOT" && git submodule | grep "^-" | cut -d ' ' -f 2)
+    [ ! -f "$project.submodules" ] || {
+        MODULE_LIST=$(cat $project.submodules)
+        echo "Using $project.submodules, however this is now optional, You can remove this file if you like and it will be calculated for you."
     }
+    for submodule in $MODULE_LIST
+    do
+        if [ -d "$submodule" ]; then
+           find "$submodule" -maxdepth 2 -name \*.cabal
+        fi
+    done | grep -q . || (
+        cd $PROJECT_ROOT
+        git submodule update --init
+    )
+
+    # discover and add cabal sources
+    CABAL_SOURCES=$(cd "$PROJECT_ROOT" && find lib -maxdepth 4 ! -path "lib/*/bin/*" -name \*.cabal | xargs -L 1 dirname)
+    [ ! -f "$project.submodules" ] || {
+        CABAL_SOURCES=$MODULE_LIST
+    }
+    for submodule in $CABAL_SOURCES;
+    do
+        if ! grep -q "${submodule}\"" ${SANDBOX_DIR}/add-source-timestamps; then
+            cabal sandbox add-source ${SANDBOX:-} "$submodule"
+        fi
+    done
+
 
     # all dependencies installed, and configure been run?
     cabal install -j --only-dependencies --force-reinstalls --enable-tests
@@ -146,7 +158,7 @@ run_quick () {
 run_watch () {
     command -v ghcid >/dev/null 2>&1 || { echo >&2 "ghcid required not installed. To install: create a fresh cabal sandbox, cabal install ghcid and add to your \$PATH."; exit 1; }
     initialize
-    [ $# -ge 1 ] || fail "Watch requires atleast one argument, specifying the entry point you want to load."
+    [ $# -ge 1 ] || fail "Watch requires at least one argument, specifying the entry point you want to load."
     [ -f "$1" ] || fail "The entry point does not exist."
     [ ! -d src ] || SRC_DIRS="-isrc"
     [ ! -d test ] || SRC_DIRS="${SRC_DIRS:-} -itest"
@@ -321,3 +333,4 @@ case "$MODE" in
 build|test|repl|quick|tags|lint|update|clean|depend|watch|upgrade) run_$MODE "$@" ;;
 *) fail "Unknown mode: $MODE"
 esac
+# Version: 4b1e8dd46040f08f813dec9e792a8d9db44a03b1
