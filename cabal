@@ -8,6 +8,8 @@ usage () {
 Commands:
     build           Build this project, including all executables and test suites.
     test            Test this project, by default this runs all test suites.
+    testci          Test this project, but process control characters (\b, \r) which
+                    reposition the cursor, prior to emitting each line of output.
     repl            Start the repl, by default on the the main library source.
     quick           Start the repl directly skipping cabal, this is useful developing
                     across multiple source trees at once.
@@ -62,34 +64,46 @@ initialize () {
 
     PROJECT_ROOT=$(git rev-parse --show-toplevel)
 
-    # init any submodules that we need. Optional $project.submodules files.
-    MODULE_LIST=$(cd "$PROJECT_ROOT" && git submodule | grep "^-" | cut -d ' ' -f 2)
-    [ ! -f "$project.submodules" ] || {
-        MODULE_LIST=$(cat $project.submodules)
-        echo "Using $project.submodules, however this is now optional, You can remove this file if you like and it will be calculated for you."
-    }
-    for submodule in $MODULE_LIST
-    do
-        if [ -d "$submodule" ]; then
-           find "$submodule" -maxdepth 2 -name \*.cabal
-        fi
-    done | grep -q . || (
-        cd $PROJECT_ROOT
-        git submodule update --init
-    )
+    # init any submodules that we need. Don't worry about explicit submodules
+    # file here, we just want to trust git to tell us things that haven't been
+    # initialized, we really _don't_ want to run this just because a module is
+    # dirty from development changes etc...
 
-    # discover and add cabal sources
-    CABAL_SOURCES=$(cd "$PROJECT_ROOT" && find lib -maxdepth 4 ! -path "lib/*/bin/*" -name \*.cabal | xargs -L 1 dirname)
-    [ ! -f "$project.submodules" ] || {
-        CABAL_SOURCES=$MODULE_LIST
-    }
-    for submodule in $CABAL_SOURCES;
-    do
-        if ! grep -q "${submodule}\"" ${SANDBOX_DIR}/add-source-timestamps; then
-            cabal sandbox add-source ${SANDBOX:-} "$submodule"
-        fi
+    UNINITIALIZED=$(cd "$PROJECT_ROOT" && git submodule | grep "^-" | cut -d ' ' -f 2)
+    for submodule in $UNINITIALIZED; do
+        (cd "$PROJECT_ROOT" && git submodule update --init $submodule) || exit $?
     done
 
+    # if there is an explicit submodules file, then use it (hysterical
+    # raisins, compatability or something...), otherwise auto-magicically
+    # discover the sources from the lib directory.
+
+    if [ -f "$project.submodules" ]; then
+        CABAL_SOURCES=$(cat $project.submodules)
+        echo "Using $project.submodules, however this is now optional, You can remove this file if you like and it will be calculated for you."
+    else
+        CABAL_SOURCES=$(cd "$PROJECT_ROOT" && find lib -maxdepth 4 ! -path "lib/*/bin/*" ! -path "lib/*/lib/*" -name \*.cabal | xargs -L 1 dirname)
+    fi
+
+    # Remove any cabal sources that are no longer available
+
+    for source in $(cabal sandbox list-sources | tail -n +4 | sed '$d' | sed '$d'); do
+      source_path=$(echo $source | sed s#$(pwd)/##)
+      if ! $(echo "${CABAL_SOURCES}" | grep -q "${source_path}"); then
+        echo "${source_path} no longer exists - removing from the sandbox"
+        cabal sandbox delete-source "$source" 1> /dev/null
+      fi
+    done
+
+    # We add-sources only if they haven't been added before. We should also
+    # remove them if they aren't needed, but @charleso has promised to do this
+    # so for now we live in anticipation.
+
+    for submodule in $CABAL_SOURCES; do
+        if ! grep -q "${submodule}\"" ${SANDBOX_DIR}/add-source-timestamps; then
+            cabal sandbox add-source ${SANDBOX:-} "$PROJECT_ROOT/$submodule"
+        fi
+    done
 
     # all dependencies installed, and configure been run?
     cabal install -j --only-dependencies --force-reinstalls --enable-tests
@@ -110,6 +124,56 @@ run_build () {
 run_test () {
     initialize
     cabal test --show-details=streaming "$@"
+}
+
+#
+# Cabal test for CI build bots.
+#
+run_testci () {
+    # Create a temporary directory which will be deleted when the script
+    # terminates. Unfortunately `mktemp` doesn't behave the same on
+    # Linux and OS/X so we need to try two different approaches.
+    CABAL_EXTRAS_TEMP=$(mktemp -d 2>/dev/null || mktemp -d -t 'cabal-extras')
+    trap "rm -rf $CABAL_EXTRAS_TEMP" EXIT
+
+    # Write out a haskell program which performs the control character
+    # processing.
+    UNCTL=$CABAL_EXTRAS_TEMP/unctl.hs
+    cat << EOF > $UNCTL
+import System.IO
+
+main :: IO ()
+main = do
+    hSetBuffering stdin  LineBuffering
+    hSetBuffering stdout LineBuffering
+    interact (go [])
+  where
+    go :: [Char] -- ^ current line
+       -> [Char] -- ^ stdin
+       -> [Char] -- ^ stdout
+
+    -- backspace - delete previous character
+    go (_ : line) ('\b' : xs) = go line xs
+    go []         ('\b' : xs) = go []   xs
+
+    -- carriage return - delete the whole line
+    go _          ('\r' : xs) = go []   xs
+
+    -- line feed - emit the current line
+    go line       ('\n' : xs) = reverse ('\n' : line) ++ go [] xs
+
+    -- normal character - add to current line
+    go line       (x    : xs) = go (x : line) xs
+
+    -- end of stream - emit the current line
+    go line       []          = line
+EOF
+
+    # Run the tests, but fix up their output before emitting it.
+    PIPE=$CABAL_EXTRAS_TEMP/testci.pipe
+    mkfifo $PIPE
+    runghc $UNCTL < $PIPE &
+    run_test "$@" > $PIPE
 }
 
 #
@@ -148,6 +212,7 @@ run_quick () {
     [ -f "$1" ] || fail "The entry point does not exist."
     [ ! -d src ] || SRC_DIRS="-isrc"
     [ ! -d test ] || SRC_DIRS="${SRC_DIRS:-} -itest"
+    [ ! -d gen ] || SRC_DIRS="${SRC_DIRS:-} -igen"
     [ ! -d dist/build/autogen ] || SRC_DIRS="${SRC_DIRS:-} -idist/build/autogen"
     ghci -package-db=$(find .cabal-sandbox -name '*-packages.conf.d') ${SRC_DIRS:-} "$1"
 }
@@ -162,6 +227,7 @@ run_watch () {
     [ -f "$1" ] || fail "The entry point does not exist."
     [ ! -d src ] || SRC_DIRS="-isrc"
     [ ! -d test ] || SRC_DIRS="${SRC_DIRS:-} -itest"
+    [ ! -d gen ] || SRC_DIRS="${SRC_DIRS:-} -igen"
     [ ! -d dist/build/autogen ] || SRC_DIRS="${SRC_DIRS:-} -idist/build/autogen"
     ENTRY=$1
     shift
@@ -330,7 +396,7 @@ esac
 
 MODE="$1"; shift
 case "$MODE" in
-build|test|repl|quick|tags|lint|update|clean|depend|watch|upgrade) run_$MODE "$@" ;;
+build|test|testci|repl|quick|tags|lint|update|clean|depend|watch|upgrade) run_$MODE "$@" ;;
 *) fail "Unknown mode: $MODE"
 esac
-# Version: 4b1e8dd46040f08f813dec9e792a8d9db44a03b1
+# Version: fb83ed7a2f70e6b1b0547118c1dc515021ff024d
