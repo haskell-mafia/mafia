@@ -1,4 +1,4 @@
-name:                  project
+name:                  ambiata-project
 version:               0.0.1
 license:               AllRightsReserved
 author:                Ambiata <info@ambiata.com>
@@ -13,22 +13,20 @@ description:           project
 library
   build-depends:
                       base                            >= 3          && < 5
-                    , attoparsec                      == 0.12.*
+                    , ambiata-p
                     , either                          >= 4.4.1      && < 4.5
-                    , p
-                    , text
+                    , text                            == 1.2.*
 
   ghc-options:
                     -Wall
 
   hs-source-dirs:
-                    src
+                    src gen
 
   exposed-modules:
-                    Paths_project
+                    Paths_ambiata_project
+                    BuildInfo_ambiata_project
                     Project
-                    Project.Data
-                    Project.Error
 
 executable project
   ghc-options:
@@ -39,11 +37,11 @@ executable project
 
   build-depends:
                       base
-                    , project
+                    , ambiata-project
+                    , ambiata-p
+                    , ambiata-x-optparse
                     , optparse-applicative            == 0.11.*
-                    , p
                     , text
-                    , x-optparse
 
 
 test-suite test
@@ -61,10 +59,10 @@ test-suite test
 
   build-depends:
                       base                            >= 3          && < 5
-                    , project
-                    , disorder-core
-                    , disorder-corpus
-                    , p
+                    , ambiata-project
+                    , ambiata-disorder-core
+                    , ambiata-disorder-corpus
+                    , ambiata-p
                     , QuickCheck                      == 2.7.*
                     , quickcheck-instances            == 0.3.*
 
@@ -83,10 +81,10 @@ test-suite test-io
 
   build-depends:
                       base                            >= 3          && < 5
-                    , project
-                    , disorder-core
-                    , disorder-corpus
-                    , p
+                    , ambiata-project
+                    , ambiata-disorder-core
+                    , ambiata-disorder-corpus
+                    , ambiata-p
                     , text
                     , QuickCheck                      == 2.7.*
                     , quickcheck-instances            == 0.3.*
@@ -106,5 +104,5 @@ test-suite test-cli
 
   build-depends:
                       base                            >= 3          && < 5
-                    , project
-                    , disorder-core
+                    , ambiata-project
+                    , ambiata-disorder-core
