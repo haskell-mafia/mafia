@@ -1,10 +1,7 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-import           BuildInfo_project
-
-import           Data.String
-import qualified Data.Text as T
+import           BuildInfo_ambiata_project
 
 import           Options.Applicative
 
@@ -20,59 +17,22 @@ main = do
   hSetBuffering stderr LineBuffering
   dispatch parser >>= \sc ->
     case sc of
-      Version ->
+      VersionCommand ->
         putStrLn buildInfoVersion >> exitSuccess
       RunCommand DryRun c ->
-        print (renderCommand c) >> exitSuccess
+        print c >> exitSuccess
       RunCommand RealRun c ->
         run c
 
+parser :: Parser (SafeCommand Command)
+parser =
+  safeCommand $ pure Command
+
 run :: Command -> IO ()
 run c = case c of
-  CommandInputs name ->
-    putStrLn (T.unpack name)
-
-
--------------
--- DATA TYPES
--------------
-
--- | This application can be run for real
--- | or just return a description of what it is about to do
-data RunType =
-  DryRun | RealRun
-  deriving (Eq, Show)
-
-data SafeCommand =
-  Version
-  | RunCommand RunType Command
-  deriving (Eq, Show)
+  Command ->
+    putStrLn "*implement me*" >> exitFailure
 
 data Command =
-  CommandInputs T.Text
+  Command
   deriving (Eq, Show)
-
-renderCommand :: Command -> String
-renderCommand (CommandInputs name) =
-   T.unpack $
-    T.concat
-    [ "CommandInputs("
-    , "name=", name, ")"
-    ]
-
-
-----------
--- PARSERS
-----------
-
-parser :: Parser SafeCommand
-parser =
-  Version <$ flag' () (short 'v' <> long "version" <> help "Version information")
-  <|> RunCommand <$> flag RealRun DryRun (long "dry-run" <> hidden) <*> commandP'
-
-commandP' :: Parser Command
-commandP' = CommandInputs <$> name'
-
-name' :: Parser T.Text
-name'= fmap T.pack $ argument str $
-     metavar "VIEW-NAME"

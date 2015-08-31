@@ -20,25 +20,31 @@ main :: IO ()
 main =
   let hooks = simpleUserHooks
    in defaultMainWithHooks hooks {
-     buildHook = \pd lbi uh flags -> do
-       genBuildInfo (fromFlag $ buildVerbosity flags) pd lbi
+     preConf = \args flags -> do
+       createDirectoryIfMissingVerbose silent True "gen"
+       (preConf hooks) args flags
+   , sDistHook  = \pd mlbi uh flags -> do
+       genBuildInfo silent pd
+       (sDistHook hooks) pd mlbi uh flags
+   , buildHook = \pd lbi uh flags -> do
+       genBuildInfo (fromFlag $ buildVerbosity flags) pd
        (buildHook hooks) pd lbi uh flags
    , replHook = \pd lbi uh flags args -> do
-       genBuildInfo (fromFlag $ replVerbosity flags) pd lbi
+       genBuildInfo (fromFlag $ replVerbosity flags) pd
        (replHook hooks) pd lbi uh flags args
    , testHook = \args pd lbi uh flags -> do
-       genBuildInfo (fromFlag $ testVerbosity flags) pd lbi
+       genBuildInfo (fromFlag $ testVerbosity flags) pd
        (testHook hooks) args pd lbi uh flags
    }
 
-genBuildInfo :: Verbosity -> PackageDescription -> LocalBuildInfo -> IO ()
-genBuildInfo verbosity pkg info = do
-  createDirectoryIfMissingVerbose verbosity True (autogenModulesDir info)
+genBuildInfo :: Verbosity -> PackageDescription -> IO ()
+genBuildInfo verbosity pkg = do
+  createDirectoryIfMissingVerbose verbosity True "gen"
   let (PackageName pname) = pkgName . package $ pkg
       version = pkgVersion . package $ pkg
       name = "BuildInfo_" ++ (map (\c -> if c == '-' then '_' else c) pname)
-      targetHs = autogenModulesDir info </> name <.> "hs"
-      targetText = autogenModulesDir info </> "version.txt"
+      targetHs = "gen" </> name <.> "hs"
+      targetText = "gen" </> "version.txt"
   t <- timestamp
   gv <- gitVersion
   let v = showVersion version
