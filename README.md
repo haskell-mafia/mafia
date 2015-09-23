@@ -3,6 +3,7 @@ mafia
 
 > Provides protection against cabal swindling, robbing, injuring or sabotaging people with chopsticks.
 
+![mafia](img/mafia.jpg)
 
 Overview
 --------
