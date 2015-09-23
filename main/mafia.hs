@@ -1,7 +1,7 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-import           BuildInfo_ambiata_project
+import           BuildInfo_ambiata_mafia
 
 import           Options.Applicative
 
