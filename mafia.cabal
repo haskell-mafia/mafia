@@ -1,10 +1,10 @@
-name:                  ambiata-project
+name:                  ambiata-mafia
 version:               0.0.1
 license:               AllRightsReserved
 author:                Ambiata <info@ambiata.com>
 maintainer:            Ambiata <info@ambiata.com>
 copyright:             (c) 2015 Ambiata.
-synopsis:              project
+synopsis:              mafia
 category:              System
 cabal-version:         >= 1.8
 build-type:            Custom
@@ -24,20 +24,20 @@ library
                     src gen
 
   exposed-modules:
-                    Paths_ambiata_project
-                    BuildInfo_ambiata_project
+                    Paths_ambiata_mafia
+                    BuildInfo_ambiata_mafia
                     Project
 
-executable project
+executable mafia
   ghc-options:
                     -Wall -threaded -O2
 
   main-is:
-                    main/project.hs
+                    main/mafia.hs
 
   build-depends:
                       base
-                    , ambiata-project
+                    , ambiata-mafia
                     , ambiata-p
                     , ambiata-x-optparse
                     , optparse-applicative            == 0.11.*
@@ -59,9 +59,9 @@ test-suite test
 
   build-depends:
                       base                            >= 3          && < 5
-                    , ambiata-project
                     , ambiata-disorder-core
                     , ambiata-disorder-corpus
+                    , ambiata-mafia
                     , ambiata-p
                     , QuickCheck                      == 2.7.*
                     , quickcheck-instances            == 0.3.*
@@ -81,13 +81,13 @@ test-suite test-io
 
   build-depends:
                       base                            >= 3          && < 5
-                    , ambiata-project
                     , ambiata-disorder-core
                     , ambiata-disorder-corpus
+                    , ambiata-mafia
                     , ambiata-p
-                    , text
                     , QuickCheck                      == 2.7.*
                     , quickcheck-instances            == 0.3.*
+                    , text                            == 1.2.*
 
 test-suite test-cli
   type:
@@ -104,5 +104,5 @@ test-suite test-cli
 
   build-depends:
                       base                            >= 3          && < 5
-                    , ambiata-project
                     , ambiata-disorder-core
+                    , ambiata-mafia
