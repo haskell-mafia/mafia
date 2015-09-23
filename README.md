@@ -9,3 +9,5 @@ Overview
 --------
 
 `mafia` is an opinionated wrapper for `cabal` that makes working on Ambiata Haskell projects fun and easy.
+
+![godfather](img/godfather.jpg)
