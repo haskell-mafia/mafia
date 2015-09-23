@@ -8,7 +8,7 @@ synopsis:              mafia
 category:              System
 cabal-version:         >= 1.8
 build-type:            Custom
-description:           project
+description:           mafia
 
 library
   build-depends:
@@ -26,7 +26,7 @@ library
   exposed-modules:
                     Paths_ambiata_mafia
                     BuildInfo_ambiata_mafia
-                    Project
+                    Mafia
 
 executable mafia
   ghc-options:
