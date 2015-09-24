@@ -7,8 +7,11 @@ import           BuildInfo_ambiata_mafia
 
 import           Control.Monad.IO.Class (liftIO)
 
+import           Data.Set (Set)
+import qualified Data.Set as Set
 import           Data.Text (Text)
 import qualified Data.Text as T
+import qualified Data.Text.IO as T
 
 import           Mafia.IO
 import           Mafia.Path
@@ -89,15 +92,25 @@ renderViolation = \case
 -- brute force wins.
 initialize :: EitherT MafiaViolation IO ()
 initialize = do
-    _ <- initSandbox
     initSubmodules
+    syncCabalSources
+
+    cabal_ "install" [ "-j"
+                     , "--only-dependencies"
+                     , "--force-reinstalls"
+                     , "--enable-tests"
+                     , "--enable-benchmarks" ]
+
+    cabal_ "configure" [ "--enable-tests"
+                       , "--enable-benchmarks" ]
 
 ------------------------------------------------------------------------
 
 type ProjectName = Text
 
 getProjectRoot :: EitherT MafiaViolation IO File
-getProjectRoot = T.strip . unOut <$> call ProcessError "git" ["rev-parse", "--show-toplevel"]
+getProjectRoot =
+  T.strip . unOut <$> call ProcessError "git" ["rev-parse", "--show-toplevel"]
 
 getProjectName :: EitherT MafiaViolation IO ProjectName
 getProjectName = EitherT $ do
@@ -114,24 +127,106 @@ getProjectName = EitherT $ do
 
 ------------------------------------------------------------------------
 
+syncCabalSources :: EitherT MafiaViolation IO ()
+syncCabalSources = do
+  installed <- getSandboxSources
+  required  <- getSubmoduleSources
+  addSandboxSources    (required `Set.difference` installed)
+  removeSandboxSources (installed `Set.difference` required)
+
+addSandboxSources :: Set Directory -> EitherT MafiaViolation IO ()
+addSandboxSources = mapM_ add . Set.toList
+  where
+    add dir = do
+      liftIO (T.hPutStrLn stderr ("Adding " <> dir))
+      sandbox_ "add-source" [dir]
+
+removeSandboxSources :: Set Directory -> EitherT MafiaViolation IO ()
+removeSandboxSources = mapM_ delete . Set.toList
+  where
+    delete dir = do
+      -- TODO Unregister packages contained in this source dir
+      liftIO (T.hPutStrLn stderr ("Removing " <> dir))
+      sandbox_ "delete-source" [dir]
+
+getSandboxSources :: EitherT MafiaViolation IO (Set Directory)
+getSandboxSources = do
+  Out sources <- sandbox "list-sources" []
+  return . Set.fromList
+         . reverse
+         . drop 2
+         . reverse
+         . drop 3
+         . T.lines
+         $ sources
+
+getSubmoduleSources :: EitherT MafiaViolation IO (Set Directory)
+getSubmoduleSources = Set.union <$> getConfiguredSources
+                                <*> getConventionSources
+
+getConfiguredSources :: EitherT MafiaViolation IO (Set Directory)
+getConfiguredSources = do
+  root <- getProjectRoot
+  name <- getProjectName
+  cfg  <- readText (name <> ".submodules")
+  return . Set.fromList
+         . fmap (root </>)
+         . T.lines
+         . fromMaybe T.empty
+         $ cfg
+
+getConventionSources :: EitherT MafiaViolation IO (Set Directory)
+getConventionSources = do
+  root <- getProjectRoot
+
+  let lib = root </> "lib/"
+  entries <- getDirectoryListing (RecursiveDepth 4) lib
+
+  return . Set.fromList
+         . fmap   (lib </>)
+         . fmap   (takeDirectory)
+         . filter (not . T.isInfixOf "/lib/")
+         . filter (not . T.isInfixOf "/bin/")
+         . filter (extension ".cabal")
+         . fmap   (T.drop (T.length lib))
+         $ entries
+
+------------------------------------------------------------------------
+
 -- Sandbox initialized if required, this should support sandboxes in parent
 -- directories.
 initSandbox :: EitherT MafiaViolation IO File
 initSandbox = do
   name <- getProjectName
 
-  let sandboxFile = name <> ".sandbox"
-  custom <- liftIO (doesFileExist sandboxFile)
-
-  sandboxDir <- case custom of
-    True  -> liftIO (readText sandboxFile)
-    False -> return ".cabal-sandbox"
+  sandboxDir <- fromMaybe ".cabal-sandbox"
+            <$> liftIO (readText (name <> ".sandbox"))
 
   showtime <- liftIO (doesDirectoryExist sandboxDir)
   unless showtime $
     call_ ProcessError "cabal" ["sandbox", "--sandbox", sandboxDir, "init"]
 
   return sandboxDir
+
+------------------------------------------------------------------------
+
+cabal :: ProcessResult a => Argument -> [Argument] -> EitherT MafiaViolation IO a
+cabal cmd args = call ProcessError "cabal" (cmd : args)
+
+cabal_ :: Argument -> [Argument] -> EitherT MafiaViolation IO ()
+cabal_ cmd args = do
+  Pass <- cabal cmd args
+  return ()
+
+sandbox :: ProcessResult a => Argument -> [Argument] -> EitherT MafiaViolation IO a
+sandbox cmd args = do
+  sandboxDir <- initSandbox
+  cabal "sandbox" $ ["--sandbox", sandboxDir] <> (cmd:args)
+
+sandbox_ :: Argument -> [Argument] -> EitherT MafiaViolation IO ()
+sandbox_ cmd args = do
+  Pass <- sandbox cmd args
+  return ()
 
 ------------------------------------------------------------------------
 

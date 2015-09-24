@@ -52,6 +52,7 @@ executable mafia
                     , ambiata-p
                     , ambiata-x-either
                     , ambiata-x-optparse
+                    , containers                      == 0.5.*
                     , directory                       == 1.2.*
                     , filepath                        == 1.4.*
                     , optparse-applicative            == 0.11.*

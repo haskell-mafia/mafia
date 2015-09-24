@@ -1,8 +1,11 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 module Mafia.IO
   ( -- * Directory Operations
-    getDirectoryContents
+    ListingOptions(..)
+  , getDirectoryListing
+  , getDirectoryContents
 
     -- * Existence Tests
   , doesFileExist
@@ -30,15 +33,37 @@ import           P
 import qualified System.Directory as Directory
 
 ------------------------------------------------------------------------
--- Filesystem Operations
+-- Directory Operations
 
-getDirectoryContents :: MonadIO m => Directory -> m [File]
+data ListingOptions = Recursive | RecursiveDepth Int
+  deriving (Eq, Ord, Show)
+
+getDirectoryListing :: MonadIO m => ListingOptions -> Directory -> m [Path]
+getDirectoryListing options path = do
+    entries    <- fmap (path </>) `liftM` getDirectoryContents path
+    subEntries <- mapM down entries
+    return (concat (entries : subEntries))
+  where
+    down entry = do
+      isDir <- doesDirectoryExist entry
+      if isDir
+         then getDirectoryListing options' entry
+         else return []
+
+    options' = case options of
+      Recursive        -> Recursive
+      RecursiveDepth n -> RecursiveDepth (n-1)
+
+getDirectoryContents :: MonadIO m => Directory -> m [Path]
 getDirectoryContents path = liftIO $ do
   entries <- Directory.getDirectoryContents (T.unpack path)
   let interesting x = not (x == "." || x == "..")
   return . filter interesting
          . fmap T.pack
          $ entries
+
+------------------------------------------------------------------------
+-- Existence Tests
 
 doesFileExist :: MonadIO m => File -> m Bool
 doesFileExist path = liftIO (Directory.doesFileExist (T.unpack path))
@@ -49,14 +74,22 @@ doesDirectoryExist path = liftIO (Directory.doesDirectoryExist (T.unpack path))
 ------------------------------------------------------------------------
 -- File I/O
 
-readText :: MonadIO m => File -> m Text
-readText path = liftIO (T.readFile (T.unpack path))
+readText :: MonadIO m => File -> m (Maybe Text)
+readText path = liftIO $ do
+  exists <- doesFileExist path
+  case exists of
+    False -> return Nothing
+    True  -> Just `liftM` T.readFile (T.unpack path)
 
 writeText :: MonadIO m => File -> Text -> m ()
 writeText path text = liftIO (T.writeFile (T.unpack path) text)
 
-readBytes :: MonadIO m => File -> m ByteString
-readBytes path = liftIO (B.readFile (T.unpack path))
+readBytes :: MonadIO m => File -> m (Maybe ByteString)
+readBytes path = liftIO $ do
+  exists <- doesFileExist path
+  case exists of
+    False -> return Nothing
+    True  -> Just `liftM` B.readFile (T.unpack path)
 
 writeBytes :: MonadIO m => File -> ByteString -> m ()
 writeBytes path bytes = liftIO (B.writeFile (T.unpack path) bytes)
