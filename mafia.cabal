@@ -14,8 +14,16 @@ library
   build-depends:
                       base                            >= 3          && < 5
                     , ambiata-p
-                    , either                          >= 4.4.1      && < 4.5
+                    , ambiata-x-either
+                    , bytestring                      == 0.10.*
+                    , containers                      == 0.5.*
+                    , directory                       == 1.2.*
+                    , exceptions                      == 0.8.*
+                    , filepath                        == 1.4.*
+                    , process                         == 1.2.*
                     , text                            == 1.2.*
+                    , transformers                    == 0.4.*
+                    , unix                            == 2.7.*
 
   ghc-options:
                     -Wall
@@ -27,6 +35,9 @@ library
                     Paths_ambiata_mafia
                     BuildInfo_ambiata_mafia
                     Mafia
+                    Mafia.IO
+                    Mafia.Path
+                    Mafia.Process
 
 executable mafia
   ghc-options:
@@ -39,9 +50,13 @@ executable mafia
                       base
                     , ambiata-mafia
                     , ambiata-p
+                    , ambiata-x-either
                     , ambiata-x-optparse
+                    , directory                       == 1.2.*
+                    , filepath                        == 1.4.*
                     , optparse-applicative            == 0.11.*
-                    , text
+                    , text                            == 1.2.*
+                    , transformers                    == 0.4.*
 
 
 test-suite test
