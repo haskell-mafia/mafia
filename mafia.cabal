@@ -22,6 +22,7 @@ library
                     , filepath                        == 1.4.*
                     , process                         == 1.2.*
                     , text                            == 1.2.*
+                    , time                            == 1.4.*
                     , transformers                    == 0.4.*
                     , unix                            == 2.7.*
 
@@ -54,6 +55,7 @@ executable mafia
                     , ambiata-x-optparse
                     , containers                      == 0.5.*
                     , directory                       == 1.2.*
+                    , exceptions                      == 0.8.*
                     , filepath                        == 1.4.*
                     , optparse-applicative            == 0.11.*
                     , text                            == 1.2.*

@@ -8,6 +8,7 @@ module Mafia.Path
 
     -- * Filename/directory functions
   , (</>)
+  , takeFileName
   , takeDirectory
 
     -- * Extension functions
@@ -35,6 +36,9 @@ type Directory = Path
 
 (</>) :: Path -> Path -> Path
 (</>) x y = T.pack (T.unpack x FilePath.</> T.unpack y)
+
+takeFileName :: Path -> File
+takeFileName = T.pack . FilePath.takeFileName . T.unpack
 
 takeDirectory :: Path -> Directory
 takeDirectory = T.pack . FilePath.takeDirectory . T.unpack

@@ -14,6 +14,7 @@ module Mafia.Process
 
     -- * Outputs
   , Pass(..)
+  , Hush(..)
   , Out(..)
   , Err(..)
   , OutErr(..)
@@ -26,6 +27,8 @@ module Mafia.Process
   , call_
   , callFrom
   , callFrom_
+  , exec
+  , execFrom
   ) where
 
 import           Control.Concurrent (forkIO)
@@ -38,17 +41,20 @@ import           Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as B
 import           Data.Map (Map)
 import qualified Data.Map as Map
+import           Data.String (String)
 import           Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 
 import           Mafia.Path (File, Directory)
+import           Mafia.IO (setCurrentDirectory)
 
 import           P
 
 import           System.Exit (ExitCode(..))
-import           System.IO (IO)
+import           System.IO (IO, FilePath)
 import qualified System.Process as Process
+import qualified System.Posix.Process as Posix
 
 import           X.Control.Monad.Trans.Either (EitherT(..))
 import           X.Control.Monad.Trans.Either (firstEitherT, hoistEither)
@@ -70,6 +76,10 @@ data Process = Process
 
 -- | Pass @stdout@ and @stderr@ through to the console.
 data Pass = Pass
+  deriving (Eq, Ord, Show)
+
+-- | Capture @stdout@ and @stderr@ but ignore them.
+data Hush = Hush
   deriving (Eq, Ord, Show)
 
 -- | Capture @stdout@ and pass @stderr@ through to the console.
@@ -148,6 +158,11 @@ instance ProcessResult (OutErr ByteString) where
 
     return (code, OutErr out err)
 
+instance ProcessResult Hush where
+  callProcess p = do
+    OutErr (_ :: ByteString) (_ :: ByteString) <- callProcess p
+    return Hush
+
 instance ProcessResult (Out Text) where
   callProcess p = fmap T.decodeUtf8 <$> callProcess p
 
@@ -159,7 +174,7 @@ instance ProcessResult (OutErr Text) where
 
 ------------------------------------------------------------------------
 
--- | Call a process with arguments.
+-- | Call a command with arguments.
 --
 call :: (ProcessResult a, Functor m, MonadIO m, MonadCatch m)
      => (ProcessError -> e)
@@ -174,7 +189,7 @@ call up cmd args = firstEitherT up (callProcess process)
                       , processDirectory   = Nothing
                       , processEnvironment = Nothing }
 
--- | Call a process with arguments, passing the output through to stdout/stderr.
+-- | Call a command with arguments, passing the output through to stdout/stderr.
 --
 call_ :: (Functor m, MonadIO m, MonadCatch m)
       => (ProcessError -> e)
@@ -186,7 +201,7 @@ call_ up cmd args = do
   Pass <- call up cmd args
   return ()
 
--- | Call a process with arguments from inside a working directory.
+-- | Call a command with arguments from inside a working directory.
 --
 callFrom :: (ProcessResult a, Functor m, MonadIO m, MonadCatch m)
          => (ProcessError -> e)
@@ -202,7 +217,7 @@ callFrom up dir cmd args = firstEitherT up (callProcess process)
                       , processDirectory   = Just dir
                       , processEnvironment = Nothing }
 
--- | Call a process with arguments from inside a working directory.
+-- | Call a command with arguments from inside a working directory.
 --
 callFrom_ :: (Functor m, MonadIO m, MonadCatch m)
           => (ProcessError -> e)
@@ -214,6 +229,52 @@ callFrom_ :: (Functor m, MonadIO m, MonadCatch m)
 callFrom_ up dir cmd args = do
   Pass <- callFrom up dir cmd args
   return ()
+
+------------------------------------------------------------------------
+
+-- | Execute a process, this call never returns.
+--
+execProcess :: (MonadIO m, MonadCatch m) => Process -> EitherT ProcessError m a
+execProcess p = handle onError $ do
+    case processDirectory p of
+      Nothing  -> return ()
+      Just dir -> setCurrentDirectory dir
+    liftIO (Posix.executeFile cmd True args env)
+  where
+    (cmd, args, _, env) = fromProcess' p
+
+    onError (e :: IOException) = hoistEither (Left (ProcessException p e))
+
+-- | Execute a command with arguments, this call never returns.
+--
+exec :: (Functor m, MonadIO m, MonadCatch m)
+     => (ProcessError -> e)
+     -> File
+     -> [Argument]
+     -> EitherT e m a
+
+exec up cmd args = firstEitherT up (execProcess process)
+  where
+    process = Process { processCommand     = cmd
+                      , processArguments   = args
+                      , processDirectory   = Nothing
+                      , processEnvironment = Nothing }
+
+-- | Execute a command with arguments, this call never returns.
+--
+execFrom :: (Functor m, MonadIO m, MonadCatch m)
+         => (ProcessError -> e)
+         -> Directory
+         -> File
+         -> [Argument]
+         -> EitherT e m a
+
+execFrom up dir cmd args = firstEitherT up (execProcess process)
+  where
+    process = Process { processCommand     = cmd
+                      , processArguments   = args
+                      , processDirectory   = Just dir
+                      , processEnvironment = Nothing }
 
 ------------------------------------------------------------------------
 
@@ -241,6 +302,11 @@ fromProcess p = Process.CreateProcess
     , Process.close_fds     = False
     , Process.create_group  = False
     , Process.delegate_ctlc = False }
+  where
+    (cmd, args, cwd, env) = fromProcess' p
+
+fromProcess' :: Process -> (FilePath, [String], Maybe FilePath, Maybe [(String, String)])
+fromProcess' p = (cmd, args, cwd, env)
   where
     cmd  = T.unpack (processCommand p)
     args = fmap T.unpack (processArguments p)

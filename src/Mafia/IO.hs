@@ -6,16 +6,26 @@ module Mafia.IO
     ListingOptions(..)
   , getDirectoryListing
   , getDirectoryContents
+  , createDirectoryIfMissing
+  , setCurrentDirectory
 
     -- * Existence Tests
   , doesFileExist
   , doesDirectoryExist
+
+    -- * Timestamps
+  , getModificationTime
 
     -- * File Operations
   , readText
   , readBytes
   , writeText
   , writeBytes
+  , removeFile
+  , copyFile
+
+   -- * Environment
+  , findExecutable
   ) where
 
 import           Control.Monad.IO.Class (MonadIO(..))
@@ -25,6 +35,7 @@ import qualified Data.ByteString as B
 import           Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
+import           Data.Time (UTCTime)
 
 import           Mafia.Path
 
@@ -62,6 +73,13 @@ getDirectoryContents path = liftIO $ do
          . fmap T.pack
          $ entries
 
+createDirectoryIfMissing :: MonadIO m => Bool -> Directory -> m ()
+createDirectoryIfMissing parents dir =
+  liftIO (Directory.createDirectoryIfMissing parents (T.unpack dir))
+
+setCurrentDirectory :: MonadIO m => Directory -> m ()
+setCurrentDirectory dir = liftIO (Directory.setCurrentDirectory (T.unpack dir))
+
 ------------------------------------------------------------------------
 -- Existence Tests
 
@@ -70,6 +88,12 @@ doesFileExist path = liftIO (Directory.doesFileExist (T.unpack path))
 
 doesDirectoryExist :: MonadIO m => Directory -> m Bool
 doesDirectoryExist path = liftIO (Directory.doesDirectoryExist (T.unpack path))
+
+------------------------------------------------------------------------
+-- Timestamps
+
+getModificationTime :: MonadIO m => File -> m UTCTime
+getModificationTime path = liftIO (Directory.getModificationTime (T.unpack path))
 
 ------------------------------------------------------------------------
 -- File I/O
@@ -93,3 +117,17 @@ readBytes path = liftIO $ do
 
 writeBytes :: MonadIO m => File -> ByteString -> m ()
 writeBytes path bytes = liftIO (B.writeFile (T.unpack path) bytes)
+
+removeFile :: MonadIO m => File -> m ()
+removeFile path = liftIO (Directory.removeFile (T.unpack path))
+
+copyFile :: MonadIO m => File -> File -> m ()
+copyFile src dst = liftIO (Directory.copyFile (T.unpack src) (T.unpack dst))
+
+------------------------------------------------------------------------
+-- Environment
+
+findExecutable :: MonadIO m => Text -> m (Maybe File)
+findExecutable name = liftIO $ do
+  path <- Directory.findExecutable (T.unpack name)
+  return (fmap T.pack path)

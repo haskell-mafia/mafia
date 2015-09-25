@@ -2,11 +2,15 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+-- {-# OPTIONS_GHC -w #-}
 
 import           BuildInfo_ambiata_mafia
 
+import           Control.Exception (IOException)
+import           Control.Monad.Catch (handle)
 import           Control.Monad.IO.Class (liftIO)
 
+import qualified Data.Map as Map
 import           Data.Set (Set)
 import qualified Data.Set as Set
 import           Data.Text (Text)
@@ -45,16 +49,54 @@ main = do
 ------------------------------------------------------------------------
 
 data MafiaCommand
-  = MafiaCommand
+  = MafiaBuild [Argument]
+  | MafiaQuick File
+  | MafiaWatch File [Argument]
   deriving (Eq, Show)
 
-parser :: Parser (SafeCommand MafiaCommand)
-parser =
-  safeCommand $ pure MafiaCommand
-
 run :: MafiaCommand -> EitherT MafiaViolation IO ()
-run c = case c of
-  MafiaCommand -> initialize
+run = \case
+  MafiaBuild args       -> build args
+  MafiaQuick entry      -> quick entry
+  MafiaWatch entry args -> watch entry args
+
+parser :: Parser (SafeCommand MafiaCommand)
+parser = safeCommand . subparser . mconcat $ commands
+
+commands :: [Mod CommandFields MafiaCommand]
+commands =
+ [ command' "build" "Build this project, including all executables and test suites."
+            (MafiaBuild <$> many pCabalArgs)
+
+ , command' "quick" ( "Start the repl directly skipping cabal, this is useful "
+                   <> "developing across multiple source trees at once." )
+            (MafiaQuick <$> pGhciEntryPoint)
+
+ , command' "watch" ( "Watches filesystem for changes and stays running, compiles "
+                   <> "and gives quick feedback. "
+                   <> "Similarly to quick needs an entrypoint. "
+                   <> "To run tests use '-T EXPR' i.e. "
+                   <> "mafia watch test/test.hs -- -T Test.Pure.tests" )
+            (MafiaWatch <$> pGhciEntryPoint <*> many pGhcidArgs)
+ ]
+
+pGhciEntryPoint :: Parser File
+pGhciEntryPoint =
+  argument textRead $
+       metavar "FILE"
+    <> help "The entry point for GHCi."
+
+pCabalArgs :: Parser Argument
+pCabalArgs =
+  argument textRead $
+       metavar "CABAL_ARGUMENTS"
+    <> help "Extra arguments to pass on to cabal."
+
+pGhcidArgs :: Parser Argument
+pGhcidArgs =
+  argument textRead $
+       metavar "GHCID_ARGUMENTS"
+    <> help "Extra arguments to pass on to ghcid."
 
 ------------------------------------------------------------------------
 
@@ -63,6 +105,9 @@ data MafiaViolation
   | MultipleProjectsFound [ProjectName]
   | ProcessError ProcessError
   | ParseError Text
+  | CacheSyncError SyncAction IOException
+  | EntryPointNotFound File
+  | GhcidNotInstalled
   deriving (Eq, Show)
 
 renderViolation :: MafiaViolation -> Text
@@ -85,6 +130,59 @@ renderViolation = \case
   ParseError msg
    -> "Parse failed: " <> msg
 
+  CacheSyncError sync ex
+   -> "Cache sync failed: " <> T.pack (show sync)
+   <> "\n" <> T.pack (show ex)
+
+  EntryPointNotFound path
+   -> "GHCi entry point not found: " <> path
+
+  GhcidNotInstalled
+   -> "ghcid is not installed."
+   <> "\nTo install:"
+   <> "\n - create a fresh cabal sandbox"
+   <> "\n - cabal install ghcid"
+   <> "\n - add to your $PATH"
+
+------------------------------------------------------------------------
+
+build :: [Argument] -> EitherT MafiaViolation IO ()
+build args = do
+  initialize
+  cabal_ "build" $ ["--ghc-option=-Werror"] <> args
+
+quick :: File -> EitherT MafiaViolation IO ()
+quick path = do
+  args <- ghciArgs path
+  exec ProcessError "ghci" args
+
+watch :: File -> [Argument] -> EitherT MafiaViolation IO ()
+watch path extraArgs = do
+  Hush <- call (const GhcidNotInstalled) "ghcid" ["--help"]
+  args <- ghciArgs path
+  exec ProcessError "ghcid" $ [ "-c", T.unwords ("ghci" : args) ] <> extraArgs
+
+ghciArgs :: File -> EitherT MafiaViolation IO [Argument]
+ghciArgs path = do
+  exists <- doesFileExist path
+  case exists of
+    False -> hoistEither (Left (EntryPointNotFound path))
+    True  -> do
+      initialize
+      includes  <- catMaybes <$> mapM checkExist [ "src", "test", "gen", "dist/build/autogen" ]
+      databases <- getPackageDatabases
+
+      return $ [ "-no-user-package-db" ]
+            <> (fmap ("-i" <>)           includes)
+            <> (fmap ("-package-db=" <>) databases)
+            <> [ path ]
+  where
+    checkExist dir = do
+      exists <- doesDirectoryExist dir
+      case exists of
+        False -> return Nothing
+        True  -> return (Just dir)
+
 ------------------------------------------------------------------------
 
 -- Initialize things for a build. This can be made faster by being
@@ -92,17 +190,18 @@ renderViolation = \case
 -- brute force wins.
 initialize :: EitherT MafiaViolation IO ()
 initialize = do
-    initSubmodules
-    syncCabalSources
+    result <- syncCache
+    when (result == CacheUpdated) $ do
+      cabal_ "install" [ "-j"
+                       , "--only-dependencies"
+                       , "--force-reinstalls"
+                       , "--enable-tests"
+                       , "--enable-benchmarks"
+                       , "--reorder-goals"
+                       , "--max-backjumps=-1" ]
 
-    cabal_ "install" [ "-j"
-                     , "--only-dependencies"
-                     , "--force-reinstalls"
-                     , "--enable-tests"
-                     , "--enable-benchmarks" ]
-
-    cabal_ "configure" [ "--enable-tests"
-                       , "--enable-benchmarks" ]
+      cabal_ "configure" [ "--enable-tests"
+                         , "--enable-benchmarks" ]
 
 ------------------------------------------------------------------------
 
@@ -127,6 +226,85 @@ getProjectName = EitherT $ do
 
 ------------------------------------------------------------------------
 
+data CacheStatus
+  = UpToDate
+  | CacheUpdated
+  deriving (Eq, Ord, Show)
+
+data SyncAction
+  = Delete File
+  | Copy   File File
+  deriving (Eq, Ord, Show)
+
+-- Synchronizes the cache of .cabal files and returns the actions it used to do
+-- the synchronization - if the list is empty you can assume
+syncCache :: EitherT MafiaViolation IO CacheStatus
+syncCache = do
+    initSubmodules
+    syncCabalSources
+
+    allSrcs  <- Set.toList <$> getSandboxSources
+    srcs     <- mkMap . concat <$> mapM findCabal allSrcs
+    cacheDir <- getCacheDir
+    dsts     <- mkMap <$> getDirectoryListing (RecursiveDepth 0) cacheDir
+
+    let mkCopy = copyTo cacheDir
+        delete = fmap Delete (Map.elems (dsts `Map.difference` srcs))
+        copy   = fmap mkCopy (Map.elems (srcs `Map.difference` dsts))
+
+    update <- sequence (Map.elems (Map.intersectionWith syncAction srcs dsts))
+
+    let actions = delete <> copy <> catMaybes update
+
+    mapM_ runSyncAction actions
+
+    case actions of
+      [] -> return UpToDate
+      _  -> return CacheUpdated
+  where
+    findCabal dir = filter (extension ".cabal")
+                <$> getDirectoryListing (RecursiveDepth 0) dir
+
+    mkMap = Map.fromList
+          . fmap (\path -> (takeFileName path, path))
+
+    copyTo cacheDir src = Copy src (cacheDir </> takeFileName src)
+
+runSyncAction :: SyncAction -> EitherT MafiaViolation IO ()
+runSyncAction sync = handle onError $
+  case sync of
+    Delete file
+     -> do liftIO (T.hPutStrLn stderr ("Cache: Removing " <> file))
+           removeFile file
+
+    Copy src dst
+     -> do liftIO (T.hPutStrLn stderr ("Cache: Copying " <> src <> " -> " <> dst))
+           copyFile src dst
+  where
+    onError (ex :: IOException) = hoistEither (Left (CacheSyncError sync ex))
+
+syncAction :: File -> File -> EitherT MafiaViolation IO (Maybe SyncAction)
+syncAction src dst = do
+  src_exist <- doesFileExist src
+  dst_exist <- doesFileExist dst
+  case (src_exist, dst_exist) of
+    (False, False) -> return (Nothing)
+    (False, True)  -> return (Just (Delete dst))
+    (True,  False) -> return (Just (Copy src dst))
+    (True,  True)  -> do
+      src_time  <- getModificationTime src
+      dst_time  <- getModificationTime dst
+      case src_time == dst_time of
+        True  -> return (Nothing)
+        False -> do
+          src_bytes <- readBytes src
+          dst_bytes <- readBytes dst
+          case src_bytes == dst_bytes of
+            True  -> return (Nothing)
+            False -> return (Just (Copy src dst))
+
+------------------------------------------------------------------------
+
 syncCabalSources :: EitherT MafiaViolation IO ()
 syncCabalSources = do
   installed <- getSandboxSources
@@ -138,7 +316,7 @@ addSandboxSources :: Set Directory -> EitherT MafiaViolation IO ()
 addSandboxSources = mapM_ add . Set.toList
   where
     add dir = do
-      liftIO (T.hPutStrLn stderr ("Adding " <> dir))
+      liftIO (T.hPutStrLn stderr ("Sandbox: Adding " <> dir))
       sandbox_ "add-source" [dir]
 
 removeSandboxSources :: Set Directory -> EitherT MafiaViolation IO ()
@@ -146,7 +324,7 @@ removeSandboxSources = mapM_ delete . Set.toList
   where
     delete dir = do
       -- TODO Unregister packages contained in this source dir
-      liftIO (T.hPutStrLn stderr ("Removing " <> dir))
+      liftIO (T.hPutStrLn stderr ("Sandbox: Removing " <> dir))
       sandbox_ "delete-source" [dir]
 
 getSandboxSources :: EitherT MafiaViolation IO (Set Directory)
@@ -195,8 +373,8 @@ getConventionSources = do
 
 -- Sandbox initialized if required, this should support sandboxes in parent
 -- directories.
-initSandbox :: EitherT MafiaViolation IO File
-initSandbox = do
+getSandboxDir :: EitherT MafiaViolation IO Directory
+getSandboxDir = do
   name <- getProjectName
 
   sandboxDir <- fromMaybe ".cabal-sandbox"
@@ -207,6 +385,19 @@ initSandbox = do
     call_ ProcessError "cabal" ["sandbox", "--sandbox", sandboxDir, "init"]
 
   return sandboxDir
+
+getPackageDatabases :: EitherT MafiaViolation IO [Directory]
+getPackageDatabases = do
+    sandboxDir <- getSandboxDir
+    filter isPackage <$> getDirectoryListing Recursive sandboxDir
+  where
+    isPackage = ("-packages.conf.d" `T.isSuffixOf`)
+
+getCacheDir :: EitherT MafiaViolation IO Directory
+getCacheDir = do
+  cacheDir <- (</> "mafia") <$> getSandboxDir
+  createDirectoryIfMissing False cacheDir
+  return cacheDir
 
 ------------------------------------------------------------------------
 
@@ -220,7 +411,7 @@ cabal_ cmd args = do
 
 sandbox :: ProcessResult a => Argument -> [Argument] -> EitherT MafiaViolation IO a
 sandbox cmd args = do
-  sandboxDir <- initSandbox
+  sandboxDir <- getSandboxDir
   cabal "sandbox" $ ["--sandbox", sandboxDir] <> (cmd:args)
 
 sandbox_ :: Argument -> [Argument] -> EitherT MafiaViolation IO ()
