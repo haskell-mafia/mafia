@@ -8,6 +8,7 @@ module Mafia.IO
   , getDirectoryContents
   , createDirectoryIfMissing
   , setCurrentDirectory
+  , getCurrentDirectory
 
     -- * Existence Tests
   , doesFileExist
@@ -79,6 +80,9 @@ createDirectoryIfMissing parents dir =
 
 setCurrentDirectory :: MonadIO m => Directory -> m ()
 setCurrentDirectory dir = liftIO (Directory.setCurrentDirectory (T.unpack dir))
+
+getCurrentDirectory :: MonadIO m => m Directory
+getCurrentDirectory = T.pack `liftM` liftIO Directory.getCurrentDirectory
 
 ------------------------------------------------------------------------
 -- Existence Tests

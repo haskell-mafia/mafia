@@ -243,7 +243,10 @@ syncCache = do
     initSubmodules
     syncCabalSources
 
-    allSrcs  <- Set.toList <$> getSandboxSources
+    currentDir  <- getCurrentDirectory
+    sandboxSrcs <- Set.toList <$> getSandboxSources
+    let allSrcs = currentDir : sandboxSrcs
+
     srcs     <- mkMap . concat <$> mapM findCabal allSrcs
     cacheDir <- getCacheDir
     dsts     <- mkMap <$> getDirectoryListing (RecursiveDepth 0) cacheDir
