@@ -358,16 +358,21 @@ getConventionSources = do
   root <- getProjectRoot
 
   let lib = root </> "lib/"
-  entries <- getDirectoryListing (RecursiveDepth 4) lib
+  exists <- doesDirectoryExist lib
 
-  return . Set.fromList
-         . fmap   (lib </>)
-         . fmap   (takeDirectory)
-         . filter (not . T.isInfixOf "/lib/")
-         . filter (not . T.isInfixOf "/bin/")
-         . filter (extension ".cabal")
-         . fmap   (T.drop (T.length lib))
-         $ entries
+  case exists of
+    False -> return Set.empty
+    True  -> do
+      entries <- getDirectoryListing (RecursiveDepth 4) lib
+      return . Set.fromList
+             . fmap   (lib </>)
+             . fmap   (takeDirectory)
+             . filter (not . T.isInfixOf ".cabal-sandbox")
+             . filter (not . T.isInfixOf "/lib/")
+             . filter (not . T.isInfixOf "/bin/")
+             . filter (extension ".cabal")
+             . fmap   (T.drop (T.length lib))
+             $ entries
 
 ------------------------------------------------------------------------
 
