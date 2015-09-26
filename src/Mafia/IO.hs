@@ -51,6 +51,7 @@ data ListingOptions = Recursive | RecursiveDepth Int
   deriving (Eq, Ord, Show)
 
 getDirectoryListing :: MonadIO m => ListingOptions -> Directory -> m [Path]
+getDirectoryListing (RecursiveDepth n) _ | n < 0 = return []
 getDirectoryListing options path = do
     entries    <- fmap (path </>) `liftM` getDirectoryContents path
     subEntries <- mapM down entries
