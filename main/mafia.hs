@@ -10,6 +10,7 @@ import           Control.Exception (IOException)
 import           Control.Monad.Catch (handle)
 import           Control.Monad.IO.Class (liftIO)
 
+import qualified Data.List as List
 import qualified Data.Map as Map
 import           Data.Set (Set)
 import qualified Data.Set as Set
@@ -105,7 +106,7 @@ data MafiaViolation
   | MultipleProjectsFound [ProjectName]
   | ProcessError ProcessError
   | ParseError Text
-  | CacheSyncError SyncAction IOException
+  | CacheUpdateError CacheUpdate IOException
   | EntryPointNotFound File
   | GhcidNotInstalled
   deriving (Eq, Show)
@@ -130,7 +131,7 @@ renderViolation = \case
   ParseError msg
    -> "Parse failed: " <> msg
 
-  CacheSyncError sync ex
+  CacheUpdateError sync ex
    -> "Cache sync failed: " <> T.pack (show sync)
    <> "\n" <> T.pack (show ex)
 
@@ -190,8 +191,12 @@ ghciArgs path = do
 -- brute force wins.
 initialize :: EitherT MafiaViolation IO ()
 initialize = do
-    result <- syncCache
-    when (result == CacheUpdated) $ do
+    updates <- determineCacheUpdates
+    when (updates /= []) $ do
+      -- we want to know up front why we're doing an install/configure
+      let sortedUpdates = List.sort updates
+      mapM_ putUpdateReason sortedUpdates
+
       cabal_ "install" [ "-j"
                        , "--only-dependencies"
                        , "--force-reinstalls"
@@ -202,6 +207,10 @@ initialize = do
 
       cabal_ "configure" [ "--enable-tests"
                          , "--enable-benchmarks" ]
+
+      -- but we don't want to commit the modified .cabal files
+      -- until we're done, in case an error occurs
+      mapM_ runCacheUpdate sortedUpdates
 
 ------------------------------------------------------------------------
 
@@ -226,20 +235,13 @@ getProjectName = EitherT $ do
 
 ------------------------------------------------------------------------
 
-data CacheStatus
-  = UpToDate
-  | CacheUpdated
-  deriving (Eq, Ord, Show)
-
-data SyncAction
+data CacheUpdate
   = Delete File
-  | Copy   File File
+  | Update File File
   deriving (Eq, Ord, Show)
 
--- Synchronizes the cache of .cabal files and returns the actions it used to do
--- the synchronization - if the list is empty you can assume
-syncCache :: EitherT MafiaViolation IO CacheStatus
-syncCache = do
+determineCacheUpdates :: EitherT MafiaViolation IO [CacheUpdate]
+determineCacheUpdates = do
     initSubmodules
     syncCabalSources
 
@@ -251,19 +253,14 @@ syncCache = do
     cacheDir <- getCacheDir
     dsts     <- mkMap <$> getDirectoryListing (RecursiveDepth 0) cacheDir
 
-    let mkCopy = copyTo cacheDir
-        delete = fmap Delete (Map.elems (dsts `Map.difference` srcs))
-        copy   = fmap mkCopy (Map.elems (srcs `Map.difference` dsts))
+    let mkUpdate src = Update src (cacheDir </> takeFileName src)
 
-    update <- sequence (Map.elems (Map.intersectionWith syncAction srcs dsts))
+        stale = fmap Delete   (Map.elems (dsts `Map.difference` srcs))
+        fresh = fmap mkUpdate (Map.elems (srcs `Map.difference` dsts))
 
-    let actions = delete <> copy <> catMaybes update
+    update <- sequence (Map.elems (Map.intersectionWith cacheUpdate srcs dsts))
 
-    mapM_ runSyncAction actions
-
-    case actions of
-      [] -> return UpToDate
-      _  -> return CacheUpdated
+    return (stale <> fresh <> catMaybes update)
   where
     findCabal dir = filter (extension ".cabal")
                 <$> getDirectoryListing (RecursiveDepth 0) dir
@@ -271,29 +268,32 @@ syncCache = do
     mkMap = Map.fromList
           . fmap (\path -> (takeFileName path, path))
 
-    copyTo cacheDir src = Copy src (cacheDir </> takeFileName src)
-
-runSyncAction :: SyncAction -> EitherT MafiaViolation IO ()
-runSyncAction sync = handle onError $
+putUpdateReason :: CacheUpdate -> EitherT MafiaViolation IO ()
+putUpdateReason sync =
   case sync of
     Delete file
-     -> do liftIO (T.hPutStrLn stderr ("Cache: Removing " <> file))
-           removeFile file
+     -> do liftIO (T.hPutStrLn stderr ("Cache: Removed " <> takeFileName file))
 
-    Copy src dst
-     -> do liftIO (T.hPutStrLn stderr ("Cache: Copying " <> src <> " -> " <> dst))
-           copyFile src dst
+    Update src _
+     -> do rel <- makeRelativeToCurrentDirectory src
+           liftIO (T.hPutStrLn stderr ("Cache: Modified " <> rel))
+
+runCacheUpdate :: CacheUpdate -> EitherT MafiaViolation IO ()
+runCacheUpdate sync = handle onError $
+  case sync of
+    Delete file    -> removeFile file
+    Update src dst -> copyFile src dst
   where
-    onError (ex :: IOException) = hoistEither (Left (CacheSyncError sync ex))
+    onError (ex :: IOException) = hoistEither (Left (CacheUpdateError sync ex))
 
-syncAction :: File -> File -> EitherT MafiaViolation IO (Maybe SyncAction)
-syncAction src dst = do
+cacheUpdate :: File -> File -> EitherT MafiaViolation IO (Maybe CacheUpdate)
+cacheUpdate src dst = do
   src_exist <- doesFileExist src
   dst_exist <- doesFileExist dst
   case (src_exist, dst_exist) of
     (False, False) -> return (Nothing)
     (False, True)  -> return (Just (Delete dst))
-    (True,  False) -> return (Just (Copy src dst))
+    (True,  False) -> return (Just (Update src dst))
     (True,  True)  -> do
       src_time  <- getModificationTime src
       dst_time  <- getModificationTime dst
@@ -304,7 +304,7 @@ syncAction src dst = do
           dst_bytes <- readBytes dst
           case src_bytes == dst_bytes of
             True  -> return (Nothing)
-            False -> return (Just (Copy src dst))
+            False -> return (Just (Update src dst))
 
 ------------------------------------------------------------------------
 
