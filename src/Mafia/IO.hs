@@ -86,9 +86,11 @@ setCurrentDirectory dir = liftIO (Directory.setCurrentDirectory (T.unpack dir))
 getCurrentDirectory :: MonadIO m => m Directory
 getCurrentDirectory = T.pack `liftM` liftIO Directory.getCurrentDirectory
 
-makeRelativeToCurrentDirectory :: MonadIO m => Path -> m Path
-makeRelativeToCurrentDirectory path =
-  T.pack `liftM` liftIO (Directory.makeRelativeToCurrentDirectory (T.unpack path))
+makeRelativeToCurrentDirectory :: MonadIO m => Path -> m (Maybe Path)
+makeRelativeToCurrentDirectory path = do
+  current <- getCurrentDirectory
+  absPath <- T.pack `liftM` liftIO (Directory.makeAbsolute (T.unpack path))
+  return (makeRelative current absPath)
 
 ------------------------------------------------------------------------
 -- Existence Tests

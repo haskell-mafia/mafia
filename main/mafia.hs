@@ -279,7 +279,7 @@ putUpdateReason sync =
      -> do liftIO (T.hPutStrLn stderr ("Cache: Removed " <> takeFileName file))
 
     Update src _
-     -> do rel <- makeRelativeToCurrentDirectory src
+     -> do rel <- fromMaybe src <$> makeRelativeToCurrentDirectory src
            liftIO (T.hPutStrLn stderr ("Cache: Modified " <> rel))
 
 runCacheUpdate :: CacheUpdate -> EitherT MafiaViolation IO ()
@@ -323,15 +323,17 @@ addSandboxSources :: Set Directory -> EitherT MafiaViolation IO ()
 addSandboxSources = mapM_ add . Set.toList
   where
     add dir = do
-      liftIO (T.hPutStrLn stderr ("Sandbox: Adding " <> dir))
+      rel <- fromMaybe dir <$> makeRelativeToCurrentDirectory dir
+      liftIO (T.hPutStrLn stderr ("Sandbox: Adding " <> rel))
       sandbox_ "add-source" [dir]
 
 removeSandboxSources :: Set Directory -> EitherT MafiaViolation IO ()
 removeSandboxSources = mapM_ delete . Set.toList
   where
     delete dir = do
+      rel <- fromMaybe dir <$> makeRelativeToCurrentDirectory dir
+      liftIO (T.hPutStrLn stderr ("Sandbox: Removing " <> rel))
       -- TODO Unregister packages contained in this source dir
-      liftIO (T.hPutStrLn stderr ("Sandbox: Removing " <> dir))
       sandbox_ "delete-source" [dir]
 
 getSandboxSources :: EitherT MafiaViolation IO (Set Directory)
