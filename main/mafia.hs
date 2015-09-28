@@ -2,15 +2,15 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
--- {-# OPTIONS_GHC -w #-}
 
 import           BuildInfo_ambiata_mafia
 
 import           Control.Exception (IOException)
 import           Control.Monad.Catch (handle)
-import           Control.Monad.IO.Class (liftIO)
+import           Control.Monad.IO.Class (MonadIO(..))
 
 import qualified Data.List as List
+import           Data.Map (Map)
 import qualified Data.Map as Map
 import           Data.Set (Set)
 import qualified Data.Set as Set
@@ -170,19 +170,22 @@ ghciArgs path = do
     False -> hoistEither (Left (EntryPointNotFound path))
     True  -> do
       initialize
-      includes  <- catMaybes <$> mapM checkExist [ "src", "test", "gen", "dist/build/autogen" ]
+
+      let dirs = ["src", "test", "gen", "dist/build/autogen"]
+      includes  <- catMaybes <$> mapM ensureDirectory dirs
       databases <- getPackageDatabases
 
       return $ [ "-no-user-package-db" ]
             <> (fmap ("-i" <>)           includes)
             <> (fmap ("-package-db=" <>) databases)
             <> [ path ]
-  where
-    checkExist dir = do
-      exists <- doesDirectoryExist dir
-      case exists of
-        False -> return Nothing
-        True  -> return (Just dir)
+
+ensureDirectory :: MonadIO m => Directory -> m (Maybe Directory)
+ensureDirectory dir = do
+  exists <- doesDirectoryExist dir
+  case exists of
+    False -> return Nothing
+    True  -> return (Just dir)
 
 ------------------------------------------------------------------------
 
@@ -249,9 +252,9 @@ determineCacheUpdates = do
     sandboxSrcs <- Set.toList <$> getSandboxSources
     let allSrcs = currentDir : sandboxSrcs
 
-    srcs     <- mkMap . concat <$> mapM findCabal allSrcs
+    srcs     <- mkFileMap . concat <$> mapM findCabal allSrcs
     cacheDir <- getCacheDir
-    dsts     <- mkMap <$> getDirectoryListing (RecursiveDepth 0) cacheDir
+    dsts     <- mkFileMap <$> getDirectoryListing (RecursiveDepth 0) cacheDir
 
     let mkUpdate src = Update src (cacheDir </> takeFileName src)
 
@@ -261,12 +264,13 @@ determineCacheUpdates = do
     update <- sequence (Map.elems (Map.intersectionWith cacheUpdate srcs dsts))
 
     return (stale <> fresh <> catMaybes update)
-  where
-    findCabal dir = filter (extension ".cabal")
-                <$> getDirectoryListing (RecursiveDepth 0) dir
 
-    mkMap = Map.fromList
-          . fmap (\path -> (takeFileName path, path))
+findCabal :: MonadIO m => Directory -> m [Path]
+findCabal dir = filter (extension ".cabal")
+        `liftM` getDirectoryListing (RecursiveDepth 0) dir
+
+mkFileMap :: [Path] -> Map File Path
+mkFileMap = Map.fromList . fmap (\path -> (takeFileName path, path))
 
 putUpdateReason :: CacheUpdate -> EitherT MafiaViolation IO ()
 putUpdateReason sync =
@@ -333,11 +337,13 @@ removeSandboxSources = mapM_ delete . Set.toList
 getSandboxSources :: EitherT MafiaViolation IO (Set Directory)
 getSandboxSources = do
   Out sources <- sandbox "list-sources" []
+
+  let dropHeader = drop 3
+      dropFooter = reverse . drop 2 . reverse
+
   return . Set.fromList
-         . reverse
-         . drop 2
-         . reverse
-         . drop 3
+         . dropFooter
+         . dropHeader
          . T.lines
          $ sources
 
