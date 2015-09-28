@@ -316,25 +316,21 @@ syncCabalSources :: EitherT MafiaViolation IO ()
 syncCabalSources = do
   installed <- getSandboxSources
   required  <- getSubmoduleSources
-  addSandboxSources    (required `Set.difference` installed)
-  removeSandboxSources (installed `Set.difference` required)
+  traverse_ addSandboxSource    (required `Set.difference` installed)
+  traverse_ removeSandboxSource (installed `Set.difference` required)
 
-addSandboxSources :: Set Directory -> EitherT MafiaViolation IO ()
-addSandboxSources = mapM_ add . Set.toList
-  where
-    add dir = do
-      rel <- fromMaybe dir <$> makeRelativeToCurrentDirectory dir
-      liftIO (T.hPutStrLn stderr ("Sandbox: Adding " <> rel))
-      sandbox_ "add-source" [dir]
+addSandboxSource :: Directory -> EitherT MafiaViolation IO ()
+addSandboxSource dir = do
+  rel <- fromMaybe dir <$> makeRelativeToCurrentDirectory dir
+  liftIO (T.hPutStrLn stderr ("Sandbox: Adding " <> rel))
+  sandbox_ "add-source" [dir]
 
-removeSandboxSources :: Set Directory -> EitherT MafiaViolation IO ()
-removeSandboxSources = mapM_ delete . Set.toList
-  where
-    delete dir = do
-      rel <- fromMaybe dir <$> makeRelativeToCurrentDirectory dir
-      liftIO (T.hPutStrLn stderr ("Sandbox: Removing " <> rel))
-      -- TODO Unregister packages contained in this source dir
-      sandbox_ "delete-source" [dir]
+removeSandboxSource :: Directory -> EitherT MafiaViolation IO ()
+removeSandboxSource dir = do
+  rel <- fromMaybe dir <$> makeRelativeToCurrentDirectory dir
+  liftIO (T.hPutStrLn stderr ("Sandbox: Removing " <> rel))
+  -- TODO Unregister packages contained in this source dir
+  sandbox_ "delete-source" [dir]
 
 getSandboxSources :: EitherT MafiaViolation IO (Set Directory)
 getSandboxSources = do
@@ -462,21 +458,23 @@ initSubmodules = do
 
 getSubmodules :: EitherT MafiaViolation IO [Submodule]
 getSubmodules = do
-    root    <- getProjectRoot
-    Out out <- callFrom ProcessError root "git" ["submodule"]
+  root    <- getProjectRoot
+  Out out <- callFrom ProcessError root "git" ["submodule"]
 
-    sequence . fmap parseLine
-             . T.lines
-             $ out
-  where
-    parseLine line = Submodule <$> parseState line
-                               <*> parseName  line
+  sequence . fmap parseSubmoduleLine
+           . T.lines
+           $ out
 
-    parseState line
-      | "-" `T.isPrefixOf` line = pure NeedsInit
-      | otherwise               = pure Ready
+parseSubmoduleLine :: Text -> EitherT MafiaViolation IO Submodule
+parseSubmoduleLine line = Submodule (parseSubmoduleState line) <$> parseSubmoduleName line
 
-    parseName line =
-      case T.words line of
-        (_:x:_) -> pure x
-        _       -> left (ParseError ("failed to read submodule name from: " <> line))
+parseSubmoduleState :: Text -> SubmoduleState
+parseSubmoduleState line
+  | "-" `T.isPrefixOf` line = NeedsInit
+  | otherwise               = Ready
+
+parseSubmoduleName :: Text -> EitherT MafiaViolation IO Text
+parseSubmoduleName line =
+  case T.words line of
+    (_:x:_) -> pure x
+    _       -> left (ParseError ("failed to read submodule name from: " <> line))
