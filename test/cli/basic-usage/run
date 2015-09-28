@@ -1,0 +1,36 @@
+#!/bin/sh -eux
+
+absolute_path() {
+  echo "$(cd "$(dirname "$1")" && pwd)/$(basename "$1")"
+}
+
+MAFIA=$(absolute_path ${1:-./dist/build/mafia/mafia})
+
+${MAFIA} -v
+${MAFIA} --version
+
+${MAFIA} -h
+${MAFIA} --help
+
+check() {
+  MAFIA_REPO=$1
+  MAFIA_DIR=$2
+  MAFIA_ENTRY=$3
+
+  MAFIA_TEMP=$(mktemp -d 2>/dev/null || mktemp -d -t 'mafia')
+  trap "rm -rf \"${MAFIA_TEMP}\"" EXIT
+
+  cd ${MAFIA_TEMP}
+  git clone git@github.com:ambiata/${MAFIA_REPO}
+
+  cd ${MAFIA_DIR}
+  ${MAFIA} build
+  ${MAFIA} build
+
+  ${MAFIA} quick ${MAFIA_ENTRY} <<EOF
+    :q
+EOF
+}
+
+check p p          src/P.hs
+check x x/x-either src/X/Control/Monad/Trans/Either.hs
