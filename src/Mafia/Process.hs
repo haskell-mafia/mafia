@@ -31,10 +31,9 @@ module Mafia.Process
   , execFrom
   ) where
 
-import           Control.Concurrent (forkIO)
-import           Control.Concurrent.MVar (newEmptyMVar, putMVar, takeMVar)
-import           Control.Exception (IOException)
-import           Control.Monad.Catch (MonadCatch(..), MonadMask(..), try, handle)
+import           Control.Concurrent.Async (Async, async, waitCatch)
+import           Control.Exception (SomeException)
+import           Control.Monad.Catch (MonadCatch(..), handle)
 import           Control.Monad.IO.Class (MonadIO(..))
 
 import           Data.ByteString (ByteString)
@@ -52,7 +51,7 @@ import           Mafia.IO (setCurrentDirectory)
 import           P
 
 import           System.Exit (ExitCode(..))
-import           System.IO (IO, FilePath)
+import           System.IO (FilePath)
 import qualified System.Process as Process
 import qualified System.Posix.Process as Posix
 
@@ -100,8 +99,8 @@ type ExitStatus = Int
 
 data ProcessError
   = ProcessFailure   Process ExitStatus
-  | ProcessException Process IOException
-  deriving (Eq, Show)
+  | ProcessException Process SomeException
+  deriving (Show)
 
 ------------------------------------------------------------------------
 
@@ -147,13 +146,11 @@ instance ProcessResult (OutErr ByteString) where
 
     (Nothing, Just hOut, Just hErr, pid) <- liftIO (Process.createProcess cp)
 
-    waitOut <- liftIO (forkWait (B.hGetContents hOut))
-    waitErr <- liftIO (forkWait (B.hGetContents hErr))
+    asyncOut <- liftIO (async (B.hGetContents hOut))
+    asyncErr <- liftIO (async (B.hGetContents hErr))
 
-    let liftEIO = EitherT . liftIO
-
-    out  <- firstEitherT (ProcessException p) (liftEIO waitOut)
-    err  <- firstEitherT (ProcessException p) (liftEIO waitErr)
+    out  <- waitCatchE p asyncOut
+    err  <- waitCatchE p asyncErr
     code <- liftIO (Process.waitForProcess pid)
 
     return (code, OutErr out err)
@@ -235,15 +232,13 @@ callFrom_ up dir cmd args = do
 -- | Execute a process, this call never returns.
 --
 execProcess :: (MonadIO m, MonadCatch m) => Process -> EitherT ProcessError m a
-execProcess p = handle onError $ do
+execProcess p = handleAll p $ do
     case processDirectory p of
       Nothing  -> return ()
       Just dir -> setCurrentDirectory dir
     liftIO (Posix.executeFile cmd True args env)
   where
     (cmd, args, _, env) = fromProcess' p
-
-    onError (e :: IOException) = hoistEither (Left (ProcessException p e))
 
 -- | Execute a command with arguments, this call never returns.
 --
@@ -283,13 +278,11 @@ withProcess :: (MonadIO m, MonadCatch m)
             -> EitherT ProcessError m (ExitCode, a)
             -> EitherT ProcessError m a
 
-withProcess p io = handle onError $ do
-    (code, result) <- io
-    case code of
-      ExitSuccess   -> return result
-      ExitFailure x -> hoistEither (Left (ProcessFailure p x))
-  where
-    onError (e :: IOException) = hoistEither (Left (ProcessException p e))
+withProcess p io = handleAll p $ do
+  (code, result) <- io
+  case code of
+    ExitSuccess   -> return result
+    ExitFailure x -> hoistEither (Left (ProcessFailure p x))
 
 fromProcess :: Process -> Process.CreateProcess
 fromProcess p = Process.CreateProcess
@@ -317,13 +310,8 @@ fromProcess' p = (cmd, args, cwd, env)
 
 ------------------------------------------------------------------------
 
-forkWait :: IO a -> IO (IO (Either IOException a))
-forkWait io = do
-  mv <- newEmptyMVar
+handleAll :: MonadCatch m => Process -> EitherT ProcessError m a -> EitherT ProcessError m a
+handleAll p = handle (hoistEither . Left . ProcessException p)
 
-  _  <- mask $ \restore ->
-    forkIO $ do
-      x <- try (restore io)
-      putMVar mv x
-
-  return (takeMVar mv)
+waitCatchE :: (Functor m, MonadIO m) => Process -> Async a -> EitherT ProcessError m a
+waitCatchE p = firstEitherT (ProcessException p) . EitherT . liftIO . waitCatch

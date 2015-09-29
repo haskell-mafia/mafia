@@ -109,7 +109,7 @@ data MafiaViolation
   | CacheUpdateError CacheUpdate IOException
   | EntryPointNotFound File
   | GhcidNotInstalled
-  deriving (Eq, Show)
+  deriving (Show)
 
 renderViolation :: MafiaViolation -> Text
 renderViolation = \case

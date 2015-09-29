@@ -15,6 +15,7 @@ library
                       base                            >= 3          && < 5
                     , ambiata-p
                     , ambiata-x-either
+                    , async                           == 2.0.*
                     , bytestring                      == 0.10.*
                     , containers                      == 0.5.*
                     , directory                       == 1.2.*
