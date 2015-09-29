@@ -2,4 +2,4 @@ import           Disorder.Core.Main
 
 main :: IO ()
 main =
-  disorderCliMain ["./dist/build/project/project"]
+  disorderCliMain ["./dist/build/mafia/mafia"]

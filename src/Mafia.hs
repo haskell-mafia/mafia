@@ -1,2 +1,2 @@
 {-# LANGUAGE NoImplicitPrelude #-}
-module Project where
+module Mafia where
