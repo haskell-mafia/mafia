@@ -194,26 +194,26 @@ ensureDirectory dir = do
 -- brute force wins.
 initialize :: EitherT MafiaViolation IO ()
 initialize = do
-    updates <- determineCacheUpdates
-    when (updates /= []) $ do
-      -- we want to know up front why we're doing an install/configure
-      let sortedUpdates = List.sort updates
-      mapM_ putUpdateReason sortedUpdates
+  updates <- determineCacheUpdates
+  when (updates /= []) $ do
+    -- we want to know up front why we're doing an install/configure
+    let sortedUpdates = List.sort updates
+    mapM_ putUpdateReason sortedUpdates
 
-      cabal_ "install" [ "-j"
-                       , "--only-dependencies"
-                       , "--force-reinstalls"
-                       , "--enable-tests"
-                       , "--enable-benchmarks"
-                       , "--reorder-goals"
-                       , "--max-backjumps=-1" ]
+    cabal_ "install" [ "-j"
+                     , "--only-dependencies"
+                     , "--force-reinstalls"
+                     , "--enable-tests"
+                     , "--enable-benchmarks"
+                     , "--reorder-goals"
+                     , "--max-backjumps=-1" ]
 
-      cabal_ "configure" [ "--enable-tests"
-                         , "--enable-benchmarks" ]
+    cabal_ "configure" [ "--enable-tests"
+                       , "--enable-benchmarks" ]
 
-      -- but we don't want to commit the modified .cabal files
-      -- until we're done, in case an error occurs
-      mapM_ runCacheUpdate sortedUpdates
+    -- but we don't want to commit the modified .cabal files
+    -- until we're done, in case an error occurs
+    mapM_ runCacheUpdate sortedUpdates
 
 ------------------------------------------------------------------------
 
