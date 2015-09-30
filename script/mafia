@@ -1,0 +1,70 @@
+#!/bin/sh -eu
+
+fetch_latest () {
+  if [ -z ${MAFIA_TEST_MODE+x} ]; then
+    TZ=$(date +"%T")
+    curl --silent "https://raw.githubusercontent.com/ambiata/mafia/master/script/mafia?$TZ"
+  else
+    cat ../script/mafia
+  fi
+}
+
+run_upgrade () {
+  echo "Checking for a new version of mafia ..."
+  fetch_latest > /tmp/mafia
+
+  COMMIT_VERSION=$(git ls-remote https://github.com/ambiata/mafia | grep refs/heads/master | cut -f 1)
+  echo "# Version: $COMMIT_VERSION" >> /tmp/mafia
+
+  if ! cmp ./mafia /tmp/mafia >/dev/null 2>&1; then
+    echo "New version found and upgraded. You can now commit it to your git repo."
+    mv /tmp/mafia ./mafia
+    chmod +x ./mafia
+  else
+    echo "You have latest mafia script"
+  fi
+}
+
+exec_mafia () {
+  MAFIA_VERSION=$(awk '/^# Version: / { print $3; exit 0; }' $0)
+  MAFIA_PATH=$HOME/.ambiata/mafia/bin/mafia-$MAFIA_VERSION
+
+  [ -f "$MAFIA_PATH" ] || {
+    # Create a temporary directory which will be deleted when the script
+    # terminates. Unfortunately `mktemp` doesn't behave the same on
+    # Linux and OS/X so we need to try two different approaches.
+    MAFIA_TEMP=$(mktemp -d 2>/dev/null || mktemp -d -t 'exec_mafia')
+    trap "rm -rf \"$MAFIA_TEMP\"" EXIT
+
+    echo "Building mafia-$MAFIA_VERSION in $MAFIA_TEMP"
+
+    ( cd "$MAFIA_TEMP"
+
+      git clone https://github.com/ambiata/mafia
+      cd mafia
+
+      git reset --hard $MAFIA_VERSION
+
+      bin/bootstrap ) || exit $?
+
+    mkdir -p $(dirname $MAFIA_PATH)
+    cp "$MAFIA_TEMP/mafia/.cabal-sandbox/bin/mafia" "$MAFIA_PATH"
+  }
+
+  exec $MAFIA_PATH $@
+}
+
+#
+# The actual start of the script.....
+#
+
+if [ $# -gt 0 ]; then
+  MODE="$1"
+else
+  MODE=""
+fi
+
+case "$MODE" in
+upgrade) shift; run_$MODE "$@" ;;
+*) exec_mafia "$@"
+esac
