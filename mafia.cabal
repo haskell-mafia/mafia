@@ -1,11 +1,12 @@
 name:                  ambiata-mafia
 version:               0.0.1
-license:               AllRightsReserved
+license:               Apache-2.0
+license-file:          LICENSE
 author:                Ambiata <info@ambiata.com>
 maintainer:            Ambiata <info@ambiata.com>
 copyright:             (c) 2015 Ambiata.
 synopsis:              mafia
-category:              System
+category:              Development
 cabal-version:         >= 1.8
 build-type:            Custom
 description:           mafia
