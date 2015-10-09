@@ -27,31 +27,37 @@ run_upgrade () {
 
 exec_mafia () {
   MAFIA_VERSION=$(awk '/^# Version: / { print $3; exit 0; }' $0)
-  MAFIA_PATH=$HOME/.ambiata/mafia/bin/mafia-$MAFIA_VERSION
 
-  [ -f "$MAFIA_PATH" ] || {
-    # Create a temporary directory which will be deleted when the script
-    # terminates. Unfortunately `mktemp` doesn't behave the same on
-    # Linux and OS/X so we need to try two different approaches.
-    MAFIA_TEMP=$(mktemp -d 2>/dev/null || mktemp -d -t 'exec_mafia')
-    trap "rm -rf \"$MAFIA_TEMP\"" EXIT
+  if [ "x$MAFIA_VERSION" == "x" ]; then
+    # If we can't find the mafia version, then we need to upgrade the script.
+    run_upgrade
+  else
+    MAFIA_PATH=$HOME/.ambiata/mafia/bin/mafia-$MAFIA_VERSION
 
-    echo "Building mafia-$MAFIA_VERSION in $MAFIA_TEMP"
+    [ -f "$MAFIA_PATH" ] || {
+      # Create a temporary directory which will be deleted when the script
+      # terminates. Unfortunately `mktemp` doesn't behave the same on
+      # Linux and OS/X so we need to try two different approaches.
+      MAFIA_TEMP=$(mktemp -d 2>/dev/null || mktemp -d -t 'exec_mafia')
+      trap "rm -rf \"$MAFIA_TEMP\"" EXIT
 
-    ( cd "$MAFIA_TEMP"
+      echo "Building mafia-$MAFIA_VERSION in $MAFIA_TEMP"
 
-      git clone https://github.com/ambiata/mafia
-      cd mafia
+      ( cd "$MAFIA_TEMP"
 
-      git reset --hard $MAFIA_VERSION
+        git clone https://github.com/ambiata/mafia
+        cd mafia
 
-      bin/bootstrap ) || exit $?
+        git reset --hard $MAFIA_VERSION
 
-    mkdir -p $(dirname $MAFIA_PATH)
-    cp "$MAFIA_TEMP/mafia/.cabal-sandbox/bin/mafia" "$MAFIA_PATH"
-  }
+        bin/bootstrap ) || exit $?
 
-  exec $MAFIA_PATH $@
+      mkdir -p $(dirname $MAFIA_PATH)
+      cp "$MAFIA_TEMP/mafia/.cabal-sandbox/bin/mafia" "$MAFIA_PATH"
+    }
+
+    exec $MAFIA_PATH $@
+  fi
 }
 
 #

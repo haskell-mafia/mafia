@@ -51,6 +51,8 @@ main = do
 
 data MafiaCommand
   = MafiaBuild [Argument]
+  | MafiaTest  [Argument]
+  | MafiaRepl  [Argument]
   | MafiaQuick File
   | MafiaWatch File [Argument]
   deriving (Eq, Show)
@@ -58,6 +60,8 @@ data MafiaCommand
 run :: MafiaCommand -> EitherT MafiaViolation IO ()
 run = \case
   MafiaBuild args       -> build args
+  MafiaTest  args       -> test  args
+  MafiaRepl  args       -> repl  args
   MafiaQuick entry      -> quick entry
   MafiaWatch entry args -> watch entry args
 
@@ -68,6 +72,12 @@ commands :: [Mod CommandFields MafiaCommand]
 commands =
  [ command' "build" "Build this project, including all executables and test suites."
             (MafiaBuild <$> many pCabalArgs)
+
+ , command' "test" "Test this project, by default this runs all test suites."
+            (MafiaTest <$> many pCabalArgs)
+
+ , command' "repl" "Start the repl, by default on the main library source."
+            (MafiaRepl <$> many pCabalArgs)
 
  , command' "quick" ( "Start the repl directly skipping cabal, this is useful "
                    <> "developing across multiple source trees at once." )
@@ -151,6 +161,16 @@ build :: [Argument] -> EitherT MafiaViolation IO ()
 build args = do
   initialize
   cabal_ "build" $ ["--ghc-option=-Werror"] <> args
+
+test :: [Argument] -> EitherT MafiaViolation IO ()
+test args = do
+  initialize
+  cabal_ "test" $ ["--show-details=streaming"] <> args
+
+repl :: [Argument] -> EitherT MafiaViolation IO ()
+repl args = do
+  initialize
+  cabal_ "repl" args
 
 quick :: File -> EitherT MafiaViolation IO ()
 quick path = do
