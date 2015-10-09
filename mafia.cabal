@@ -61,6 +61,7 @@ executable mafia
                     , filepath                        == 1.4.*
                     , optparse-applicative            == 0.11.*
                     , text                            == 1.2.*
+                    , time                            == 1.4.*
                     , transformers                    == 0.4.*
 
 

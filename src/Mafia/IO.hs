@@ -26,8 +26,11 @@ module Mafia.IO
   , removeFile
   , copyFile
 
-   -- * Environment
+    -- * Environment
   , findExecutable
+
+    -- * Pre-defined directories
+  , getHomeDirectory
   ) where
 
 import           Control.Monad.IO.Class (MonadIO(..))
@@ -143,3 +146,9 @@ findExecutable :: MonadIO m => Text -> m (Maybe File)
 findExecutable name = liftIO $ do
   path <- Directory.findExecutable (T.unpack name)
   return (fmap T.pack path)
+
+------------------------------------------------------------------------
+-- Pre-defined directories
+
+getHomeDirectory :: MonadIO m => m Directory
+getHomeDirectory = T.pack `liftM` liftIO Directory.getHomeDirectory
