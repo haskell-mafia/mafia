@@ -23,7 +23,7 @@ git submodule add https://github.com/ambiata/p lib/p
 
 $MAFIA build
 
-PKG=$(cabal sandbox hc-pkg list 2>/dev/null | grep -q ambiata-p)
+PKG=$(cabal sandbox hc-pkg list 2>/dev/null | grep ambiata-p || exit 0)
 if [ "x$PKG" == "x" ]; then
   echo "Expected to find 'ambiata-p' as a registered package"
   exit 1
@@ -37,7 +37,7 @@ cp $SCRIPT_DIR/without-p.cabal $MAFIA_TEMP/mafia-test.cabal
 
 $MAFIA build
 
-PKG=$(cabal sandbox hc-pkg list 2>/dev/null | grep -q ambiata-p)
+PKG=$(cabal sandbox hc-pkg list 2>/dev/null | grep ambiata-p || exit 0)
 if [ "x$PKG" != "x" ]; then
   echo "Found 'ambiata-p' but it should have been unregistered"
   exit 1
