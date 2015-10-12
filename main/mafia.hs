@@ -6,7 +6,7 @@
 import           BuildInfo_ambiata_mafia
 
 import           Control.Exception (IOException)
-import           Control.Monad.Catch (handle)
+import           Control.Monad.Catch (handle, catch)
 import           Control.Monad.IO.Class (MonadIO(..))
 
 import qualified Data.List as List
@@ -251,6 +251,7 @@ initialize = do
     -- we want to know up front why we're doing an install/configure
     let sortedUpdates = List.sort updates
     mapM_ putUpdateReason sortedUpdates
+    mapM_ runCacheDelete  sortedUpdates
 
     cabal_ "install" [ "-j"
                      , "--only-dependencies"
@@ -327,20 +328,65 @@ mkFileMap = Map.fromList . fmap (\path -> (takeFileName path, path))
 putUpdateReason :: CacheUpdate -> EitherT MafiaViolation IO ()
 putUpdateReason sync =
   case sync of
-    Delete file
-     -> do liftIO (T.hPutStrLn stderr ("Cache: Removed " <> takeFileName file))
+    Delete file -> do
+      liftIO (T.hPutStrLn stderr ("Cache: Removed " <> takeFileName file))
 
-    Update src _
-     -> do rel <- fromMaybe src <$> makeRelativeToCurrentDirectory src
-           liftIO (T.hPutStrLn stderr ("Cache: Modified " <> rel))
+    Update src _ -> do
+      rel <- fromMaybe src <$> makeRelativeToCurrentDirectory src
+      liftIO (T.hPutStrLn stderr ("Cache: Modified " <> rel))
+
+runCacheDelete :: CacheUpdate -> EitherT MafiaViolation IO ()
+runCacheDelete sync = handle (onCacheUpdateError sync) $
+  case sync of
+    Delete file -> do
+      tryUnregisterPackage file
+      removeFile file
+
+    Update _ dst -> do
+      tryUnregisterPackage dst
+      removeFile dst `catch` \(_ :: IOException) -> return ()
 
 runCacheUpdate :: CacheUpdate -> EitherT MafiaViolation IO ()
-runCacheUpdate sync = handle onError $
+runCacheUpdate sync = handle (onCacheUpdateError sync) $
   case sync of
-    Delete file    -> removeFile file
-    Update src dst -> copyFile src dst
-  where
-    onError (ex :: IOException) = hoistEither (Left (CacheUpdateError sync ex))
+    Delete _ -> do
+      return ()
+
+    Update src dst -> do
+      copyFile src dst
+
+onCacheUpdateError :: Monad m => CacheUpdate -> IOException -> EitherT MafiaViolation m a
+onCacheUpdateError sync (ex :: IOException) = hoistEither (Left (CacheUpdateError sync ex))
+
+tryUnregisterPackage :: MonadIO m => File -> m ()
+tryUnregisterPackage cabalFile = do
+  mpkg <- readPackageName cabalFile
+  case mpkg of
+    Nothing  -> return ()
+    Just pkg -> do
+      -- This is only best effort, if unregistering fails it means we've probably
+      -- already unregistered the package or it was never registered, no harm is
+      -- done because we'll be reinstalling it later if it's required.
+
+      result <- liftIO . runEitherT $ do
+        Hush <- cabal "sandbox" ["hc-pkg", "--", "unregister", "--force", pkg]
+        return ()
+
+      case result of
+        Left  _ -> return ()
+        Right _ -> liftIO (T.putStrLn ("Sandbox: Unregistered " <> pkg))
+
+readPackageName :: MonadIO m => File -> m (Maybe Text)
+readPackageName cabalFile = do
+  text <- fromMaybe T.empty `liftM` readText cabalFile
+
+  let findName ("name:":name:_) = Just name
+      findName _                = Nothing
+
+  return . listToMaybe
+         . mapMaybe (findName . T.words)
+         . T.lines
+         $ text
 
 cacheUpdate :: File -> File -> EitherT MafiaViolation IO (Maybe CacheUpdate)
 cacheUpdate src dst = do
@@ -381,8 +427,7 @@ removeSandboxSource :: Directory -> EitherT MafiaViolation IO ()
 removeSandboxSource dir = do
   rel <- fromMaybe dir <$> makeRelativeToCurrentDirectory dir
   liftIO (T.hPutStrLn stderr ("Sandbox: Removing " <> rel))
-  -- TODO Unregister packages contained in this source dir
-  sandbox_ "delete-source" [dir]
+  sandbox_ "delete-source" ["-v0", dir]
 
 getSandboxSources :: EitherT MafiaViolation IO (Set Directory)
 getSandboxSources = do
