@@ -14,6 +14,7 @@ module Mafia.Process
 
     -- * Outputs
   , Pass(..)
+  , Clean(..)
   , Hush(..)
   , Out(..)
   , Err(..)
@@ -29,11 +30,14 @@ module Mafia.Process
   , callFrom_
   , exec
   , execFrom
+
+    -- * Internal (exported for testing)
+  , cleanLines
   ) where
 
 import           Control.Concurrent.Async (Async, async, waitCatch)
-import           Control.Exception (SomeException)
-import           Control.Monad.Catch (MonadCatch(..), handle)
+import           Control.Exception (SomeException, IOException)
+import           Control.Monad.Catch (MonadCatch(..), handle, bracket_)
 import           Control.Monad.IO.Class (MonadIO(..))
 
 import           Data.ByteString (ByteString)
@@ -51,7 +55,8 @@ import           Mafia.IO (setCurrentDirectory)
 import           P
 
 import           System.Exit (ExitCode(..))
-import           System.IO (FilePath)
+import           System.IO (IO, FilePath, Handle, BufferMode(..))
+import qualified System.IO as IO
 import qualified System.Process as Process
 import qualified System.Posix.Process as Posix
 
@@ -75,6 +80,11 @@ data Process = Process
 
 -- | Pass @stdout@ and @stderr@ through to the console.
 data Pass = Pass
+  deriving (Eq, Ord, Show)
+
+-- | Pass @stdout@ and @stderr@ through to the console, but process control
+--   characters (such as \b, \r) prior to emitting each line of output.
+data Clean = Clean
   deriving (Eq, Ord, Show)
 
 -- | Capture @stdout@ and @stderr@ but ignore them.
@@ -159,6 +169,22 @@ instance ProcessResult Hush where
   callProcess p = do
     OutErr (_ :: ByteString) (_ :: ByteString) <- callProcess p
     return Hush
+
+instance ProcessResult Clean where
+  callProcess p = withProcess p $ do
+    let cp = (fromProcess p) { Process.std_out = Process.CreatePipe
+                             , Process.std_err = Process.CreatePipe }
+
+    (Nothing, Just hOut, Just hErr, pid) <- liftIO (Process.createProcess cp)
+
+    asyncOut <- liftIO (async (clean hOut IO.stdout))
+    asyncErr <- liftIO (async (clean hErr IO.stderr))
+
+    ()   <- waitCatchE p asyncOut
+    ()   <- waitCatchE p asyncErr
+    code <- liftIO (Process.waitForProcess pid)
+
+    return (code, Clean)
 
 instance ProcessResult (Out Text) where
   callProcess p = fmap T.decodeUtf8 <$> callProcess p
@@ -315,3 +341,48 @@ handleAll p = handle (hoistEither . Left . ProcessException p)
 
 waitCatchE :: (Functor m, MonadIO m) => Process -> Async a -> EitherT ProcessError m a
 waitCatchE p = firstEitherT (ProcessException p) . EitherT . liftIO . waitCatch
+
+------------------------------------------------------------------------
+
+clean :: Handle -> Handle -> IO ()
+clean input output = do
+  ibuf <- IO.hGetBuffering input
+  obuf <- IO.hGetBuffering output
+
+  let setLineBuffering = do
+        IO.hSetBuffering input  LineBuffering
+        IO.hSetBuffering output LineBuffering
+
+      ignoreIOE (_ :: IOException) = return ()
+
+      -- the handles may be closed by the time we
+      -- try to reset the buffer mode, so we need
+      -- to catch exceptions
+      resetBuffering = do
+        handle ignoreIOE (IO.hSetBuffering input  ibuf)
+        handle ignoreIOE (IO.hSetBuffering output obuf)
+
+  bracket_ setLineBuffering resetBuffering $ do
+    xs <- IO.hGetContents input
+    IO.hPutStr output (cleanLines [] xs)
+
+
+cleanLines :: [Char] -- ^ current line
+           -> [Char] -- ^ input
+           -> [Char] -- ^ output
+
+-- backspace - delete previous character
+cleanLines (_ : line) ('\b' : xs) = cleanLines line xs
+cleanLines []         ('\b' : xs) = cleanLines []   xs
+
+-- carriage return - delete the whole line
+cleanLines _          ('\r' : xs) = cleanLines []   xs
+
+-- line feed - emit the current line
+cleanLines line       ('\n' : xs) = reverse ('\n' : line) <> cleanLines [] xs
+
+-- normal character - add to current line
+cleanLines line       (x    : xs) = cleanLines (x : line) xs
+
+-- end of stream - emit the current line
+cleanLines line       []          = line

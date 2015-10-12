@@ -52,21 +52,23 @@ main = do
 
 data MafiaCommand
   = MafiaUpdate
-  | MafiaBuild [Argument]
-  | MafiaTest  [Argument]
-  | MafiaRepl  [Argument]
-  | MafiaQuick File
-  | MafiaWatch File [Argument]
+  | MafiaBuild  [Argument]
+  | MafiaTest   [Argument]
+  | MafiaTestCI [Argument]
+  | MafiaRepl   [Argument]
+  | MafiaQuick  File
+  | MafiaWatch  File [Argument]
   deriving (Eq, Show)
 
 run :: MafiaCommand -> EitherT MafiaViolation IO ()
 run = \case
-  MafiaUpdate           -> update
-  MafiaBuild args       -> build args
-  MafiaTest  args       -> test  args
-  MafiaRepl  args       -> repl  args
-  MafiaQuick entry      -> quick entry
-  MafiaWatch entry args -> watch entry args
+  MafiaUpdate            -> update
+  MafiaBuild  args       -> build  args
+  MafiaTest   args       -> test   args
+  MafiaTestCI args       -> testci args
+  MafiaRepl   args       -> repl   args
+  MafiaQuick  entry      -> quick  entry
+  MafiaWatch  entry args -> watch  entry args
 
 parser :: Parser (SafeCommand MafiaCommand)
 parser = safeCommand . subparser . mconcat $ commands
@@ -81,6 +83,10 @@ commands =
 
  , command' "test" "Test this project, by default this runs all test suites."
             (MafiaTest <$> many pCabalArgs)
+
+ , command' "testci" ("Test this project, but process control characters (\\b, \\r) which "
+                   <> "reposition the cursor, prior to emitting each line of output.")
+            (MafiaTestCI <$> many pCabalArgs)
 
  , command' "repl" "Start the repl, by default on the main library source."
             (MafiaRepl <$> many pCabalArgs)
@@ -186,6 +192,12 @@ test :: [Argument] -> EitherT MafiaViolation IO ()
 test args = do
   initialize
   cabal_ "test" $ ["--show-details=streaming"] <> args
+
+testci :: [Argument] -> EitherT MafiaViolation IO ()
+testci args = do
+  initialize
+  Clean <- cabal "test" $ ["--show-details=streaming"] <> args
+  return ()
 
 repl :: [Argument] -> EitherT MafiaViolation IO ()
 repl args = do
