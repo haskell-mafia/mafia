@@ -403,14 +403,15 @@ getSubmoduleSources = Set.union <$> getConfiguredSources
 
 getConfiguredSources :: EitherT MafiaViolation IO (Set Directory)
 getConfiguredSources = do
-  root <- getProjectRoot
-  name <- getProjectName
-  cfg  <- readText (name <> ".submodules")
-  return . Set.fromList
-         . fmap (root </>)
+  name  <- getProjectName
+  cfg   <- readText (name <> ".submodules")
+
+  paths <- traverse canonicalizePath
          . T.lines
          . fromMaybe T.empty
          $ cfg
+
+  return (Set.fromList paths)
 
 getConventionSources :: EitherT MafiaViolation IO (Set Directory)
 getConventionSources = do
