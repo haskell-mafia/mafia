@@ -9,6 +9,7 @@ module Mafia.IO
   , createDirectoryIfMissing
   , setCurrentDirectory
   , getCurrentDirectory
+  , canonicalizePath
   , makeRelativeToCurrentDirectory
 
     -- * Existence Tests
@@ -88,6 +89,9 @@ setCurrentDirectory dir = liftIO (Directory.setCurrentDirectory (T.unpack dir))
 
 getCurrentDirectory :: MonadIO m => m Directory
 getCurrentDirectory = T.pack `liftM` liftIO Directory.getCurrentDirectory
+
+canonicalizePath :: MonadIO m => Path -> m Path
+canonicalizePath path = T.pack `liftM` liftIO (Directory.canonicalizePath (T.unpack path))
 
 makeRelativeToCurrentDirectory :: MonadIO m => Path -> m (Maybe Path)
 makeRelativeToCurrentDirectory path = do
