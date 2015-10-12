@@ -8,7 +8,7 @@ MAFIA=$(absolute_path ${1:-./dist/build/mafia/mafia})
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
 
 MAFIA_TEMP=$(mktemp -d 2>/dev/null || mktemp -d -t 'mafia')
-#trap "rm -rf \"${MAFIA_TEMP}\"" EXIT
+trap "rm -rf \"${MAFIA_TEMP}\"" EXIT
 
 cp -r $SCRIPT_DIR/src $MAFIA_TEMP/src
 cp -r $SCRIPT_DIR/with-p.cabal $MAFIA_TEMP/mafia-test.cabal
