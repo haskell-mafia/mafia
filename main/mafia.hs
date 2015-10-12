@@ -17,6 +17,7 @@ import qualified Data.Set as Set
 import           Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
+import           Data.Time (getCurrentTime, diffUTCTime)
 
 import           Mafia.IO
 import           Mafia.Path
@@ -50,7 +51,8 @@ main = do
 ------------------------------------------------------------------------
 
 data MafiaCommand
-  = MafiaBuild [Argument]
+  = MafiaUpdate
+  | MafiaBuild [Argument]
   | MafiaTest  [Argument]
   | MafiaRepl  [Argument]
   | MafiaQuick File
@@ -59,6 +61,7 @@ data MafiaCommand
 
 run :: MafiaCommand -> EitherT MafiaViolation IO ()
 run = \case
+  MafiaUpdate           -> update
   MafiaBuild args       -> build args
   MafiaTest  args       -> test  args
   MafiaRepl  args       -> repl  args
@@ -70,7 +73,10 @@ parser = safeCommand . subparser . mconcat $ commands
 
 commands :: [Mod CommandFields MafiaCommand]
 commands =
- [ command' "build" "Build this project, including all executables and test suites."
+ [ command' "update" "Cabal update, but limited to retrieving at most once per day."
+            (pure MafiaUpdate)
+
+ , command' "build" "Build this project, including all executables and test suites."
             (MafiaBuild <$> many pCabalArgs)
 
  , command' "test" "Test this project, by default this runs all test suites."
@@ -156,6 +162,20 @@ renderViolation = \case
    <> "\n - add to your $PATH"
 
 ------------------------------------------------------------------------
+
+update :: EitherT MafiaViolation IO ()
+update = do
+  home <- getHomeDirectory
+
+  let index = home </> ".cabal/packages/hackage.haskell.org/00-index.cache"
+
+  indexTime   <- getModificationTime index
+  currentTime <- liftIO getCurrentTime
+
+  let age    = currentTime `diffUTCTime` indexTime
+      oneDay = 24 * 60 * 60
+
+  when (age > oneDay) (cabal_ "update" [])
 
 build :: [Argument] -> EitherT MafiaViolation IO ()
 build args = do
@@ -281,9 +301,9 @@ determineCacheUpdates = do
         stale = fmap Delete   (Map.elems (dsts `Map.difference` srcs))
         fresh = fmap mkUpdate (Map.elems (srcs `Map.difference` dsts))
 
-    update <- sequence (Map.elems (Map.intersectionWith cacheUpdate srcs dsts))
+    updates <- sequence (Map.elems (Map.intersectionWith cacheUpdate srcs dsts))
 
-    return (stale <> fresh <> catMaybes update)
+    return (stale <> fresh <> catMaybes updates)
 
 findCabal :: MonadIO m => Directory -> m [Path]
 findCabal dir = filter (extension ".cabal")
