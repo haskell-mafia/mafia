@@ -1,0 +1,25 @@
+name:                  ambiata-mafia-test
+version:               0.0.1
+license:               Apache-2.0
+author:                Ambiata <info@ambiata.com>
+maintainer:            Ambiata <info@ambiata.com>
+copyright:             (c) 2015 Ambiata.
+synopsis:              mafia-test
+category:              Development
+cabal-version:         >= 1.8
+build-type:            Simple
+description:           mafia-test
+
+library
+  build-depends:
+                      base                            >= 3          && < 5
+                    , ambiata-p
+
+  ghc-options:
+                    -Wall
+
+  hs-source-dirs:
+                    src
+
+  exposed-modules:
+                    MafiaTest

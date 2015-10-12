@@ -1,0 +1,44 @@
+#!/bin/sh -eux
+
+absolute_path() {
+  echo "$(cd "$(dirname "$1")" && pwd)/$(basename "$1")"
+}
+
+MAFIA=$(absolute_path ${1:-./dist/build/mafia/mafia})
+SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
+
+MAFIA_TEMP=$(mktemp -d 2>/dev/null || mktemp -d -t 'mafia')
+#trap "rm -rf \"${MAFIA_TEMP}\"" EXIT
+
+cp -r $SCRIPT_DIR/src $MAFIA_TEMP/src
+cp -r $SCRIPT_DIR/with-p.cabal $MAFIA_TEMP/mafia-test.cabal
+
+cd $MAFIA_TEMP
+
+cabal sandbox init
+git init
+
+mkdir lib
+git submodule add https://github.com/ambiata/p lib/p
+
+$MAFIA build
+
+PKG=$(cabal sandbox hc-pkg list 2>/dev/null | grep ambiata-p)
+if [ "x$PKG" == "x" ]; then
+  echo "Expected to find 'ambiata-p' as a registered package"
+  exit 1
+fi
+
+rm .gitmodules
+git rm --cached lib/p
+rm -rf lib/p
+
+cp $SCRIPT_DIR/without-p.cabal $MAFIA_TEMP/mafia-test.cabal
+
+$MAFIA build
+
+PKG=$(cabal sandbox hc-pkg list 2>/dev/null | grep ambiata-p)
+if [ "x$PKG" != "x" ]; then
+  echo "Found 'ambiata-p' but it should have been unregistered"
+  exit 1
+fi
