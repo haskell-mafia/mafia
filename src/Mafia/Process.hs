@@ -30,6 +30,9 @@ module Mafia.Process
   , callFrom_
   , exec
   , execFrom
+
+    -- * Internal (exported for testing)
+  , cleanLines
   ) where
 
 import           Control.Concurrent.Async (Async, async, waitCatch)
