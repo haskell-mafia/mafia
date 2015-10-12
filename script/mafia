@@ -53,7 +53,8 @@ exec_mafia () {
         bin/bootstrap ) || exit $?
 
       mkdir -p $(dirname $MAFIA_PATH)
-      cp "$MAFIA_TEMP/mafia/.cabal-sandbox/bin/mafia" "$MAFIA_PATH"
+      cp "$MAFIA_TEMP/mafia/.cabal-sandbox/bin/mafia" "${MAFIA_PATH}.tmp"
+      mv "${MAFIA_PATH}.tmp" "$MAFIA_PATH"
     }
 
     exec $MAFIA_PATH $@
