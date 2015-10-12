@@ -328,12 +328,12 @@ mkFileMap = Map.fromList . fmap (\path -> (takeFileName path, path))
 putUpdateReason :: CacheUpdate -> EitherT MafiaViolation IO ()
 putUpdateReason sync =
   case sync of
-    Delete file
-     -> do liftIO (T.hPutStrLn stderr ("Cache: Removed " <> takeFileName file))
+    Delete file -> do
+      liftIO (T.hPutStrLn stderr ("Cache: Removed " <> takeFileName file))
 
-    Update src _
-     -> do rel <- fromMaybe src <$> makeRelativeToCurrentDirectory src
-           liftIO (T.hPutStrLn stderr ("Cache: Modified " <> rel))
+    Update src _ -> do
+      rel <- fromMaybe src <$> makeRelativeToCurrentDirectory src
+      liftIO (T.hPutStrLn stderr ("Cache: Modified " <> rel))
 
 runCacheDelete :: CacheUpdate -> EitherT MafiaViolation IO ()
 runCacheDelete sync = handle (onCacheUpdateError sync) $
