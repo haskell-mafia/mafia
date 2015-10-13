@@ -30,8 +30,8 @@ import           P
 import           System.Exit
 import           System.IO
 
-import           X.Options.Applicative
 import           X.Control.Monad.Trans.Either
+import           X.Options.Applicative
 
 ------------------------------------------------------------------------
 
@@ -382,7 +382,7 @@ removeSandboxSource dir = do
   rel <- fromMaybe dir <$> makeRelativeToCurrentDirectory dir
   liftIO (T.hPutStrLn stderr ("Sandbox: Removing " <> rel))
   -- TODO Unregister packages contained in this source dir
-  sandbox_ "delete-source" [dir]
+  sandbox_ "delete-source" ["-v0", dir]
 
 getSandboxSources :: EitherT MafiaViolation IO (Set Directory)
 getSandboxSources = do

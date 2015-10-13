@@ -106,9 +106,13 @@ test-suite test-io
                     , ambiata-disorder-corpus
                     , ambiata-mafia
                     , ambiata-p
+                    , ambiata-x-either
+                    , exceptions                      == 0.8.*
                     , QuickCheck                      == 2.7.*
                     , quickcheck-instances            == 0.3.*
+                    , temporary                       == 1.2.*
                     , text                            == 1.2.*
+                    , transformers                    == 0.4.*
 
 test-suite test-cli
   type:
