@@ -23,6 +23,7 @@ library
                     , exceptions                      == 0.8.*
                     , filepath                        == 1.4.*
                     , process                         == 1.2.*
+                    , tar                             == 0.4.*
                     , text                            == 1.2.*
                     , time                            == 1.4.*
                     , transformers                    == 0.4.*
@@ -38,6 +39,7 @@ library
                     Paths_ambiata_mafia
                     BuildInfo_ambiata_mafia
                     Mafia
+                    Mafia.Cabal
                     Mafia.IO
                     Mafia.Path
                     Mafia.Process
