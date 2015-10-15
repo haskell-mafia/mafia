@@ -5,6 +5,7 @@ module Mafia.Cabal
   ( SandboxDir
   , CabalError(..)
   , repairIndexFile
+  , readPackageName
   ) where
 
 import           Control.Exception (IOException)
@@ -13,6 +14,8 @@ import           Control.Monad.IO.Class (MonadIO(..))
 
 import           Data.ByteString (ByteString)
 import qualified Data.ByteString.Lazy as L
+import           Data.Text (Text)
+import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 
 import qualified Codec.Archive.Tar as Tar
@@ -24,7 +27,7 @@ import           P
 
 import           System.IO (IO)
 
-import           X.Control.Monad.Trans.Either
+import           X.Control.Monad.Trans.Either (EitherT, hoistEither)
 
 ------------------------------------------------------------------------
 
@@ -76,3 +79,16 @@ filterEntries pred sandboxDir = do
     let bytes' = L.toStrict (Tar.write entries')
     writeBytes indexFile bytes'
     removeFile indexCache `catch` \(_ :: IOException) -> pure ()
+
+------------------------------------------------------------------------
+
+readPackageName :: MonadIO m => File -> m (Maybe Text)
+readPackageName cabalFile = do
+  text <- fromMaybe T.empty `liftM` readText cabalFile
+
+  let findName ("name:":name:_) = Just name
+      findName _                = Nothing
+
+  return . listToMaybe
+         . mapMaybe (findName . T.words)
+         $ T.lines text

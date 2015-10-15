@@ -6,7 +6,7 @@
 import           BuildInfo_ambiata_mafia
 
 import           Control.Exception (IOException)
-import           Control.Monad.Catch (handle)
+import           Control.Monad.Catch (MonadCatch(..), handle)
 import           Control.Monad.IO.Class (MonadIO(..))
 
 import qualified Data.List as List
@@ -24,15 +24,17 @@ import           Mafia.IO
 import           Mafia.Path
 import           Mafia.Process
 
-import           Options.Applicative
-
 import           P
 
-import           System.Exit
-import           System.IO
+import           System.Exit (exitSuccess)
+import           System.IO (BufferMode(..), hSetBuffering)
+import           System.IO (IO, stdout, stderr, putStrLn, print)
 
-import           X.Control.Monad.Trans.Either
-import           X.Options.Applicative
+import           X.Control.Monad.Trans.Either (EitherT(..), hoistEither, firstEitherT, left)
+import           X.Options.Applicative (Parser, CommandFields, Mod)
+import           X.Options.Applicative (SafeCommand(..), RunType(..))
+import           X.Options.Applicative (argument, textRead, metavar, help)
+import           X.Options.Applicative (dispatch, orDie, subparser, safeCommand, command')
 
 ------------------------------------------------------------------------
 
@@ -161,8 +163,8 @@ renderViolation = \case
   ParseError msg
    -> "Parse failed: " <> msg
 
-  CacheUpdateError sync ex
-   -> "Cache sync failed: " <> T.pack (show sync)
+  CacheUpdateError x ex
+   -> "Cache update failed: " <> T.pack (show x)
    <> "\n" <> T.pack (show ex)
 
   EntryPointNotFound path
@@ -259,6 +261,7 @@ initialize = do
     -- we want to know up front why we're doing an install/configure
     let sortedUpdates = List.sort updates
     mapM_ putUpdateReason sortedUpdates
+    mapM_ runCacheUnregister sortedUpdates
 
     cabal_ "install" [ "-j"
                      , "--only-dependencies"
@@ -299,8 +302,9 @@ getProjectName = EitherT $ do
 ------------------------------------------------------------------------
 
 data CacheUpdate
-  = Delete File
+  = Add    File File
   | Update File File
+  | Delete File
   deriving (Eq, Ord, Show)
 
 determineCacheUpdates :: EitherT MafiaViolation IO [CacheUpdate]
@@ -316,10 +320,10 @@ determineCacheUpdates = do
     cacheDir <- getCacheDir
     dsts     <- mkFileMap <$> getDirectoryListing (RecursiveDepth 0) cacheDir
 
-    let mkUpdate src = Update src (cacheDir </> takeFileName src)
+    let mkAdd src = Add src (cacheDir </> takeFileName src)
 
-        stale = fmap Delete   (Map.elems (dsts `Map.difference` srcs))
-        fresh = fmap mkUpdate (Map.elems (srcs `Map.difference` dsts))
+        fresh = fmap mkAdd  (Map.elems (srcs `Map.difference` dsts))
+        stale = fmap Delete (Map.elems (dsts `Map.difference` srcs))
 
     updates <- sequence (Map.elems (Map.intersectionWith cacheUpdate srcs dsts))
 
@@ -333,22 +337,83 @@ mkFileMap :: [Path] -> Map File Path
 mkFileMap = Map.fromList . fmap (\path -> (takeFileName path, path))
 
 putUpdateReason :: CacheUpdate -> EitherT MafiaViolation IO ()
-putUpdateReason sync =
-  case sync of
-    Delete file
-     -> do liftIO (T.hPutStrLn stderr ("Cache: Removed " <> takeFileName file))
+putUpdateReason x =
+  case x of
+    Add src _ -> do
+      rel <- fromMaybe src <$> makeRelativeToCurrentDirectory src
+      liftIO (T.hPutStrLn stderr ("Cache: Adding " <> rel))
 
-    Update src _
-     -> do rel <- fromMaybe src <$> makeRelativeToCurrentDirectory src
-           liftIO (T.hPutStrLn stderr ("Cache: Modified " <> rel))
+    Update src _ -> do
+      rel <- fromMaybe src <$> makeRelativeToCurrentDirectory src
+      liftIO (T.hPutStrLn stderr ("Cache: Updating " <> rel))
+
+    Delete file -> do
+      liftIO (T.hPutStrLn stderr ("Cache: Removing " <> takeFileName file))
 
 runCacheUpdate :: CacheUpdate -> EitherT MafiaViolation IO ()
-runCacheUpdate sync = handle onError $
-  case sync of
-    Delete file    -> removeFile file
-    Update src dst -> copyFile src dst
-  where
-    onError (ex :: IOException) = hoistEither (Left (CacheUpdateError sync ex))
+runCacheUpdate x = handleCacheUpdateError x $
+  case x of
+    Add src dst -> do
+      copyFile src dst
+
+    Update src dst -> do
+      copyFile src dst
+
+    Delete file -> do
+      removeFile file
+
+handleCacheUpdateError :: MonadCatch m
+                       => CacheUpdate
+                       -> EitherT MafiaViolation m a
+                       -> EitherT MafiaViolation m a
+
+handleCacheUpdateError x =
+  handle (\(ex :: IOException) -> hoistEither . Left $ CacheUpdateError x ex)
+
+runCacheUnregister :: CacheUpdate -> EitherT MafiaViolation IO ()
+runCacheUnregister x =
+  case x of
+    Add src dst -> do
+      tryUnregisterPackage src
+      tryUnregisterPackage dst
+      invalidateCache dst
+
+    Update src dst -> do
+      tryUnregisterPackage src
+      tryUnregisterPackage dst
+      invalidateCache dst
+
+    Delete file -> do
+      tryUnregisterPackage file
+      invalidateCache file
+
+tryUnregisterPackage :: MonadIO m => File -> m ()
+tryUnregisterPackage cabalFile = do
+  mpkg <- readPackageName cabalFile
+  case mpkg of
+    Nothing  -> return ()
+    Just pkg -> do
+      -- This is only best effort, if unregistering fails it means we've probably
+      -- already unregistered the package or it was never registered, no harm is
+      -- done because we'll be reinstalling it later if it's required.
+
+      result <- liftIO . runEitherT $ do
+        Hush <- cabal "sandbox" ["hc-pkg", "--", "unregister", "--force", pkg]
+        return ()
+
+      case result of
+        Left  _ -> return ()
+        Right _ -> liftIO (T.putStrLn ("Sandbox: Unregistered " <> pkg))
+
+invalidateCache :: MonadIO m => File -> m ()
+invalidateCache cabalFile = do
+  mtxt <- readText cabalFile
+  case mtxt of
+    Nothing  -> return ()
+    Just txt -> do
+      time <- liftIO getCurrentTime
+      let header = "-- " <> T.pack (show time) <> "\n"
+      writeText cabalFile (header <> txt)
 
 cacheUpdate :: File -> File -> EitherT MafiaViolation IO (Maybe CacheUpdate)
 cacheUpdate src dst = do
@@ -395,7 +460,6 @@ removeSandboxSource :: Directory -> EitherT MafiaViolation IO ()
 removeSandboxSource dir = do
   rel <- fromMaybe dir <$> makeRelativeToCurrentDirectory dir
   liftIO (T.hPutStrLn stderr ("Sandbox: Removing " <> rel))
-  -- TODO Unregister packages contained in this source dir
   sandbox_ "delete-source" ["-v0", dir]
 
 getSandboxSources :: EitherT MafiaViolation IO (Set Directory)
