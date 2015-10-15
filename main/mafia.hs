@@ -19,6 +19,7 @@ import qualified Data.Text as T
 import qualified Data.Text.IO as T
 import           Data.Time (getCurrentTime, diffUTCTime)
 
+import           Mafia.Cabal
 import           Mafia.IO
 import           Mafia.Path
 import           Mafia.Process
@@ -30,8 +31,8 @@ import           P
 import           System.Exit
 import           System.IO
 
-import           X.Options.Applicative
 import           X.Control.Monad.Trans.Either
+import           X.Options.Applicative
 
 ------------------------------------------------------------------------
 
@@ -126,6 +127,7 @@ pGhcidArgs =
 data MafiaViolation
   = ProjectNotFound
   | MultipleProjectsFound [ProjectName]
+  | CabalError CabalError
   | ProcessError ProcessError
   | ParseError Text
   | CacheUpdateError CacheUpdate IOException
@@ -141,6 +143,12 @@ renderViolation = \case
   MultipleProjectsFound ps
    -> "Found multiple possible .cabal projects: "
    <> T.intercalate ", " ps
+
+  CabalError (IndexFileNotFound file)
+   -> "Index file not found: " <> file
+
+  CabalError (CorruptIndexFile tarError)
+   -> "Corrupt index file: " <> T.pack (show tarError)
 
   ProcessError (ProcessFailure p code)
    -> "Process failed: " <> T.intercalate " " (processCommand p : processArguments p)
@@ -366,10 +374,16 @@ cacheUpdate src dst = do
 
 syncCabalSources :: EitherT MafiaViolation IO ()
 syncCabalSources = do
+  repairSandbox
   installed <- getSandboxSources
   required  <- getSubmoduleSources
   traverse_ addSandboxSource    (required `Set.difference` installed)
   traverse_ removeSandboxSource (installed `Set.difference` required)
+
+repairSandbox :: EitherT MafiaViolation IO ()
+repairSandbox = do
+  sandboxDir <- getSandboxDir
+  firstEitherT CabalError (repairIndexFile sandboxDir)
 
 addSandboxSource :: Directory -> EitherT MafiaViolation IO ()
 addSandboxSource dir = do
@@ -382,7 +396,7 @@ removeSandboxSource dir = do
   rel <- fromMaybe dir <$> makeRelativeToCurrentDirectory dir
   liftIO (T.hPutStrLn stderr ("Sandbox: Removing " <> rel))
   -- TODO Unregister packages contained in this source dir
-  sandbox_ "delete-source" [dir]
+  sandbox_ "delete-source" ["-v0", dir]
 
 getSandboxSources :: EitherT MafiaViolation IO (Set Directory)
 getSandboxSources = do
