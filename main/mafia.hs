@@ -495,23 +495,26 @@ getConfiguredSources = do
 getConventionSources :: EitherT MafiaViolation IO (Set Directory)
 getConventionSources = do
   root <- liftGit getProjectRoot
+  subs <- fmap ((root </>) . subName) <$> liftGit getSubmodules
+  Set.unions <$> traverse getSourcesFrom subs
 
-  let lib = root </> "lib/"
-  exists <- doesDirectoryExist lib
+getSourcesFrom :: MonadIO m => Directory -> m (Set Path)
+getSourcesFrom dir = do
+  let cleanDir x = dropTrailingPathSeparator `liftM` canonicalizePath x
 
-  case exists of
-    False -> return Set.empty
-    True  -> do
-      entries <- getDirectoryListing (RecursiveDepth 4) lib
-      return . Set.fromList
-             . fmap   (lib </>)
-             . fmap   (takeDirectory)
-             . filter (not . T.isInfixOf ".cabal-sandbox")
-             . filter (not . T.isInfixOf "/lib/")
-             . filter (not . T.isInfixOf "/bin/")
-             . filter (extension ".cabal")
-             . fmap   (T.drop (T.length lib))
-             $ entries
+  dir'    <- cleanDir dir
+  entries <- getDirectoryListing (RecursiveDepth 3) dir'
+  sources <- mapM cleanDir
+           . fmap   (dir' </>)
+           . fmap   (takeDirectory)
+           . filter (not . T.isInfixOf ".cabal-sandbox/")
+           . filter (not . T.isPrefixOf "lib/")
+           . filter (not . T.isPrefixOf "bin/")
+           . filter (extension ".cabal")
+           . fmap   (T.drop (T.length dir' + 1))
+           $ entries
+
+  return (Set.fromList sources)
 
 ------------------------------------------------------------------------
 

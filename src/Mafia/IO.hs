@@ -11,6 +11,7 @@ module Mafia.IO
   , setCurrentDirectory
   , getCurrentDirectory
   , makeRelativeToCurrentDirectory
+  , canonicalizePath
 
     -- * Existence Tests
   , doesFileExist
@@ -99,6 +100,10 @@ makeRelativeToCurrentDirectory path = do
   current <- getCurrentDirectory
   absPath <- T.pack `liftM` liftIO (Directory.makeAbsolute (T.unpack path))
   return (makeRelative current absPath)
+
+canonicalizePath :: MonadIO m => Path -> m Path
+canonicalizePath path =
+  T.pack `liftM` liftIO (Directory.canonicalizePath (T.unpack path))
 
 ------------------------------------------------------------------------
 -- Existence Tests
