@@ -1,3 +1,4 @@
+{-# LANGUAGE DoAndIfThenElse #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NoImplicitPrelude #-}
@@ -23,6 +24,7 @@ import           Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
 
+import           Mafia.Git
 import           Mafia.IO
 import           Mafia.Path
 import           Mafia.Process
@@ -36,9 +38,15 @@ import           Test.QuickCheck (Arbitrary(..), Gen, Property, Testable(..))
 import           Test.QuickCheck (forAllProperties)
 import qualified Test.QuickCheck as QC
 
-import           X.Control.Monad.Trans.Either (EitherT(..))
+import           X.Control.Monad.Trans.Either (EitherT(..), firstEitherT, hoistEither)
 
 ------------------------------------------------------------------------
+
+data ChaosError =
+    GitError     GitError
+  | ProcessError ProcessError
+  | ExpectedBuildFailure
+  deriving (Show)
 
 type PackageName   = Text
 type SubmoduleName = Text
@@ -211,14 +219,6 @@ addLocal' :: PackageName -> PackageDeps -> PackageDeps
 addLocal' dep (PackageDeps ss ls) =
   PackageDeps ss (Set.insert dep ls)
 
-recursiveLocals :: Repo -> PackageDeps -> Set PackageName
-recursiveLocals repo@(Repo _ os) (PackageDeps _ ls) =
-  let lookup name = fromMaybe Set.empty (recursiveLocals repo <$> Map.lookup name os) in
-  Set.union (unionMap lookup ls) ls
-
-unionMap :: Ord b => (a -> Set b) -> Set a -> Set b
-unionMap f = Set.foldl (\xs x -> xs `Set.union` f x) Set.empty
-
 addSubmodule :: SubmoduleName -> PackageName -> Repo -> Repo
 addSubmodule dep pkg (Repo f os) =
   if pkg == focusPackageName
@@ -228,6 +228,19 @@ addSubmodule dep pkg (Repo f os) =
 addSubmodule' :: SubmoduleName -> PackageDeps -> PackageDeps
 addSubmodule' dep (PackageDeps ss ls) =
   PackageDeps (Set.insert dep ss) ls
+
+recursiveLocals :: Repo -> PackageDeps -> Set PackageName
+recursiveLocals repo@(Repo _ os) (PackageDeps _ ls) =
+  let lookup name = fromMaybe Set.empty (recursiveLocals repo <$> Map.lookup name os) in
+  Set.union (unionMap lookup ls) ls
+
+recursiveSubmodules :: Repo -> PackageDeps -> Set SubmoduleName
+recursiveSubmodules repo@(Repo _ os) (PackageDeps ss ls) =
+  let lookup name = fromMaybe Set.empty (recursiveSubmodules repo <$> Map.lookup name os) in
+  Set.union (unionMap lookup ls) ss
+
+unionMap :: Ord b => (a -> Set b) -> Set a -> Set b
+unionMap f = Set.foldl (\xs x -> xs `Set.union` f x) Set.empty
 
 removeLocal :: PackageName -> Repo -> Repo
 removeLocal dep (Repo f os) =
@@ -252,7 +265,7 @@ removeSubmodule' dep (PackageDeps ss ls) =
 bracketDirectory :: IO a -> IO a
 bracketDirectory io = bracket getCurrentDirectory setCurrentDirectory (const io)
 
-withTempDirectory :: Testable a => (Directory -> EitherT ProcessError IO a) -> Property
+withTempDirectory :: Testable a => (Directory -> EitherT ChaosError IO a) -> Property
 withTempDirectory io = testIO . bracketDirectory $ do
   result  <- withSystemTempDirectory "mafia.chaos" (runEitherT . io . T.pack)
   case result of
@@ -268,9 +281,6 @@ writeRepo :: (MonadIO m, MonadCatch m) => Directory -> Repo -> m ()
 writeRepo dir repo@(Repo focus others) = do
   writePackage dir repo focusPackageName focus
   mapM_ (\(name, pkg) -> writePackage dir repo name pkg) (Map.toList others)
-
-  let lib = dir </> "lib"
-  mapM_ (\name -> writePackage lib repo name emptyPackageDeps) (repoSubmodules repo)
 
 writePackage :: (MonadIO m, MonadCatch m) => Directory -> Repo -> PackageName -> PackageDeps -> m ()
 writePackage dir repo name pd@(PackageDeps ss ls) = do
@@ -324,19 +334,63 @@ cabalText name deps = T.unlines [
 
 ------------------------------------------------------------------------
 
+createGitHub :: (MonadCatch m, MonadIO m, Functor m) => Path -> EitherT ChaosError m ()
+createGitHub dir =
+  forM_ submoduleNames $ \name -> do
+    let subDir = dir </> name
+
+    createDirectoryIfMissing True subDir
+    Hush <- callFrom ProcessError subDir "git" ["init"]
+    Hush <- callFrom ProcessError subDir "git" ["commit", "--allow-empty", "-m", "initial commit"]
+
+    writeProject subDir name [] []
+    Hush <- callFrom ProcessError subDir "git" ["add", "-A"]
+    Hush <- callFrom ProcessError subDir "git" ["commit", "-m", "created project"]
+
+    return ()
+
+submoduleExists :: Directory -> EitherT ChaosError IO Bool
+submoduleExists sub = do
+  subs <- fmap subName <$> firstEitherT GitError getSubmodules
+  return (sub `elem` subs)
+
+gitAddSubmodule :: Directory -> Directory -> Path -> EitherT ChaosError IO ()
+gitAddSubmodule github repoDir dep = do
+  let subDir = "lib" </> dep
+  exists <- submoduleExists subDir
+  unless exists $ do
+    callFrom_ ProcessError repoDir "git" ["submodule", "add", github </> dep, subDir]
+    callFrom_ ProcessError repoDir "git" ["commit", "-m", "added " <> dep]
+
+gitRemoveSubmodule :: Directory -> Path -> EitherT ChaosError IO ()
+gitRemoveSubmodule repoDir dep = do
+  let subDir = "lib" </> dep
+  exists <- submoduleExists subDir
+  when exists $ do
+    callFrom_ ProcessError repoDir "git" ["rm", "--cached", subDir]
+    callFrom_ ProcessError repoDir "git" ["commit", "-m", "removed " <> dep]
+
+------------------------------------------------------------------------
+
+savages = Actions {unActions = [AddLocal "chaos-norovirus" "chaos-focus",AddLocal "chaos-measles" "chaos-norovirus",RemoveLocal "chaos-norovirus",SidestepLocal "chaos-measles"]}
+
 prop_chaos (Actions actions) = withTempDirectory $ \temp -> do
   liftIO (print actions)
 
   mafia <- (</> "dist/build/mafia/mafia") <$> getCurrentDirectory
 
-  let repoDir   = temp </> "repo"
+  let githubDir = temp </> "github"
+      repoDir   = temp </> "repo"
       focusDir  = repoDir </> focusPackageName
+
+  createGitHub githubDir
 
   createDirectoryIfMissing False repoDir
   createDirectoryIfMissing False focusDir
 
   setCurrentDirectory repoDir
-  call_ id "git" ["init"]
+  call_ ProcessError "git" ["init"]
+  call_ ProcessError "git" ["commit", "--allow-empty", "-m", "inital commit"]
 
   setCurrentDirectory focusDir
   writeRepo repoDir emptyRepo
@@ -347,22 +401,22 @@ prop_chaos (Actions actions) = withTempDirectory $ \temp -> do
 
     Just testRun -> do
       forM_ testRun $ \(action, repo) -> do
-        runAction mafia repoDir repo action
+        runAction mafia githubDir repoDir repo action
       return (property True)
 
-runAction :: File -> Directory -> Repo -> Action -> EitherT ProcessError IO ()
-runAction mafia repoDir repo = \case
+runAction :: File -> Directory -> Directory -> Repo -> Action -> EitherT ChaosError IO ()
+runAction mafia github repoDir repo@(Repo focus _) = \case
   Build -> do
     liftIO (T.putStrLn "$ mafia build")
-    call_ id mafia ["build"]
+    expectBuildSuccess mafia
 
   AddLocal dep pkg -> do
     putAdd (dep <> " -> " <> pkg)
     writeRepo repoDir repo
 
   AddSubmodule dep pkg -> do
-    let dep' = "lib" </> dep
-    putAdd (dep' <> " -> " <> pkg)
+    putAdd ("lib" </> dep <> " -> " <> pkg)
+    gitAddSubmodule github repoDir dep
     writeRepo repoDir repo
 
   RemoveLocal dep -> do
@@ -371,23 +425,40 @@ runAction mafia repoDir repo = \case
     writeRepo repoDir repo
 
   RemoveSubmodule dep -> do
-    let dep' = "lib" </> dep
-    putRemove dep'
-    removeDirectoryRecursive (repoDir </> dep')
+    putRemove ("lib" </> dep)
+    gitRemoveSubmodule repoDir dep
     writeRepo repoDir repo
 
   SidestepLocal dep -> do
     putSidestep dep
     removeDirectoryRecursive (repoDir </> dep)
-    _ <- liftIO . runEitherT $ call_ id mafia ["build"]
+
+    if Set.member dep (recursiveLocals repo focus)
+    then expectBuildFailure mafia
+    else expectBuildSuccess mafia
+
     writeRepo repoDir repo
 
   SidestepSubmodule dep -> do
-    let dep' = "lib" </> dep
-    putSidestep dep'
-    removeDirectoryRecursive (repoDir </> dep')
-    _ <- liftIO . runEitherT $ call_ id mafia ["build"]
-    writeRepo repoDir repo
+    putSidestep ("lib" </> dep)
+    gitRemoveSubmodule repoDir dep
+
+    if Set.member dep (recursiveSubmodules repo focus)
+    then expectBuildFailure mafia
+    else expectBuildSuccess mafia
+
+    gitAddSubmodule github repoDir dep
+
+expectBuildSuccess :: File -> EitherT ChaosError IO ()
+expectBuildSuccess mafia =
+  call_ ProcessError mafia ["build"]
+
+expectBuildFailure :: File -> EitherT ChaosError IO ()
+expectBuildFailure mafia = do
+  result <- liftIO . runEitherT $ call_ id mafia ["build"]
+  hoistEither $ case result of
+    Left _   -> Right ()
+    Right () -> Left ExpectedBuildFailure
 
 putAdd :: MonadIO m => Text -> m ()
 putAdd x = liftIO (T.putStrLn ("+ " <> x))
