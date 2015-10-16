@@ -20,6 +20,7 @@ import qualified Data.Text.IO as T
 import           Data.Time (getCurrentTime, diffUTCTime)
 
 import           Mafia.Cabal
+import           Mafia.Git
 import           Mafia.IO
 import           Mafia.Path
 import           Mafia.Process
@@ -30,7 +31,7 @@ import           System.Exit (exitSuccess)
 import           System.IO (BufferMode(..), hSetBuffering)
 import           System.IO (IO, stdout, stderr, putStrLn, print)
 
-import           X.Control.Monad.Trans.Either (EitherT(..), hoistEither, firstEitherT, left)
+import           X.Control.Monad.Trans.Either (EitherT(..), hoistEither, firstEitherT)
 import           X.Options.Applicative (Parser, CommandFields, Mod)
 import           X.Options.Applicative (SafeCommand(..), RunType(..))
 import           X.Options.Applicative (argument, textRead, metavar, help)
@@ -177,6 +178,11 @@ renderViolation = \case
    <> "\n - cabal install ghcid"
    <> "\n - add to your $PATH"
 
+liftGit :: Functor m => EitherT GitError m a -> EitherT MafiaViolation m a
+liftGit = firstEitherT $ \case
+  GitParseError   msg -> ParseError   msg
+  GitProcessError err -> ProcessError err
+
 ------------------------------------------------------------------------
 
 update :: EitherT MafiaViolation IO ()
@@ -282,10 +288,6 @@ initialize = do
 
 type ProjectName = Text
 
-getProjectRoot :: EitherT MafiaViolation IO File
-getProjectRoot =
-  T.strip . unOut <$> call ProcessError "git" ["rev-parse", "--show-toplevel"]
-
 getProjectName :: EitherT MafiaViolation IO ProjectName
 getProjectName = EitherT $ do
   entries <- getDirectoryContents "."
@@ -309,7 +311,7 @@ data CacheUpdate
 
 determineCacheUpdates :: EitherT MafiaViolation IO [CacheUpdate]
 determineCacheUpdates = do
-    initSubmodules
+    liftGit initSubmodules
     syncCabalSources
 
     currentDir  <- getCurrentDirectory
@@ -481,7 +483,7 @@ getSubmoduleSources = Set.union <$> getConfiguredSources
 
 getConfiguredSources :: EitherT MafiaViolation IO (Set Directory)
 getConfiguredSources = do
-  root <- getProjectRoot
+  root <- liftGit getProjectRoot
   name <- getProjectName
   cfg  <- readText (name <> ".submodules")
   return . Set.fromList
@@ -492,7 +494,7 @@ getConfiguredSources = do
 
 getConventionSources :: EitherT MafiaViolation IO (Set Directory)
 getConventionSources = do
-  root <- getProjectRoot
+  root <- liftGit getProjectRoot
 
   let lib = root </> "lib/"
   exists <- doesDirectoryExist lib
@@ -560,51 +562,3 @@ sandbox_ :: Argument -> [Argument] -> EitherT MafiaViolation IO ()
 sandbox_ cmd args = do
   Pass <- sandbox cmd args
   return ()
-
-------------------------------------------------------------------------
-
-data SubmoduleState = NeedsInit | Ready
-  deriving (Eq, Ord, Show)
-
-data Submodule = Submodule
-  { subState :: SubmoduleState
-  , subName  :: Path
-  } deriving (Eq, Ord, Show)
-
-subNeedsInit :: Submodule -> Bool
-subNeedsInit = (== NeedsInit) . subState
-
--- Init any submodules that we need. Don't worry about explicit submodules
--- file here, we just want to trust git to tell us things that haven't been
--- initialized, we really _don't_ want to run this just because a module is
--- dirty from development changes etc...
-initSubmodules :: EitherT MafiaViolation IO ()
-initSubmodules = do
-  root <- getProjectRoot
-  ss   <- fmap subName . filter subNeedsInit <$> getSubmodules
-
-  forM_ ss $ \s ->
-    callFrom_ ProcessError root "git" ["submodule", "update", "--init", s]
-
-getSubmodules :: EitherT MafiaViolation IO [Submodule]
-getSubmodules = do
-  root    <- getProjectRoot
-  Out out <- callFrom ProcessError root "git" ["submodule"]
-
-  sequence . fmap parseSubmoduleLine
-           . T.lines
-           $ out
-
-parseSubmoduleLine :: Text -> EitherT MafiaViolation IO Submodule
-parseSubmoduleLine line = Submodule (parseSubmoduleState line) <$> parseSubmoduleName line
-
-parseSubmoduleState :: Text -> SubmoduleState
-parseSubmoduleState line
-  | "-" `T.isPrefixOf` line = NeedsInit
-  | otherwise               = Ready
-
-parseSubmoduleName :: Text -> EitherT MafiaViolation IO Text
-parseSubmoduleName line =
-  case T.words line of
-    (_:x:_) -> pure x
-    _       -> left (ParseError ("failed to read submodule name from: " <> line))
