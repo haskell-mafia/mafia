@@ -109,6 +109,7 @@ test-suite test-io
                     , ambiata-mafia
                     , ambiata-p
                     , ambiata-x-either
+                    , containers                      == 0.5.*
                     , exceptions                      == 0.8.*
                     , QuickCheck                      == 2.7.*
                     , quickcheck-instances            == 0.3.*
