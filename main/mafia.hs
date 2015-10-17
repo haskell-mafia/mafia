@@ -1,4 +1,5 @@
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE MultiWayIf #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -419,23 +420,19 @@ invalidateCache cabalFile = do
 
 cacheUpdate :: File -> File -> EitherT MafiaViolation IO (Maybe CacheUpdate)
 cacheUpdate src dst = do
-  src_exist <- doesFileExist src
-  dst_exist <- doesFileExist dst
-  case (src_exist, dst_exist) of
-    (False, False) -> return (Nothing)
-    (False, True)  -> return (Just (Delete dst))
-    (True,  False) -> return (Just (Update src dst))
-    (True,  True)  -> do
-      src_time  <- getModificationTime src
-      dst_time  <- getModificationTime dst
-      case src_time == dst_time of
-        True  -> return (Nothing)
-        False -> do
-          src_bytes <- readBytes src
-          dst_bytes <- readBytes dst
-          case src_bytes == dst_bytes of
-            True  -> return (Nothing)
-            False -> return (Just (Update src dst))
+  src_missing <- not <$> doesFileExist src
+  dst_missing <- not <$> doesFileExist dst
+  if | src_missing && dst_missing -> return (Nothing)
+     | src_missing                -> return (Just (Delete dst))
+     | dst_missing                -> return (Just (Update src dst))
+     | otherwise                  -> cacheUpdateDiff src dst
+
+cacheUpdateDiff :: File -> File -> EitherT MafiaViolation IO (Maybe CacheUpdate)
+cacheUpdateDiff src dst = do
+  src_bytes <- readBytes src
+  dst_bytes <- readBytes dst
+  if | src_bytes == dst_bytes -> return (Nothing)
+     | otherwise              -> return (Just (Update src dst))
 
 ------------------------------------------------------------------------
 
