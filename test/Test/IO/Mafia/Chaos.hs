@@ -334,18 +334,26 @@ cabalText name deps = T.unlines [
 
 ------------------------------------------------------------------------
 
+git :: (MonadCatch m, MonadIO m, Functor m, ProcessResult a)
+    => Directory -> Argument -> [Argument] -> EitherT ChaosError m a
+git dir cmd args =
+  callFrom ProcessError dir "git" ([cmd] <> args)
+
 createGitHub :: (MonadCatch m, MonadIO m, Functor m) => Path -> EitherT ChaosError m ()
 createGitHub dir =
   forM_ submoduleNames $ \name -> do
     let subDir = dir </> name
 
     createDirectoryIfMissing True subDir
-    Hush <- callFrom ProcessError subDir "git" ["init"]
-    Hush <- callFrom ProcessError subDir "git" ["commit", "--allow-empty", "-m", "initial commit"]
+
+    Hush <- git subDir "init" []
+    Hush <- git subDir "config" ["user.name", "Doris"]
+    Hush <- git subDir "config" ["user.email", "doris@megacorp.com"]
 
     writeProject subDir name [] []
-    Hush <- callFrom ProcessError subDir "git" ["add", "-A"]
-    Hush <- callFrom ProcessError subDir "git" ["commit", "-m", "created project"]
+
+    Hush <- git subDir "add" ["-A"]
+    Hush <- git subDir "commit" ["-m", "created project"]
 
     return ()
 
@@ -359,20 +367,20 @@ gitAddSubmodule github repoDir dep = do
   let subDir = "lib" </> dep
   exists <- submoduleExists subDir
   unless exists $ do
-    callFrom_ ProcessError repoDir "git" ["submodule", "add", github </> dep, subDir]
-    callFrom_ ProcessError repoDir "git" ["commit", "-m", "added " <> dep]
+    Pass <- git repoDir "submodule" ["add", github </> dep, subDir]
+    Pass <- git repoDir "commit" ["-m", "added " <> dep]
+    return ()
 
 gitRemoveSubmodule :: Directory -> Path -> EitherT ChaosError IO ()
 gitRemoveSubmodule repoDir dep = do
   let subDir = "lib" </> dep
   exists <- submoduleExists subDir
   when exists $ do
-    callFrom_ ProcessError repoDir "git" ["rm", "--cached", subDir]
-    callFrom_ ProcessError repoDir "git" ["commit", "-m", "removed " <> dep]
+    Pass <- git repoDir "rm" ["--cached", subDir]
+    Pass <- git repoDir "commit" ["-m", "removed " <> dep]
+    return ()
 
 ------------------------------------------------------------------------
-
-savages = Actions {unActions = [AddLocal "chaos-norovirus" "chaos-focus",AddLocal "chaos-measles" "chaos-norovirus",RemoveLocal "chaos-norovirus",SidestepLocal "chaos-measles"]}
 
 prop_chaos (Actions actions) = withTempDirectory $ \temp -> do
   liftIO (print actions)
@@ -388,9 +396,9 @@ prop_chaos (Actions actions) = withTempDirectory $ \temp -> do
   createDirectoryIfMissing False repoDir
   createDirectoryIfMissing False focusDir
 
-  setCurrentDirectory repoDir
-  call_ ProcessError "git" ["init"]
-  call_ ProcessError "git" ["commit", "--allow-empty", "-m", "inital commit"]
+  Pass <- git repoDir "init" []
+  Pass <- git repoDir "config" ["user.name", "Doris"]
+  Pass <- git repoDir "config" ["user.email", "doris@megacorp.com"]
 
   setCurrentDirectory focusDir
   writeRepo repoDir emptyRepo
