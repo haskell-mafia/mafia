@@ -28,7 +28,7 @@ run_upgrade () {
 exec_mafia () {
   MAFIA_VERSION=$(awk '/^# Version: / { print $3; exit 0; }' $0)
 
-  if [ "x$MAFIA_VERSION" == "x" ]; then
+  if [ "x$MAFIA_VERSION" = "x" ]; then
     # If we can't find the mafia version, then we need to upgrade the script.
     run_upgrade
   else
