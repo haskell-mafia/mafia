@@ -40,6 +40,7 @@ library
                     BuildInfo_ambiata_mafia
                     Mafia
                     Mafia.Cabal
+                    Mafia.Git
                     Mafia.IO
                     Mafia.Path
                     Mafia.Process

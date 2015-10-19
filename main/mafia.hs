@@ -1,4 +1,5 @@
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE MultiWayIf #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -20,6 +21,7 @@ import qualified Data.Text.IO as T
 import           Data.Time (getCurrentTime, diffUTCTime)
 
 import           Mafia.Cabal
+import           Mafia.Git
 import           Mafia.IO
 import           Mafia.Path
 import           Mafia.Process
@@ -30,7 +32,7 @@ import           System.Exit (exitSuccess)
 import           System.IO (BufferMode(..), hSetBuffering)
 import           System.IO (IO, stdout, stderr, putStrLn, print)
 
-import           X.Control.Monad.Trans.Either (EitherT(..), hoistEither, firstEitherT, left)
+import           X.Control.Monad.Trans.Either (EitherT(..), hoistEither, firstEitherT)
 import           X.Options.Applicative (Parser, CommandFields, Mod)
 import           X.Options.Applicative (SafeCommand(..), RunType(..))
 import           X.Options.Applicative (argument, textRead, metavar, help)
@@ -177,6 +179,11 @@ renderViolation = \case
    <> "\n - cabal install ghcid"
    <> "\n - add to your $PATH"
 
+liftGit :: Functor m => EitherT GitError m a -> EitherT MafiaViolation m a
+liftGit = firstEitherT $ \case
+  GitParseError   msg -> ParseError   msg
+  GitProcessError err -> ProcessError err
+
 ------------------------------------------------------------------------
 
 update :: EitherT MafiaViolation IO ()
@@ -282,10 +289,6 @@ initialize = do
 
 type ProjectName = Text
 
-getProjectRoot :: EitherT MafiaViolation IO File
-getProjectRoot =
-  T.strip . unOut <$> call ProcessError "git" ["rev-parse", "--show-toplevel"]
-
 getProjectName :: EitherT MafiaViolation IO ProjectName
 getProjectName = EitherT $ do
   entries <- getDirectoryContents "."
@@ -309,7 +312,7 @@ data CacheUpdate
 
 determineCacheUpdates :: EitherT MafiaViolation IO [CacheUpdate]
 determineCacheUpdates = do
-    initSubmodules
+    liftGit initSubmodules
     syncCabalSources
 
     currentDir  <- getCurrentDirectory
@@ -417,23 +420,19 @@ invalidateCache cabalFile = do
 
 cacheUpdate :: File -> File -> EitherT MafiaViolation IO (Maybe CacheUpdate)
 cacheUpdate src dst = do
-  src_exist <- doesFileExist src
-  dst_exist <- doesFileExist dst
-  case (src_exist, dst_exist) of
-    (False, False) -> return (Nothing)
-    (False, True)  -> return (Just (Delete dst))
-    (True,  False) -> return (Just (Update src dst))
-    (True,  True)  -> do
-      src_time  <- getModificationTime src
-      dst_time  <- getModificationTime dst
-      case src_time == dst_time of
-        True  -> return (Nothing)
-        False -> do
-          src_bytes <- readBytes src
-          dst_bytes <- readBytes dst
-          case src_bytes == dst_bytes of
-            True  -> return (Nothing)
-            False -> return (Just (Update src dst))
+  src_missing <- not <$> doesFileExist src
+  dst_missing <- not <$> doesFileExist dst
+  if | src_missing && dst_missing -> return (Nothing)
+     | src_missing                -> return (Just (Delete dst))
+     | dst_missing                -> return (Just (Update src dst))
+     | otherwise                  -> cacheUpdateDiff src dst
+
+cacheUpdateDiff :: File -> File -> EitherT MafiaViolation IO (Maybe CacheUpdate)
+cacheUpdateDiff src dst = do
+  src_bytes <- readBytes src
+  dst_bytes <- readBytes dst
+  if | src_bytes == dst_bytes -> return (Nothing)
+     | otherwise              -> return (Just (Update src dst))
 
 ------------------------------------------------------------------------
 
@@ -481,7 +480,7 @@ getSubmoduleSources = Set.union <$> getConfiguredSources
 
 getConfiguredSources :: EitherT MafiaViolation IO (Set Directory)
 getConfiguredSources = do
-  root <- getProjectRoot
+  root <- liftGit getProjectRoot
   name <- getProjectName
   cfg  <- readText (name <> ".submodules")
   return . Set.fromList
@@ -492,24 +491,27 @@ getConfiguredSources = do
 
 getConventionSources :: EitherT MafiaViolation IO (Set Directory)
 getConventionSources = do
-  root <- getProjectRoot
+  root <- liftGit getProjectRoot
+  subs <- fmap ((root </>) . subName) <$> liftGit getSubmodules
+  Set.unions <$> traverse getSourcesFrom subs
 
-  let lib = root </> "lib/"
-  exists <- doesDirectoryExist lib
+getSourcesFrom :: MonadIO m => Directory -> m (Set Path)
+getSourcesFrom dir = do
+  let cleanDir x = dropTrailingPathSeparator `liftM` canonicalizePath x
 
-  case exists of
-    False -> return Set.empty
-    True  -> do
-      entries <- getDirectoryListing (RecursiveDepth 4) lib
-      return . Set.fromList
-             . fmap   (lib </>)
-             . fmap   (takeDirectory)
-             . filter (not . T.isInfixOf ".cabal-sandbox")
-             . filter (not . T.isInfixOf "/lib/")
-             . filter (not . T.isInfixOf "/bin/")
-             . filter (extension ".cabal")
-             . fmap   (T.drop (T.length lib))
-             $ entries
+  dir'    <- cleanDir dir
+  entries <- getDirectoryListing (RecursiveDepth 3) dir'
+  sources <- mapM cleanDir
+           . fmap   (dir' </>)
+           . fmap   (takeDirectory)
+           . filter (not . T.isInfixOf ".cabal-sandbox/")
+           . filter (not . T.isPrefixOf "lib/")
+           . filter (not . T.isPrefixOf "bin/")
+           . filter (extension ".cabal")
+           . fmap   (T.drop (T.length dir' + 1))
+           $ entries
+
+  return (Set.fromList sources)
 
 ------------------------------------------------------------------------
 
@@ -560,51 +562,3 @@ sandbox_ :: Argument -> [Argument] -> EitherT MafiaViolation IO ()
 sandbox_ cmd args = do
   Pass <- sandbox cmd args
   return ()
-
-------------------------------------------------------------------------
-
-data SubmoduleState = NeedsInit | Ready
-  deriving (Eq, Ord, Show)
-
-data Submodule = Submodule
-  { subState :: SubmoduleState
-  , subName  :: Path
-  } deriving (Eq, Ord, Show)
-
-subNeedsInit :: Submodule -> Bool
-subNeedsInit = (== NeedsInit) . subState
-
--- Init any submodules that we need. Don't worry about explicit submodules
--- file here, we just want to trust git to tell us things that haven't been
--- initialized, we really _don't_ want to run this just because a module is
--- dirty from development changes etc...
-initSubmodules :: EitherT MafiaViolation IO ()
-initSubmodules = do
-  root <- getProjectRoot
-  ss   <- fmap subName . filter subNeedsInit <$> getSubmodules
-
-  forM_ ss $ \s ->
-    callFrom_ ProcessError root "git" ["submodule", "update", "--init", s]
-
-getSubmodules :: EitherT MafiaViolation IO [Submodule]
-getSubmodules = do
-  root    <- getProjectRoot
-  Out out <- callFrom ProcessError root "git" ["submodule"]
-
-  sequence . fmap parseSubmoduleLine
-           . T.lines
-           $ out
-
-parseSubmoduleLine :: Text -> EitherT MafiaViolation IO Submodule
-parseSubmoduleLine line = Submodule (parseSubmoduleState line) <$> parseSubmoduleName line
-
-parseSubmoduleState :: Text -> SubmoduleState
-parseSubmoduleState line
-  | "-" `T.isPrefixOf` line = NeedsInit
-  | otherwise               = Ready
-
-parseSubmoduleName :: Text -> EitherT MafiaViolation IO Text
-parseSubmoduleName line =
-  case T.words line of
-    (_:x:_) -> pure x
-    _       -> left (ParseError ("failed to read submodule name from: " <> line))

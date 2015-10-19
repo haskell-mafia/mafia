@@ -10,6 +10,7 @@ module Mafia.Path
   , (</>)
   , takeFileName
   , takeDirectory
+  , dropTrailingPathSeparator
   , makeRelative
 
     -- * Extension functions
@@ -44,6 +45,9 @@ takeFileName = T.pack . FilePath.takeFileName . T.unpack
 
 takeDirectory :: Path -> Directory
 takeDirectory = T.pack . FilePath.takeDirectory . T.unpack
+
+dropTrailingPathSeparator :: Directory -> Directory
+dropTrailingPathSeparator = T.pack . FilePath.dropTrailingPathSeparator . T.unpack
 
 makeRelative :: Path -> Path -> Maybe Path
 makeRelative xp yp =
