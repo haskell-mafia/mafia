@@ -9,4 +9,5 @@ for CABAL_SOURCE in $CABAL_SOURCES; do
   cabal sandbox add-source -- $CABAL_SOURCE
 done
 
+cabal update
 cabal install
