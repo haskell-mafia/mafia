@@ -35,7 +35,7 @@ import           System.IO (IO, stdout, stderr, putStrLn, print)
 import           X.Control.Monad.Trans.Either (EitherT(..), hoistEither, firstEitherT)
 import           X.Options.Applicative (Parser, CommandFields, Mod)
 import           X.Options.Applicative (SafeCommand(..), RunType(..))
-import           X.Options.Applicative (argument, textRead, metavar, help)
+import           X.Options.Applicative (argument, textRead, metavar, help, long, short, option)
 import           X.Options.Applicative (dispatch, orDie, subparser, safeCommand, command')
 
 ------------------------------------------------------------------------
@@ -61,19 +61,19 @@ data MafiaCommand
   | MafiaTest   [Argument]
   | MafiaTestCI [Argument]
   | MafiaRepl   [Argument]
-  | MafiaQuick  File
-  | MafiaWatch  File [Argument]
+  | MafiaQuick  [Directory] File
+  | MafiaWatch  [Directory] File [Argument]
   deriving (Eq, Show)
 
 run :: MafiaCommand -> EitherT MafiaViolation IO ()
 run = \case
-  MafiaUpdate            -> update
-  MafiaBuild  args       -> build  args
-  MafiaTest   args       -> test   args
-  MafiaTestCI args       -> testci args
-  MafiaRepl   args       -> repl   args
-  MafiaQuick  entry      -> quick  entry
-  MafiaWatch  entry args -> watch  entry args
+  MafiaUpdate                 -> update
+  MafiaBuild  args            -> build  args
+  MafiaTest   args            -> test   args
+  MafiaTestCI args            -> testci args
+  MafiaRepl   args            -> repl   args
+  MafiaQuick  dirs entry      -> quick  dirs entry
+  MafiaWatch  dirs entry args -> watch  dirs entry args
 
 parser :: Parser (SafeCommand MafiaCommand)
 parser = safeCommand . subparser . mconcat $ commands
@@ -98,14 +98,14 @@ commands =
 
  , command' "quick" ( "Start the repl directly skipping cabal, this is useful "
                    <> "developing across multiple source trees at once." )
-            (MafiaQuick <$> pGhciEntryPoint)
+            (MafiaQuick <$> many pGhciIncludeDirectory <*> pGhciEntryPoint)
 
  , command' "watch" ( "Watches filesystem for changes and stays running, compiles "
                    <> "and gives quick feedback. "
                    <> "Similarly to quick needs an entrypoint. "
                    <> "To run tests use '-T EXPR' i.e. "
                    <> "mafia watch test/test.hs -- -T Test.Pure.tests" )
-            (MafiaWatch <$> pGhciEntryPoint <*> many pGhcidArgs)
+            (MafiaWatch <$> many pGhciIncludeDirectory <*> pGhciEntryPoint <*> many pGhcidArgs)
  ]
 
 pGhciEntryPoint :: Parser File
@@ -113,6 +113,14 @@ pGhciEntryPoint =
   argument textRead $
        metavar "FILE"
     <> help "The entry point for GHCi."
+
+pGhciIncludeDirectory :: Parser Directory
+pGhciIncludeDirectory =
+  option textRead $
+       long "include"
+    <> short 'i'
+    <> metavar "DIRECTORY"
+    <> help "An additional source directory for GHCi."
 
 pCabalArgs :: Parser Argument
 pCabalArgs =
@@ -221,26 +229,26 @@ repl args = do
   initialize
   cabal_ "repl" args
 
-quick :: File -> EitherT MafiaViolation IO ()
-quick path = do
-  args <- ghciArgs path
+quick :: [Directory] -> File -> EitherT MafiaViolation IO ()
+quick extraIncludes path = do
+  args <- ghciArgs extraIncludes path
   exec ProcessError "ghci" args
 
-watch :: File -> [Argument] -> EitherT MafiaViolation IO ()
-watch path extraArgs = do
+watch :: [Directory] -> File -> [Argument] -> EitherT MafiaViolation IO ()
+watch extraIncludes path extraArgs = do
   Hush <- call (const GhcidNotInstalled) "ghcid" ["--help"]
-  args <- ghciArgs path
+  args <- ghciArgs extraIncludes path
   exec ProcessError "ghcid" $ [ "-c", T.unwords ("ghci" : args) ] <> extraArgs
 
-ghciArgs :: File -> EitherT MafiaViolation IO [Argument]
-ghciArgs path = do
+ghciArgs :: [Directory] -> File -> EitherT MafiaViolation IO [Argument]
+ghciArgs extraIncludes path = do
   exists <- doesFileExist path
   case exists of
     False -> hoistEither (Left (EntryPointNotFound path))
     True  -> do
       initialize
 
-      let dirs = ["src", "test", "gen", "dist/build/autogen"]
+      let dirs = ["src", "test", "gen", "dist/build/autogen"] <> extraIncludes
       includes  <- catMaybes <$> mapM ensureDirectory dirs
       databases <- getPackageDatabases
 
