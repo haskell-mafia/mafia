@@ -35,7 +35,7 @@ import           System.IO (IO, stdout, stderr, putStrLn, print)
 import           X.Control.Monad.Trans.Either (EitherT(..), hoistEither, firstEitherT)
 import           X.Options.Applicative (Parser, CommandFields, Mod)
 import           X.Options.Applicative (SafeCommand(..), RunType(..))
-import           X.Options.Applicative (argument, textRead, metavar, help, long, short, option)
+import           X.Options.Applicative (argument, textRead, metavar, help, long, short, option, flag')
 import           X.Options.Applicative (dispatch, orDie, subparser, safeCommand, command')
 
 ------------------------------------------------------------------------
@@ -61,8 +61,13 @@ data MafiaCommand
   | MafiaTest   [Argument]
   | MafiaTestCI [Argument]
   | MafiaRepl   [Argument]
-  | MafiaQuick  [Directory] File
-  | MafiaWatch  [Directory] File [Argument]
+  | MafiaQuick  [GhciInclude] File
+  | MafiaWatch  [GhciInclude] File [Argument]
+  deriving (Eq, Show)
+
+data GhciInclude
+  = Directory Directory
+  | AllLibraries
   deriving (Eq, Show)
 
 run :: MafiaCommand -> EitherT MafiaViolation IO ()
@@ -72,8 +77,8 @@ run = \case
   MafiaTest   args            -> test   args
   MafiaTestCI args            -> testci args
   MafiaRepl   args            -> repl   args
-  MafiaQuick  dirs entry      -> quick  dirs entry
-  MafiaWatch  dirs entry args -> watch  dirs entry args
+  MafiaQuick  incs entry      -> quick  incs entry
+  MafiaWatch  incs entry args -> watch  incs entry args
 
 parser :: Parser (SafeCommand MafiaCommand)
 parser = safeCommand . subparser . mconcat $ commands
@@ -98,14 +103,14 @@ commands =
 
  , command' "quick" ( "Start the repl directly skipping cabal, this is useful "
                    <> "developing across multiple source trees at once." )
-            (MafiaQuick <$> many pGhciIncludeDirectory <*> pGhciEntryPoint)
+            (MafiaQuick <$> pGhciIncludes <*> pGhciEntryPoint)
 
  , command' "watch" ( "Watches filesystem for changes and stays running, compiles "
                    <> "and gives quick feedback. "
                    <> "Similarly to quick needs an entrypoint. "
                    <> "To run tests use '-T EXPR' i.e. "
                    <> "mafia watch test/test.hs -- -T Test.Pure.tests" )
-            (MafiaWatch <$> many pGhciIncludeDirectory <*> pGhciEntryPoint <*> many pGhcidArgs)
+            (MafiaWatch <$> pGhciIncludes <*> pGhciEntryPoint <*> many pGhcidArgs)
  ]
 
 pGhciEntryPoint :: Parser File
@@ -114,9 +119,19 @@ pGhciEntryPoint =
        metavar "FILE"
     <> help "The entry point for GHCi."
 
-pGhciIncludeDirectory :: Parser Directory
+pGhciIncludes :: Parser [GhciInclude]
+pGhciIncludes = many (pGhciIncludeDirectory <|> pGhciIncludeAllLibraries)
+
+pGhciIncludeAllLibraries :: Parser GhciInclude
+pGhciIncludeAllLibraries =
+  flag' AllLibraries $
+       long "all"
+    <> short 'a'
+    <> help "Include all library source directories for GHCi."
+
+pGhciIncludeDirectory :: Parser GhciInclude
 pGhciIncludeDirectory =
-  option textRead $
+  fmap Directory . option textRead $
        long "include"
     <> short 'i'
     <> metavar "DIRECTORY"
@@ -229,18 +244,18 @@ repl args = do
   initialize
   cabal_ "repl" args
 
-quick :: [Directory] -> File -> EitherT MafiaViolation IO ()
+quick :: [GhciInclude] -> File -> EitherT MafiaViolation IO ()
 quick extraIncludes path = do
   args <- ghciArgs extraIncludes path
   exec ProcessError "ghci" args
 
-watch :: [Directory] -> File -> [Argument] -> EitherT MafiaViolation IO ()
+watch :: [GhciInclude] -> File -> [Argument] -> EitherT MafiaViolation IO ()
 watch extraIncludes path extraArgs = do
   Hush <- call (const GhcidNotInstalled) "ghcid" ["--help"]
   args <- ghciArgs extraIncludes path
   exec ProcessError "ghcid" $ [ "-c", T.unwords ("ghci" : args) ] <> extraArgs
 
-ghciArgs :: [Directory] -> File -> EitherT MafiaViolation IO [Argument]
+ghciArgs :: [GhciInclude] -> File -> EitherT MafiaViolation IO [Argument]
 ghciArgs extraIncludes path = do
   exists <- doesFileExist path
   case exists of
@@ -248,7 +263,9 @@ ghciArgs extraIncludes path = do
     True  -> do
       initialize
 
-      let dirs = ["src", "test", "gen", "dist/build/autogen"] <> extraIncludes
+      extras <- concat <$> mapM reifyInclude extraIncludes
+
+      let dirs = ["src", "test", "gen", "dist/build/autogen"] <> extras
       includes  <- catMaybes <$> mapM ensureDirectory dirs
       databases <- getPackageDatabases
 
@@ -256,6 +273,19 @@ ghciArgs extraIncludes path = do
             <> (fmap ("-i" <>)           includes)
             <> (fmap ("-package-db=" <>) databases)
             <> [ path ]
+
+reifyInclude :: GhciInclude -> EitherT MafiaViolation IO [Directory]
+reifyInclude = \case
+  Directory dir -> return [dir]
+  AllLibraries  -> do
+    absDirs <- Set.toList <$> getSubmoduleSources
+    relDirs <- mapM tryMakeRelativeToCurrent absDirs
+    return [ dir </> sub | dir <- relDirs
+                         , sub <- ["src", "test", "gen", "dist/build/autogen"] ]
+
+tryMakeRelativeToCurrent :: MonadIO m => Directory -> m Directory
+tryMakeRelativeToCurrent dir =
+  fromMaybe dir `liftM` makeRelativeToCurrentDirectory dir
 
 ensureDirectory :: MonadIO m => Directory -> m (Maybe Directory)
 ensureDirectory dir = do
