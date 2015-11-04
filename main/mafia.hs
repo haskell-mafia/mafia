@@ -2,6 +2,7 @@
 {-# LANGUAGE MultiWayIf #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
 import           BuildInfo_ambiata_mafia
@@ -32,11 +33,13 @@ import           System.Exit (exitSuccess)
 import           System.IO (BufferMode(..), hSetBuffering)
 import           System.IO (IO, stdout, stderr, putStrLn, print)
 
-import           X.Control.Monad.Trans.Either (EitherT(..), hoistEither, firstEitherT)
+import           X.Control.Monad.Trans.Either (EitherT, pattern EitherT, runEitherT)
+import           X.Control.Monad.Trans.Either (hoistEither, firstEitherT)
+import           X.Control.Monad.Trans.Either.Exit (orDie)
 import           X.Options.Applicative (Parser, CommandFields, Mod)
 import           X.Options.Applicative (SafeCommand(..), RunType(..))
 import           X.Options.Applicative (argument, textRead, metavar, help, long, short, option, flag')
-import           X.Options.Applicative (dispatch, orDie, subparser, safeCommand, command')
+import           X.Options.Applicative (dispatch, subparser, safeCommand, command')
 
 ------------------------------------------------------------------------
 
