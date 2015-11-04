@@ -84,7 +84,7 @@ filterEntries pred sandboxDir = do
 
 readPackageName :: MonadIO m => File -> m (Maybe Text)
 readPackageName cabalFile = do
-  text <- fromMaybe T.empty `liftM` readText cabalFile
+  text <- fromMaybe T.empty `liftM` readUtf8 cabalFile
 
   let findName ("name:":name:_) = Just name
       findName _                = Nothing
