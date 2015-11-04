@@ -38,7 +38,8 @@ import           Test.QuickCheck (Arbitrary(..), Gen, Property, Testable(..))
 import           Test.QuickCheck (forAllProperties)
 import qualified Test.QuickCheck as QC
 
-import           X.Control.Monad.Trans.Either (EitherT(..), firstEitherT, hoistEither)
+import           X.Control.Monad.Trans.Either (EitherT, runEitherT)
+import           X.Control.Monad.Trans.Either (firstEitherT, hoistEither)
 
 ------------------------------------------------------------------------
 

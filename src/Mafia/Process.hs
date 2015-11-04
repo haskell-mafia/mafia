@@ -2,6 +2,7 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NoImplicitPrelude #-}
+{-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 module Mafia.Process
   ( -- * Inputs
@@ -60,7 +61,7 @@ import qualified System.IO as IO
 import qualified System.Process as Process
 import qualified System.Posix.Process as Posix
 
-import           X.Control.Monad.Trans.Either (EitherT(..))
+import           X.Control.Monad.Trans.Either (EitherT, pattern EitherT)
 import           X.Control.Monad.Trans.Either (firstEitherT, hoistEither)
 
 ------------------------------------------------------------------------
