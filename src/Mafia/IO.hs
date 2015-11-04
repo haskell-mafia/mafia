@@ -21,9 +21,9 @@ module Mafia.IO
   , getModificationTime
 
     -- * File Operations
-  , readText
+  , readUtf8
   , readBytes
-  , writeText
+  , writeUtf8
   , writeBytes
   , removeFile
   , copyFile
@@ -36,12 +36,13 @@ module Mafia.IO
   ) where
 
 import           Control.Monad.IO.Class (MonadIO(..))
+import           Control.Monad.Trans.Maybe (MaybeT(..))
 
 import           Data.ByteString (ByteString)
 import qualified Data.ByteString as B
 import           Data.Text (Text)
 import qualified Data.Text as T
-import qualified Data.Text.IO as T
+import qualified Data.Text.Encoding as T
 import           Data.Time (UTCTime)
 
 import           Mafia.Path
@@ -123,15 +124,13 @@ getModificationTime path = liftIO (Directory.getModificationTime (T.unpack path)
 ------------------------------------------------------------------------
 -- File I/O
 
-readText :: MonadIO m => File -> m (Maybe Text)
-readText path = liftIO $ do
-  exists <- doesFileExist path
-  case exists of
-    False -> return Nothing
-    True  -> Just `liftM` T.readFile (T.unpack path)
+readUtf8 :: MonadIO m => File -> m (Maybe Text)
+readUtf8 path = runMaybeT $ do
+  bytes <- MaybeT (readBytes path)
+  return (T.decodeUtf8 bytes)
 
-writeText :: MonadIO m => File -> Text -> m ()
-writeText path text = liftIO (T.writeFile (T.unpack path) text)
+writeUtf8 :: MonadIO m => File -> Text -> m ()
+writeUtf8 path text = liftIO (B.writeFile (T.unpack path) (T.encodeUtf8 text))
 
 readBytes :: MonadIO m => File -> m (Maybe ByteString)
 readBytes path = liftIO $ do

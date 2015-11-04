@@ -448,13 +448,13 @@ tryUnregisterPackage cabalFile = do
 
 invalidateCache :: MonadIO m => File -> m ()
 invalidateCache cabalFile = do
-  mtxt <- readText cabalFile
+  mtxt <- readUtf8 cabalFile
   case mtxt of
     Nothing  -> return ()
     Just txt -> do
       time <- liftIO getCurrentTime
       let header = "-- " <> T.pack (show time) <> "\n"
-      writeText cabalFile (header <> txt)
+      writeUtf8 cabalFile (header <> txt)
 
 cacheUpdate :: File -> File -> EitherT MafiaViolation IO (Maybe CacheUpdate)
 cacheUpdate src dst = do
@@ -520,7 +520,7 @@ getConfiguredSources :: EitherT MafiaViolation IO (Set Directory)
 getConfiguredSources = do
   root <- liftGit getProjectRoot
   name <- getProjectName
-  cfg  <- readText (name <> ".submodules")
+  cfg  <- readUtf8 (name <> ".submodules")
   return . Set.fromList
          . fmap (root </>)
          . T.lines
@@ -560,7 +560,7 @@ getSandboxDir = do
   name <- getProjectName
 
   sandboxDir <- fromMaybe ".cabal-sandbox"
-            <$> liftIO (readText (name <> ".sandbox"))
+            <$> liftIO (readUtf8 (name <> ".sandbox"))
 
   showtime <- liftIO (doesDirectoryExist sandboxDir)
   unless showtime $

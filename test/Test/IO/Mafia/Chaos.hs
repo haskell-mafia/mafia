@@ -305,7 +305,7 @@ writeProject dir name deps locals = do
 writeFile :: MonadIO m => Path -> Text -> m ()
 writeFile path txt = do
   createDirectoryIfMissing True (takeDirectory path)
-  writeText path txt
+  writeUtf8 path txt
 
 dromedary :: Text -> Text
 dromedary = mconcat . fmap upcase . T.splitOn "-"
