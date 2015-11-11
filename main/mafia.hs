@@ -64,6 +64,7 @@ data MafiaCommand
   | MafiaTest   [Argument]
   | MafiaTestCI [Argument]
   | MafiaRepl   [Argument]
+  | MafiaBench  [Argument]
   | MafiaQuick  [GhciInclude] File
   | MafiaWatch  [GhciInclude] File [Argument]
   deriving (Eq, Show)
@@ -80,6 +81,7 @@ run = \case
   MafiaTest   args            -> test   args
   MafiaTestCI args            -> testci args
   MafiaRepl   args            -> repl   args
+  MafiaBench  args            -> bench  args
   MafiaQuick  incs entry      -> quick  incs entry
   MafiaWatch  incs entry args -> watch  incs entry args
 
@@ -103,6 +105,9 @@ commands =
 
  , command' "repl" "Start the repl, by default on the main library source."
             (MafiaRepl <$> many pCabalArgs)
+
+ , command' "bench" "Run project benchmarks"
+            (MafiaBench <$> many pCabalArgs)
 
  , command' "quick" ( "Start the repl directly skipping cabal, this is useful "
                    <> "developing across multiple source trees at once." )
@@ -246,6 +251,11 @@ repl :: [Argument] -> EitherT MafiaViolation IO ()
 repl args = do
   initialize
   cabal_ "repl" args
+
+bench :: [Argument] -> EitherT MafiaViolation IO ()
+bench args = do
+  initialize
+  cabal_ "bench" args
 
 quick :: [GhciInclude] -> File -> EitherT MafiaViolation IO ()
 quick extraIncludes path = do
