@@ -14,6 +14,8 @@ description:           mafia
 library
   build-depends:
                       base                            >= 3          && < 5
+                    , time                            >= 1.4        && < 1.6
+                    , time-locale-compat              == 0.1.*
                     , ambiata-p
                     , ambiata-x-eithert
                     , async                           == 2.0.*
@@ -25,7 +27,6 @@ library
                     , process                         == 1.2.*
                     , tar                             == 0.4.*
                     , text                            == 1.2.*
-                    , time                            == 1.4.*
                     , transformers                    == 0.4.*
                     , unix                            == 2.7.*
 
@@ -54,6 +55,8 @@ executable mafia
 
   build-depends:
                       base
+                    , time                            >= 1.4      && < 1.6
+                    , time-locale-compat              == 0.1.*
                     , ambiata-mafia
                     , ambiata-p
                     , ambiata-x-eithert
@@ -64,7 +67,6 @@ executable mafia
                     , filepath                        == 1.4.*
                     , optparse-applicative            == 0.11.*
                     , text                            == 1.2.*
-                    , time                            == 1.4.*
                     , transformers                    == 0.4.*
 
 
