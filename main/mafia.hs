@@ -324,6 +324,7 @@ initialize = do
     cabal_ "install" [ "-j"
                      , "--only-dependencies"
                      , "--force-reinstalls"
+                     , "--enable-relocatable"
                      , "--enable-tests"
                      , "--enable-benchmarks"
                      , "--reorder-goals"
