@@ -11,6 +11,8 @@ import           Control.Exception (IOException)
 import           Control.Monad.Catch (MonadCatch(..), handle)
 import           Control.Monad.IO.Class (MonadIO(..))
 
+import qualified Crypto.Hash as Hash
+
 import qualified Data.List as List
 import           Data.Map (Map)
 import qualified Data.Map as Map
@@ -18,6 +20,7 @@ import           Data.Set (Set)
 import qualified Data.Set as Set
 import           Data.Text (Text)
 import qualified Data.Text as T
+import qualified Data.Text.Encoding as T
 import qualified Data.Text.IO as T
 import           Data.Time (getCurrentTime, diffUTCTime)
 
@@ -29,9 +32,11 @@ import           Mafia.Process
 
 import           P
 
+import           System.Environment (lookupEnv)
 import           System.Exit (exitSuccess)
 import           System.IO (BufferMode(..), hSetBuffering)
 import           System.IO (IO, stdout, stderr, putStrLn, print)
+import           System.IO.Temp (withTempDirectory)
 
 import           X.Control.Monad.Trans.Either (EitherT, pattern EitherT, runEitherT)
 import           X.Control.Monad.Trans.Either (hoistEither, firstEitherT)
@@ -67,6 +72,7 @@ data MafiaCommand
   | MafiaBench  [Argument]
   | MafiaQuick  [GhciInclude] File
   | MafiaWatch  [GhciInclude] File [Argument]
+  | MafiaHoogle [Argument]
   deriving (Eq, Show)
 
 data GhciInclude
@@ -84,6 +90,9 @@ run = \case
   MafiaBench  args            -> bench  args
   MafiaQuick  incs entry      -> quick  incs entry
   MafiaWatch  incs entry args -> watch  incs entry args
+  MafiaHoogle args            -> do
+    hkg <- liftIO . fmap (T.pack . fromMaybe "https://hackage.haskell.org/package") $ lookupEnv "HACKAGE"
+    hoogle hkg args
 
 parser :: Parser (SafeCommand MafiaCommand)
 parser = safeCommand . subparser . mconcat $ commands
@@ -119,6 +128,9 @@ commands =
                    <> "To run tests use '-T EXPR' i.e. "
                    <> "mafia watch test/test.hs -- -T Test.Pure.tests" )
             (MafiaWatch <$> pGhciIncludes <*> pGhciEntryPoint <*> many pGhcidArgs)
+
+ , command' "hoogle" ( "Run a hoogle query across the local dependencies" )
+            (MafiaHoogle <$> many pCabalArgs)
  ]
 
 pGhciEntryPoint :: Parser File
@@ -613,3 +625,77 @@ sandbox_ :: Argument -> [Argument] -> EitherT MafiaViolation IO ()
 sandbox_ cmd args = do
   Pass <- sandbox cmd args
   return ()
+
+------------------------------------------------------------------------
+
+getMafiaHome :: IO Text
+getMafiaHome =
+  (</> T.pack ".ambiata/mafia") <$> getHomeDirectory
+
+ensureMafiaDir :: MonadIO m => Text -> m Text
+ensureMafiaDir path = liftIO $ do
+  home <- getMafiaHome
+  let path' = home </> path
+  createDirectoryIfMissing True path'
+  pure path'
+
+hoogle :: Text -> [Argument] -> EitherT MafiaViolation IO ()
+hoogle hackageRoot args = do
+  initialize
+  db <- ensureMafiaDir "hoogle"
+  hoogleExe <- installBinary "hoogle" "4.2.43" [("happy", "1.19.5")]
+  Out pkgStr <- sandbox "hc-pkg" ["list"]
+  let pkgs = fmap T.strip . filter (T.isPrefixOf " ") . T.lines $ pkgStr
+  hoos <- fmap catMaybes . for pkgs $ \pkg -> do
+    -- Extract name from `$name-$version`, but consider `unordered-containers-1.2.3`
+    let name = T.intercalate "-" . List.init $ T.splitOn "-" pkg
+    let txt = db </> pkg <> ".txt"
+    let hoo = db </> pkg <> ".hoo"
+    let skip = db </> pkg <> ".skip"
+    ifM (doesFileExist skip) (pure Nothing) $
+      ifM (doesFileExist hoo) (pure $ Just hoo) $ do
+        liftIO . T.hPutStrLn stderr $ "Downloading: " <> pkg
+        r <- runEitherT $ call ProcessError "curl" ["-f", "-s", hackageRoot </> pkg </> "docs" </> name <> ".txt", "-o", txt]
+        case r of
+          Left _ -> do
+            liftIO . T.hPutStrLn stderr $ "Missing: " <> pkg
+            -- Technically we can "convert" a broken txt file and no one is the wiser, but we're not going to do that
+            liftIO $ T.writeFile (T.unpack skip) ""
+            pure Nothing
+          Right Hush -> do
+            call_ ProcessError hoogleExe ["convert", txt]
+            pure $ Just hoo
+  -- By default hoogle will expect a 'default.hoo' file to exist in the database directory
+  -- If we want the search to just be for _this_ sandbox, we have two options
+  -- 1. Create a unique directory based on all the current packages and ensure the default.hoo
+  -- 2. Specify/append all the packages from the global database by using "+$name-$version"
+  --    Unfortunately hoogle doesn't like the "-$version" part :(
+  let hash = T.decodeUtf8 . (\(d :: Hash.Digest Hash.SHA1) -> Hash.digestToHexByteString d) . Hash.hash . T.encodeUtf8 . mconcat $ pkgs
+  db' <- (\d -> d </> "hoogle" </> hash) <$> getSandboxDir
+  unlessM (doesFileExist $ db' </> "default.hoo") $ do
+    createDirectoryIfMissing True db'
+    -- We may also want to copy/symlink all the hoo files here to allow for partial module searching
+    call_ ProcessError hoogleExe $ ["combine", "--outfile", db' </> "default.hoo"] <> hoos
+  call_ ProcessError hoogleExe $ ["-d", db'] <> args
+
+-- | Installs a given cabal package at a specific version
+installBinary :: Text -> Text -> [(Text, Text)] -> EitherT MafiaViolation IO File
+installBinary name version deps = do
+  tmp <- ensureMafiaDir "tmp"
+  let nv = name <> "-" <> version
+  bin <- ensureMafiaDir "bin"
+  let path = bin </> nv
+  liftIO (doesFileExist path) >>= \case
+    True ->
+      pure path
+    False -> do
+      EitherT . withTempDirectory (T.unpack tmp) (T.unpack $ nv <> ".") $ \sandboxDir -> runEitherT $ do
+        Pass <- callFrom ProcessError (T.pack sandboxDir) "cabal" ["sandbox", "init"]
+        -- Install any required executables first
+        -- This could also recursively call `installBinary` and copy the output in to the sandbox if we do this again
+        for_ deps $ \(n, v) -> do
+          Pass <- callFrom ProcessError (T.pack sandboxDir) "cabal" ["install", n <> "-" <> v]
+          pure ()
+        Pass <- callFrom ProcessError (T.pack sandboxDir) "cabal" ["install", nv]
+        copyFile (T.pack sandboxDir </> ".cabal-sandbox" </> "bin" </> name) path
+        return path

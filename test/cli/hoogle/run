@@ -1,0 +1,17 @@
+#!/bin/sh -eux
+
+absolute_path() {
+  echo "$(cd "$(dirname "$1")" && pwd)/$(basename "$1")"
+}
+
+MAFIA=$(absolute_path ${1:-./dist/build/mafia/mafia})
+
+MAFIA_TEMP=$(mktemp -d 2>/dev/null || mktemp -d -t 'mafia')
+trap "rm -rf \"${MAFIA_TEMP}\"" EXIT
+
+cd ${MAFIA_TEMP}
+git clone git@github.com:ambiata/p.git
+cd p
+
+${MAFIA} hoogle "length" | grep -F "Prelude length :: [a] -> Int"
+${MAFIA} hoogle "(Int -> Int) -> [Int] -> [Int]" | grep -F "Prelude fmap :: Functor f => (a -> b) -> f a -> f b"
