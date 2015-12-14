@@ -57,7 +57,7 @@ exec_mafia () {
       mv "${MAFIA_PATH}.tmp" "$MAFIA_PATH"
     }
 
-    exec $MAFIA_PATH $@
+    exec $MAFIA_PATH "$@"
   fi
 }
 
