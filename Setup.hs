@@ -1,6 +1,7 @@
 #!/usr/bin/env runhaskell
 
 import           Data.Time (formatTime, getCurrentTime)
+import           Data.Time.Locale.Compat (defaultTimeLocale)
 import           Data.List (intercalate)
 import           Data.Version (showVersion)
 
@@ -13,7 +14,6 @@ import           Distribution.Simple.BuildPaths (autogenModulesDir)
 import           Distribution.Simple.Utils (createDirectoryIfMissingVerbose, rewriteFile)
 
 import           System.FilePath ((</>), (<.>))
-import           System.Locale (defaultTimeLocale)
 import           System.Process (readProcess)
 
 main :: IO ()
