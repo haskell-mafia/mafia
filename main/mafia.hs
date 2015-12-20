@@ -39,7 +39,7 @@ import           System.IO (IO, stdout, stderr, putStrLn, print)
 import           System.IO.Temp (withTempDirectory)
 
 import           X.Control.Monad.Trans.Either (EitherT, pattern EitherT, runEitherT)
-import           X.Control.Monad.Trans.Either (hoistEither, firstEitherT)
+import           X.Control.Monad.Trans.Either (hoistEither, firstEitherT, left)
 import           X.Control.Monad.Trans.Either.Exit (orDie)
 import           X.Options.Applicative (Parser, CommandFields, Mod)
 import           X.Options.Applicative (SafeCommand(..), RunType(..))
@@ -180,6 +180,7 @@ data MafiaViolation
   | CacheUpdateError CacheUpdate IOException
   | EntryPointNotFound File
   | GhcidNotInstalled
+  | GhcNotInstalled
   deriving (Show)
 
 renderViolation :: MafiaViolation -> Text
@@ -221,6 +222,15 @@ renderViolation = \case
    <> "\n - create a fresh cabal sandbox"
    <> "\n - cabal install ghcid"
    <> "\n - add to your $PATH"
+
+  GhcNotInstalled
+   -> "ghc is not installed."
+   <> "\nTo install:"
+   <> "\n - download from https://www.haskell.org/ghc/"
+   <> "\n - ./configure --prefix=$HOME/haskell/ghc-$VERSION  # or wherever you like to keep ghc"
+   <> "\n - make install"
+   <> "\n - ln -s $HOME/haskell/ghc-$VERSION $HOME/haskell/ghc"
+   <> "\n - add $HOME/haskell/ghc/bin to your $PATH"
 
 liftGit :: Functor m => EitherT GitError m a -> EitherT MafiaViolation m a
 liftGit = firstEitherT $ \case
@@ -509,7 +519,7 @@ syncCabalSources = do
 
 repairSandbox :: EitherT MafiaViolation IO ()
 repairSandbox = do
-  sandboxDir <- getSandboxDir
+  sandboxDir <- initSandbox
   firstEitherT CabalError (repairIndexFile sandboxDir)
 
 addSandboxSource :: Directory -> EitherT MafiaViolation IO ()
@@ -580,29 +590,58 @@ getSourcesFrom dir = do
 
 -- Sandbox initialized if required, this should support sandboxes in parent
 -- directories.
-getSandboxDir :: EitherT MafiaViolation IO Directory
-getSandboxDir = do
+initSandbox :: EitherT MafiaViolation IO Directory
+initSandbox = do
   name <- getProjectName
 
-  sandboxDir <- fromMaybe ".cabal-sandbox"
-            <$> liftIO (readUtf8 (name <> ".sandbox"))
+  sandboxBase   <- fromMaybe ".cabal-sandbox" <$> liftIO (readUtf8 (name <> ".sandbox"))
+  ghcVer        <- getGhcVersion
+  cfgSandboxDir <- getConfiguredSandboxDir
 
-  showtime <- liftIO (doesDirectoryExist sandboxDir)
-  unless showtime $
+  let sandboxDir = sandboxBase </> ghcVer
+
+  let cfgOk = cfgSandboxDir == Just sandboxDir
+  dirOk <- doesDirectoryExist sandboxDir
+
+  unless (cfgOk && dirOk) $
     call_ ProcessError "cabal" ["sandbox", "--sandbox", sandboxDir, "init"]
 
   return sandboxDir
 
+getConfiguredSandboxDir :: EitherT MafiaViolation IO (Maybe Directory)
+getConfiguredSandboxDir = do
+  mcfg <- readUtf8 "cabal.sandbox.config"
+  case mcfg of
+    Nothing  -> return Nothing
+    Just cfg -> do
+      let lines  = fmap T.strip (T.lines cfg)
+          prefix = "prefix:"
+      case List.dropWhile (not . T.isPrefixOf prefix) lines of
+        []       -> return Nothing
+        (line:_) -> do
+          let dir = T.strip (T.drop (T.length prefix) line)
+          Just <$> tryMakeRelativeToCurrent dir
+
+getGhcVersion :: EitherT MafiaViolation IO Text
+getGhcVersion = do
+  result <- runEitherT (call ProcessError "ghc" ["--version"])
+  case result of
+    Left  _         -> left GhcNotInstalled
+    Right (Out out) ->
+      case reverse (T.words out) of
+        []      -> left GhcNotInstalled
+        (ver:_) -> return ver
+
 getPackageDatabases :: EitherT MafiaViolation IO [Directory]
 getPackageDatabases = do
-    sandboxDir <- getSandboxDir
+    sandboxDir <- initSandbox
     filter isPackage <$> getDirectoryListing Recursive sandboxDir
   where
     isPackage = ("-packages.conf.d" `T.isSuffixOf`)
 
 getCacheDir :: EitherT MafiaViolation IO Directory
 getCacheDir = do
-  cacheDir <- (</> "mafia") <$> getSandboxDir
+  cacheDir <- (</> "mafia") <$> initSandbox
   createDirectoryIfMissing False cacheDir
   return cacheDir
 
@@ -618,8 +657,8 @@ cabal_ cmd args = do
 
 sandbox :: ProcessResult a => Argument -> [Argument] -> EitherT MafiaViolation IO a
 sandbox cmd args = do
-  sandboxDir <- getSandboxDir
-  cabal "sandbox" $ ["--sandbox", sandboxDir] <> (cmd:args)
+  _ <- initSandbox
+  cabal "sandbox" (cmd:args)
 
 sandbox_ :: Argument -> [Argument] -> EitherT MafiaViolation IO ()
 sandbox_ cmd args = do
@@ -671,7 +710,7 @@ hoogle hackageRoot args = do
   -- 2. Specify/append all the packages from the global database by using "+$name-$version"
   --    Unfortunately hoogle doesn't like the "-$version" part :(
   let hash = T.decodeUtf8 . (\(d :: Hash.Digest Hash.SHA1) -> Hash.digestToHexByteString d) . Hash.hash . T.encodeUtf8 . mconcat $ pkgs
-  db' <- (\d -> d </> "hoogle" </> hash) <$> getSandboxDir
+  db' <- (\d -> d </> "hoogle" </> hash) <$> initSandbox
   unlessM (doesFileExist $ db' </> "default.hoo") $ do
     createDirectoryIfMissing True db'
     -- We may also want to copy/symlink all the hoo files here to allow for partial module searching
