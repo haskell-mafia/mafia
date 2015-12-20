@@ -28,6 +28,7 @@ library
                     , temporary                       == 1.2.*
                     , text                            == 1.2.*
                     , time                            >= 1.4        && < 1.6
+                    , time-locale-compat              == 0.1.*
                     , transformers                    == 0.4.*
                     , unix                            == 2.7.*
 
@@ -69,6 +70,7 @@ executable mafia
                     , temporary
                     , text                            == 1.2.*
                     , time                            >= 1.4        && < 1.6
+                    , time-locale-compat              == 0.1.*
                     , transformers                    == 0.4.*
 
 
