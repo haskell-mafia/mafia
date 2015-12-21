@@ -179,7 +179,6 @@ data MafiaViolation
   | ParseError Text
   | CacheUpdateError CacheUpdate IOException
   | EntryPointNotFound File
-  | GhcidNotInstalled
   | GhcNotInstalled
   deriving (Show)
 
@@ -215,13 +214,6 @@ renderViolation = \case
 
   EntryPointNotFound path
    -> "GHCi entry point not found: " <> path
-
-  GhcidNotInstalled
-   -> "ghcid is not installed."
-   <> "\nTo install:"
-   <> "\n - create a fresh cabal sandbox"
-   <> "\n - cabal install ghcid"
-   <> "\n - add to your $PATH"
 
   GhcNotInstalled
    -> "ghc is not installed."
@@ -286,9 +278,9 @@ quick extraIncludes path = do
 
 watch :: [GhciInclude] -> File -> [Argument] -> EitherT MafiaViolation IO ()
 watch extraIncludes path extraArgs = do
-  Hush <- call (const GhcidNotInstalled) "ghcid" ["--help"]
+  ghcidExe <- installBinary "ghcid" "0.5" []
   args <- ghciArgs extraIncludes path
-  exec ProcessError "ghcid" $ [ "-c", T.unwords ("ghci" : args) ] <> extraArgs
+  exec ProcessError ghcidExe $ [ "-c", T.unwords ("ghci" : args) ] <> extraArgs
 
 ghciArgs :: [GhciInclude] -> File -> EitherT MafiaViolation IO [Argument]
 ghciArgs extraIncludes path = do
