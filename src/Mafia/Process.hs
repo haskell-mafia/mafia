@@ -119,13 +119,13 @@ data ProcessError
 
 renderProcessError :: ProcessError -> Text
 renderProcessError = \case
-  ProcessFailure p code
-   -> "Process failed: " <> T.intercalate " " (processCommand p : processArguments p)
-   <> " (exit code: " <> T.pack (show code) <> ")"
+  ProcessFailure p code ->
+    "Process failed: " <> T.intercalate " " (processCommand p : processArguments p) <>
+    " (exit code: " <> T.pack (show code) <> ")"
 
-  ProcessException p ex
-   -> "Process failed: " <> T.intercalate " " (processCommand p : processArguments p)
-   <> "\n" <> T.pack (show ex)
+  ProcessException p ex ->
+    "Process failed: " <> T.intercalate " " (processCommand p : processArguments p) <>
+    "\n" <> T.pack (show ex)
 
 ------------------------------------------------------------------------
 

@@ -33,12 +33,11 @@ data ProjectError
 
 renderProjectError :: ProjectError -> Text
 renderProjectError = \case
-  ProjectNotFound
-   -> "Could not find .cabal project"
+  ProjectNotFound ->
+    "Could not find .cabal project"
 
-  MultipleProjectsFound ps
-   -> "Found multiple possible .cabal projects: "
-   <> T.intercalate ", " ps
+  MultipleProjectsFound ps ->
+    "Found multiple possible .cabal projects: " <> T.intercalate ", " ps
 
 
 getProjectName :: EitherT ProjectError IO ProjectName

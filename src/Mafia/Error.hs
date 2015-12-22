@@ -45,24 +45,24 @@ data MafiaError
 
 renderMafiaError :: MafiaError -> Text
 renderMafiaError = \case
-  MafiaProjectError e
-   -> renderProjectError e
+  MafiaProjectError e ->
+    renderProjectError e
 
-  MafiaCabalError e
-   -> renderCabalError e
+  MafiaCabalError e ->
+    renderCabalError e
 
-  MafiaProcessError e
-   -> renderProcessError e
+  MafiaProcessError e ->
+    renderProcessError e
 
-  MafiaParseError msg
-   -> "Parse failed: " <> msg
+  MafiaParseError msg ->
+    "Parse failed: " <> msg
 
-  MafiaCacheUpdateError x ex
-   -> "Cache update failed: " <> T.pack (show x)
-   <> "\n" <> T.pack (show ex)
+  MafiaCacheUpdateError x ex ->
+    "Cache update failed: " <> T.pack (show x) <>
+    "\n" <> T.pack (show ex)
 
-  MafiaEntryPointNotFound path
-   -> "GHCi entry point not found: " <> path
+  MafiaEntryPointNotFound path ->
+    "GHCi entry point not found: " <> path
 
 liftCabal :: Functor m => EitherT CabalError m a -> EitherT MafiaError m a
 liftCabal =
