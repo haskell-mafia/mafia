@@ -43,7 +43,8 @@ import           X.Control.Monad.Trans.Either (EitherT, hoistEither, runEitherT)
 initialize :: EitherT MafiaViolation IO ()
 initialize = do
   updates <- determineCacheUpdates
-  when (updates /= []) $ do
+  hasDist <- liftIO $ doesDirectoryExist "dist"
+  when (updates /= [] || not hasDist) $ do
     -- we want to know up front why we're doing an install/configure
     let sortedUpdates = List.sort updates
     mapM_ putUpdateReason sortedUpdates
