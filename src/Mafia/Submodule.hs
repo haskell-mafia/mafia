@@ -38,24 +38,24 @@ syncCabalSources = do
 
 repairSandbox :: EitherT MafiaError IO ()
 repairSandbox = do
-  sandboxDir <- firstEitherT MafiaCabalError initSandbox
-  firstEitherT MafiaCabalError (repairIndexFile sandboxDir)
+  sandboxDir <- liftCabal initSandbox
+  liftCabal (repairIndexFile sandboxDir)
 
 addSandboxSource :: Directory -> EitherT MafiaError IO ()
 addSandboxSource dir = do
   rel <- fromMaybe dir <$> makeRelativeToCurrentDirectory dir
   liftIO (T.hPutStrLn stderr ("Sandbox: Adding " <> rel))
-  firstEitherT MafiaCabalError $ sandbox_ "add-source" [dir]
+  liftCabal $ sandbox_ "add-source" [dir]
 
 removeSandboxSource :: Directory -> EitherT MafiaError IO ()
 removeSandboxSource dir = do
   rel <- fromMaybe dir <$> makeRelativeToCurrentDirectory dir
   liftIO (T.hPutStrLn stderr ("Sandbox: Removing " <> rel))
-  firstEitherT MafiaCabalError $ sandbox_ "delete-source" ["-v0", dir]
+  liftCabal $ sandbox_ "delete-source" ["-v0", dir]
 
 getSandboxSources :: EitherT MafiaError IO (Set Directory)
 getSandboxSources = do
-  Out sources <- firstEitherT MafiaCabalError $ sandbox "list-sources" []
+  Out sources <- liftCabal $ sandbox "list-sources" []
 
   let dropHeader = drop 3
       dropFooter = reverse . drop 2 . reverse

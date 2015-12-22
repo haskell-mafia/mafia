@@ -35,7 +35,7 @@ hoogle hackageRoot args = do
   initialize
   db <- ensureMafiaDir "hoogle"
   hoogleExe <- firstEitherT MafiaProcessError $ installBinary "hoogle" "4.2.43" [("happy", "1.19.5")]
-  Out pkgStr <- firstEitherT MafiaCabalError $ sandbox "hc-pkg" ["list"]
+  Out pkgStr <- liftCabal $ sandbox "hc-pkg" ["list"]
   let pkgs = fmap T.strip . filter (T.isPrefixOf " ") . T.lines $ pkgStr
   hoos <- fmap catMaybes . for pkgs $ \pkg -> do
     -- Extract name from `$name-$version`, but consider `unordered-containers-1.2.3`
@@ -62,7 +62,7 @@ hoogle hackageRoot args = do
   -- 2. Specify/append all the packages from the global database by using "+$name-$version"
   --    Unfortunately hoogle doesn't like the "-$version" part :(
   let hash = T.decodeUtf8 . (\(d :: Hash.Digest Hash.SHA1) -> Hash.digestToHexByteString d) . Hash.hash . T.encodeUtf8 . mconcat $ pkgs
-  db' <- (\d -> d </> "hoogle" </> hash) <$> firstEitherT MafiaCabalError initSandbox
+  db' <- (\d -> d </> "hoogle" </> hash) <$> liftCabal initSandbox
   unlessM (doesFileExist $ db' </> "default.hoo") $ do
     createDirectoryIfMissing True db'
     -- We may also want to copy/symlink all the hoo files here to allow for partial module searching

@@ -5,6 +5,7 @@ module Mafia.Error
   ( MafiaError (..)
   , CacheUpdate (..)
   , renderMafiaError
+  , liftCabal
   , liftGit
   ) where
 
@@ -63,7 +64,12 @@ renderMafiaError = \case
   MafiaEntryPointNotFound path
    -> "GHCi entry point not found: " <> path
 
+liftCabal :: Functor m => EitherT CabalError m a -> EitherT MafiaError m a
+liftCabal =
+  firstEitherT MafiaCabalError
+
 liftGit :: Functor m => EitherT GitError m a -> EitherT MafiaError m a
-liftGit = firstEitherT $ \case
-  GitParseError   msg -> MafiaParseError   msg
-  GitProcessError err -> MafiaProcessError err
+liftGit =
+  firstEitherT $ \case
+    GitParseError   msg -> MafiaParseError   msg
+    GitProcessError err -> MafiaProcessError err

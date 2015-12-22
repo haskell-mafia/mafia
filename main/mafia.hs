@@ -175,33 +175,33 @@ update = do
       oneDay = 24 * 60 * 60
 
   when (age > oneDay) $
-    firstEitherT MafiaCabalError $ cabal_ "update" []
+    liftCabal $ cabal_ "update" []
 
 build :: [Argument] -> EitherT MafiaError IO ()
 build args = do
   initialize
-  firstEitherT MafiaCabalError . cabal_ "build" $ ["--ghc-option=-Werror"] <> args
+  liftCabal . cabal_ "build" $ ["--ghc-option=-Werror"] <> args
 
 test :: [Argument] -> EitherT MafiaError IO ()
 test args = do
   initialize
-  firstEitherT MafiaCabalError . cabal_ "test" $ ["--show-details=streaming"] <> args
+  liftCabal . cabal_ "test" $ ["--show-details=streaming"] <> args
 
 testci :: [Argument] -> EitherT MafiaError IO ()
 testci args = do
   initialize
-  Clean <- firstEitherT MafiaCabalError . cabal "test" $ ["--show-details=streaming"] <> args
+  Clean <- liftCabal . cabal "test" $ ["--show-details=streaming"] <> args
   return ()
 
 repl :: [Argument] -> EitherT MafiaError IO ()
 repl args = do
   initialize
-  firstEitherT MafiaCabalError $ cabal_ "repl" args
+  liftCabal $ cabal_ "repl" args
 
 bench :: [Argument] -> EitherT MafiaError IO ()
 bench args = do
   initialize
-  firstEitherT MafiaCabalError $ cabal_ "bench" args
+  liftCabal $ cabal_ "bench" args
 
 quick :: [GhciInclude] -> File -> EitherT MafiaError IO ()
 quick extraIncludes path = do
@@ -251,7 +251,7 @@ ensureDirectory dir = do
 
 getPackageDatabases :: EitherT MafiaError IO [Directory]
 getPackageDatabases = do
-    sandboxDir <- firstEitherT MafiaCabalError initSandbox
+    sandboxDir <- liftCabal initSandbox
     filter isPackage <$> getDirectoryListing Recursive sandboxDir
   where
     isPackage = ("-packages.conf.d" `T.isSuffixOf`)

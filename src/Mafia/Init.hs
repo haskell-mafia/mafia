@@ -33,7 +33,7 @@ import           P
 
 import           System.IO (IO, stderr)
 
-import           X.Control.Monad.Trans.Either (EitherT, hoistEither, runEitherT, firstEitherT)
+import           X.Control.Monad.Trans.Either (EitherT, hoistEither, runEitherT)
 
 
 initialize :: EitherT MafiaError IO ()
@@ -46,7 +46,7 @@ initialize = do
     mapM_ putUpdateReason sortedUpdates
     mapM_ runCacheUnregister sortedUpdates
 
-    firstEitherT MafiaCabalError $ cabal_ "install"
+    liftCabal $ cabal_ "install"
       [ "-j"
       , "--only-dependencies"
       , "--force-reinstalls"
@@ -55,7 +55,7 @@ initialize = do
       , "--reorder-goals"
       , "--max-backjumps=-1" ]
 
-    firstEitherT MafiaCabalError $ cabal_ "configure"
+    liftCabal $ cabal_ "configure"
       [ "--enable-tests"
       , "--enable-benchmarks" ]
 
@@ -189,6 +189,6 @@ cacheUpdateDiff src dst = do
 
 getCacheDir :: EitherT MafiaError IO Directory
 getCacheDir = do
-  cacheDir <- (</> "mafia") <$> firstEitherT MafiaCabalError initSandbox
+  cacheDir <- (</> "mafia") <$> liftCabal initSandbox
   createDirectoryIfMissing False cacheDir
   return cacheDir
