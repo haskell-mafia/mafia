@@ -9,7 +9,6 @@ import           Control.Monad.IO.Class (MonadIO(..))
 
 import qualified Crypto.Hash as Hash
 
-import qualified Data.List as List
 import           Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
@@ -20,6 +19,7 @@ import           Mafia.Error
 import           Mafia.Home
 import           Mafia.IO
 import           Mafia.Init
+import           Mafia.Package
 import           Mafia.Path
 import           Mafia.Process
 
@@ -27,19 +27,18 @@ import           P
 
 import           System.IO (IO, stderr)
 
-import           X.Control.Monad.Trans.Either (EitherT, firstEitherT, runEitherT)
+import           X.Control.Monad.Trans.Either (EitherT, firstEitherT, hoistEither, runEitherT)
 
 
 hoogle :: Text -> [Argument] -> EitherT MafiaError IO ()
 hoogle hackageRoot args = do
   initialize
   db <- ensureMafiaDir "hoogle"
-  hoogleExe <- firstEitherT MafiaProcessError $ installBinary "hoogle" "4.2.43" [("happy", "1.19.5")]
+  hoogleExe <- firstEitherT MafiaProcessError $ installBinary (packageId "hoogle" [4, 2, 43]) [packageId "happy" [1, 19, 5]]
   Out pkgStr <- liftCabal $ sandbox "hc-pkg" ["list"]
   let pkgs = fmap T.strip . filter (T.isPrefixOf " ") . T.lines $ pkgStr
   hoos <- fmap catMaybes . for pkgs $ \pkg -> do
-    -- Extract name from `$name-$version`, but consider `unordered-containers-1.2.3`
-    let name = T.intercalate "-" . List.init $ T.splitOn "-" pkg
+    name <- hoistEither . fmap pkgName . maybeToRight (ParseError $ mconcat ["Invalid package: ", pkg]) . parsePackageId $ pkg
     let txt = db </> pkg <> ".txt"
     let hoo = db </> pkg <> ".hoo"
     let skip = db </> pkg <> ".skip"
