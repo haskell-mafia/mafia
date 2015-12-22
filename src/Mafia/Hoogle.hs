@@ -2,13 +2,19 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 module Mafia.Hoogle
-  ( hoogle
+  ( HooglePackagesSandbox (..)
+  , HooglePackagesCached (..)
+  , hoogle
+  , joinHooglePackages
   ) where
 
 import           Control.Monad.IO.Class (MonadIO(..))
 
 import qualified Crypto.Hash as Hash
 
+import qualified Data.List as L
+import           Data.Map (Map)
+import qualified Data.Map as M
 import           Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
@@ -30,18 +36,24 @@ import           System.IO (IO, stderr)
 import           X.Control.Monad.Trans.Either (EitherT, firstEitherT, hoistEither, runEitherT)
 
 
-hoogle :: Text -> [Argument] -> EitherT MafiaError IO ()
-hoogle hackageRoot args =
-  hooglePackages hackageRoot >>= hoogleIndex args
+newtype HooglePackagesSandbox = HooglePackagesSandbox [PackageId]
+newtype HooglePackagesCached = HooglePackagesCached [PackageId]
 
-hooglePackages :: Text -> EitherT MafiaError IO [PackageId]
+
+hoogle :: Text -> [Argument] -> EitherT MafiaError IO ()
+hoogle hackageRoot args = do
+  hp <- hooglePackages hackageRoot
+  hpc <- hooglePackagesCached
+  hoogleIndex args $ joinHooglePackages hpc hp
+
+hooglePackages :: Text -> EitherT MafiaError IO HooglePackagesSandbox
 hooglePackages hackageRoot = do
   initialize
   db <- hoogleCacheDir
   hoogleExe <- installHoogle
   Out pkgStr <- liftCabal $ sandbox "hc-pkg" ["list"]
   let pkgs = fmap (T.dropWhileEnd (== ')') . T.dropWhile (== '(') . T.strip) . filter (T.isPrefixOf " ") . T.lines $ pkgStr
-  fmap catMaybes . for pkgs $ \pkg -> do
+  fmap (HooglePackagesSandbox . catMaybes) . for pkgs $ \pkg -> do
     pkgId <- hoistEither . maybeToRight (MafiaParseError $ mconcat ["Invalid package: ", pkg]) . parsePackageId $ pkg
     let name = unPackageName . pkgName $ pkgId
     let txt = db </> pkg <> ".txt"
@@ -79,6 +91,19 @@ hoogleIndex args pkgs = do
     call_ MafiaProcessError hoogleExe $ ["combine", "--outfile", db' </> "default.hoo"] <> fmap (hoogleDbFile db) pkgs
   call_ MafiaProcessError hoogleExe $ ["-d", db'] <> args
 
+hooglePackagesCached :: (Functor m, MonadIO m) => m HooglePackagesCached
+hooglePackagesCached = do
+  db <- hoogleCacheDir
+  HooglePackagesCached . catMaybes . fmap ((=<<) parsePackageId . T.stripSuffix ".hoo" . takeFileName) <$>
+    getDirectoryListing (RecursiveDepth 1) db
+
+-- | Keep everything from the current sandbox and append the latest of any remaining packages
+joinHooglePackages :: HooglePackagesCached -> HooglePackagesSandbox -> [PackageId]
+joinHooglePackages (HooglePackagesCached cached) (HooglePackagesSandbox current) =
+  let index = mapFromListGrouped . fmap packageIdTuple
+      extra = fmap (uncurry PackageId) . M.toList . M.mapMaybe (head . reverse . L.sort) $ M.difference (index cached) (index current)
+  in current <> extra
+
 hoogleCacheDir :: MonadIO m => m Directory
 hoogleCacheDir =
   ensureMafiaDir "hoogle"
@@ -90,3 +115,7 @@ installHoogle =
 hoogleDbFile :: Directory -> PackageId -> File
 hoogleDbFile db pkg =
   db </> renderPackageId pkg <> ".hoo"
+
+mapFromListGrouped :: Ord a => [(a, b)] -> Map a [b]
+mapFromListGrouped =
+  foldr (\(k, v) -> M.insertWith (<>) k [v]) M.empty
