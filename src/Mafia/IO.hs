@@ -11,6 +11,7 @@ module Mafia.IO
   , setCurrentDirectory
   , getCurrentDirectory
   , makeRelativeToCurrentDirectory
+  , tryMakeRelativeToCurrent
   , canonicalizePath
 
     -- * Existence Tests
@@ -101,6 +102,10 @@ makeRelativeToCurrentDirectory path = do
   current <- getCurrentDirectory
   absPath <- T.pack `liftM` liftIO (Directory.makeAbsolute (T.unpack path))
   return (makeRelative current absPath)
+
+tryMakeRelativeToCurrent :: MonadIO m => Directory -> m Directory
+tryMakeRelativeToCurrent dir =
+  fromMaybe dir `liftM` makeRelativeToCurrentDirectory dir
 
 canonicalizePath :: MonadIO m => Path -> m Path
 canonicalizePath path =
