@@ -47,6 +47,7 @@ library
                     Mafia.Cabal.Sandbox
                     Mafia.Cabal.Types
                     Mafia.Error
+                    Mafia.Ghc
                     Mafia.Git
                     Mafia.Home
                     Mafia.Hoogle

@@ -9,11 +9,11 @@ module Mafia.Cabal.Sandbox
 import           Control.Monad.IO.Class (MonadIO(..))
 
 import qualified Data.List as List
-import           Data.Text (Text)
 import qualified Data.Text as T
 
 import           Mafia.Cabal.Process
 import           Mafia.Cabal.Types
+import           Mafia.Ghc
 import           Mafia.IO
 import           Mafia.Path
 import           Mafia.Process
@@ -23,7 +23,7 @@ import           P
 
 import           System.IO (IO)
 
-import           X.Control.Monad.Trans.Either (EitherT, firstEitherT, left, runEitherT)
+import           X.Control.Monad.Trans.Either (EitherT, firstEitherT)
 
 
 sandbox :: ProcessResult a => Argument -> [Argument] -> EitherT CabalError IO a
@@ -43,7 +43,7 @@ initSandbox = do
   name <- firstEitherT CabalProjectError getProjectName
 
   sandboxBase   <- fromMaybe ".cabal-sandbox" <$> liftIO (readUtf8 (name <> ".sandbox"))
-  ghcVer        <- getGhcVersion
+  ghcVer        <- firstEitherT CabalGhcError getGhcVersion
   cfgSandboxDir <- getConfiguredSandboxDir
 
   let sandboxDir = sandboxBase </> ghcVer
@@ -69,13 +69,3 @@ getConfiguredSandboxDir = do
         (line:_) -> do
           let dir = T.strip (T.drop (T.length prefix) line)
           Just <$> tryMakeRelativeToCurrent dir
-
-getGhcVersion :: EitherT CabalError IO Text
-getGhcVersion = do
-  result <- runEitherT (call CabalProcessError "ghc" ["--version"])
-  case result of
-    Left  _         -> left CabalGhcNotInstalled
-    Right (Out out) ->
-      case reverse (T.words out) of
-        []      -> left CabalGhcNotInstalled
-        (ver:_) -> return ver
