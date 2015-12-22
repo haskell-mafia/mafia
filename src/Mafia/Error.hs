@@ -2,9 +2,9 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
 module Mafia.Error
-  ( MafiaViolation (..)
+  ( MafiaError (..)
   , CacheUpdate (..)
-  , renderViolation
+  , renderMafiaError
   , liftGit
   ) where
 
@@ -30,62 +30,40 @@ data CacheUpdate
   | Delete File
   deriving (Eq, Ord, Show)
 
--- FIX Leaving this to make code cleanup easier, but ideally is a union of sub-exceptions rather than this module being
--- the root of most dependencies
-data MafiaViolation
+-- FIX Leaving this to make code cleanup easier, but ideally is a union of
+-- sub-exceptions rather than this module being the root of most dependencies
+data MafiaError
   = MafiaProjectError ProjectError
-  | CabalError CabalError
-  | ProcessError ProcessError
-  | ParseError Text
-  | CacheUpdateError CacheUpdate IOException
-  | EntryPointNotFound File
-  | GhcNotInstalled
+  | MafiaCabalError CabalError
+  | MafiaProcessError ProcessError
+  | MafiaParseError Text
+  | MafiaCacheUpdateError CacheUpdate IOException
+  | MafiaEntryPointNotFound File
   deriving (Show)
 
 
-renderViolation :: MafiaViolation -> Text
-renderViolation = \case
-  MafiaProjectError ProjectNotFound
-   -> "Could not find .cabal project"
+renderMafiaError :: MafiaError -> Text
+renderMafiaError = \case
+  MafiaProjectError e
+   -> renderProjectError e
 
-  MafiaProjectError (MultipleProjectsFound ps)
-   -> "Found multiple possible .cabal projects: "
-   <> T.intercalate ", " ps
+  MafiaCabalError e
+   -> renderCabalError e
 
-  CabalError (IndexFileNotFound file)
-   -> "Index file not found: " <> file
+  MafiaProcessError e
+   -> renderProcessError e
 
-  CabalError (CorruptIndexFile tarError)
-   -> "Corrupt index file: " <> T.pack (show tarError)
-
-  ProcessError (ProcessFailure p code)
-   -> "Process failed: " <> T.intercalate " " (processCommand p : processArguments p)
-   <> " (exit code: " <> T.pack (show code) <> ")"
-
-  ProcessError (ProcessException p ex)
-   -> "Process failed: " <> T.intercalate " " (processCommand p : processArguments p)
-   <> "\n" <> T.pack (show ex)
-
-  ParseError msg
+  MafiaParseError msg
    -> "Parse failed: " <> msg
 
-  CacheUpdateError x ex
+  MafiaCacheUpdateError x ex
    -> "Cache update failed: " <> T.pack (show x)
    <> "\n" <> T.pack (show ex)
 
-  EntryPointNotFound path
+  MafiaEntryPointNotFound path
    -> "GHCi entry point not found: " <> path
 
-  GhcNotInstalled
-   -> "ghc is not installed."
-   <> "\nTo install:"
-   <> "\n - download from https://www.haskell.org/ghc/"
-   <> "\n - ./configure --prefix=$HOME/haskell/ghc-$VERSION  # or wherever you like to keep ghc"
-   <> "\n - make install"
-   <> "\n - ln -s $HOME/haskell/ghc-$VERSION $HOME/haskell/ghc"
-   <> "\n - add $HOME/haskell/ghc/bin to your $PATH"
-
-liftGit :: Functor m => EitherT GitError m a -> EitherT MafiaViolation m a
+liftGit :: Functor m => EitherT GitError m a -> EitherT MafiaError m a
 liftGit = firstEitherT $ \case
-  GitParseError   msg -> ParseError   msg
-  GitProcessError err -> ProcessError err
+  GitParseError   msg -> MafiaParseError   msg
+  GitProcessError err -> MafiaProcessError err

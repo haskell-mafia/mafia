@@ -28,7 +28,7 @@ import           System.IO (IO, stderr)
 import           X.Control.Monad.Trans.Either (EitherT, firstEitherT)
 
 
-syncCabalSources :: EitherT MafiaViolation IO ()
+syncCabalSources :: EitherT MafiaError IO ()
 syncCabalSources = do
   repairSandbox
   installed <- getSandboxSources
@@ -36,26 +36,26 @@ syncCabalSources = do
   traverse_ addSandboxSource    (required `Set.difference` installed)
   traverse_ removeSandboxSource (installed `Set.difference` required)
 
-repairSandbox :: EitherT MafiaViolation IO ()
+repairSandbox :: EitherT MafiaError IO ()
 repairSandbox = do
-  sandboxDir <- initSandbox
-  firstEitherT CabalError (repairIndexFile sandboxDir)
+  sandboxDir <- firstEitherT MafiaCabalError initSandbox
+  firstEitherT MafiaCabalError (repairIndexFile sandboxDir)
 
-addSandboxSource :: Directory -> EitherT MafiaViolation IO ()
+addSandboxSource :: Directory -> EitherT MafiaError IO ()
 addSandboxSource dir = do
   rel <- fromMaybe dir <$> makeRelativeToCurrentDirectory dir
   liftIO (T.hPutStrLn stderr ("Sandbox: Adding " <> rel))
-  sandbox_ "add-source" [dir]
+  firstEitherT MafiaCabalError $ sandbox_ "add-source" [dir]
 
-removeSandboxSource :: Directory -> EitherT MafiaViolation IO ()
+removeSandboxSource :: Directory -> EitherT MafiaError IO ()
 removeSandboxSource dir = do
   rel <- fromMaybe dir <$> makeRelativeToCurrentDirectory dir
   liftIO (T.hPutStrLn stderr ("Sandbox: Removing " <> rel))
-  sandbox_ "delete-source" ["-v0", dir]
+  firstEitherT MafiaCabalError $ sandbox_ "delete-source" ["-v0", dir]
 
-getSandboxSources :: EitherT MafiaViolation IO (Set Directory)
+getSandboxSources :: EitherT MafiaError IO (Set Directory)
 getSandboxSources = do
-  Out sources <- sandbox "list-sources" []
+  Out sources <- firstEitherT MafiaCabalError $ sandbox "list-sources" []
 
   let dropHeader = drop 3
       dropFooter = reverse . drop 2 . reverse
@@ -66,11 +66,11 @@ getSandboxSources = do
          . T.lines
          $ sources
 
-getSubmoduleSources :: EitherT MafiaViolation IO (Set Directory)
+getSubmoduleSources :: EitherT MafiaError IO (Set Directory)
 getSubmoduleSources = Set.union <$> getConfiguredSources
                                 <*> liftGit getConventionSources
 
-getConfiguredSources :: EitherT MafiaViolation IO (Set Directory)
+getConfiguredSources :: EitherT MafiaError IO (Set Directory)
 getConfiguredSources = do
   root <- liftGit getProjectRoot
   name <- firstEitherT MafiaProjectError getProjectName

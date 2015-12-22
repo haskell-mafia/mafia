@@ -2,6 +2,7 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NoImplicitPrelude #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 module Mafia.Process
@@ -20,8 +21,11 @@ module Mafia.Process
   , Out(..)
   , Err(..)
   , OutErr(..)
+
+    -- * Errors
   , ProcessError(..)
   , ExitStatus
+  , renderProcessError
 
     -- * Running Processes
   , ProcessResult(..)
@@ -112,6 +116,16 @@ data ProcessError
   = ProcessFailure   Process ExitStatus
   | ProcessException Process SomeException
   deriving (Show)
+
+renderProcessError :: ProcessError -> Text
+renderProcessError = \case
+  ProcessFailure p code
+   -> "Process failed: " <> T.intercalate " " (processCommand p : processArguments p)
+   <> " (exit code: " <> T.pack (show code) <> ")"
+
+  ProcessException p ex
+   -> "Process failed: " <> T.intercalate " " (processCommand p : processArguments p)
+   <> "\n" <> T.pack (show ex)
 
 ------------------------------------------------------------------------
 

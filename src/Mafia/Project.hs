@@ -1,13 +1,17 @@
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PatternSynonyms #-}
 module Mafia.Project
-  ( ProjectError (..)
-  , ProjectName
+  ( ProjectName
   , getProjectName
+
+  , ProjectError (..)
+  , renderProjectError
   ) where
 
 import           Data.Text (Text)
+import qualified Data.Text as T
 
 import           Mafia.IO
 import           Mafia.Path
@@ -19,12 +23,22 @@ import           System.IO (IO)
 import           X.Control.Monad.Trans.Either (EitherT, pattern EitherT)
 
 
+type ProjectName = Text
+
 data ProjectError
   = ProjectNotFound
   | MultipleProjectsFound [ProjectName]
   deriving (Show)
 
-type ProjectName = Text
+
+renderProjectError :: ProjectError -> Text
+renderProjectError = \case
+  ProjectNotFound
+   -> "Could not find .cabal project"
+
+  MultipleProjectsFound ps
+   -> "Found multiple possible .cabal projects: "
+   <> T.intercalate ", " ps
 
 
 getProjectName :: EitherT ProjectError IO ProjectName

@@ -33,12 +33,12 @@ import           X.Control.Monad.Trans.Either (EitherT, hoistEither)
 readIndexFile :: MonadIO m => File -> EitherT CabalError m ByteString
 readIndexFile file = do
   mbs <- readBytes file
-  hoistEither $ maybe (Left (IndexFileNotFound file)) Right mbs
+  hoistEither $ maybe (Left (CabalIndexFileNotFound file)) Right mbs
 
 readEntries :: Monad m => ByteString -> EitherT CabalError m [Tar.Entry]
 readEntries bs = do
   let tar = Tar.read (L.fromStrict bs)
-  hoistEither $ Tar.foldEntries (\x -> fmap (x :)) (Right []) (Left . CorruptIndexFile) tar
+  hoistEither $ Tar.foldEntries (\x -> fmap (x :)) (Right []) (Left . CabalCorruptIndexFile) tar
 
 isTreeRef :: Tar.Entry -> Bool
 isTreeRef x = Tar.entryPath x == "local-build-tree-reference/"

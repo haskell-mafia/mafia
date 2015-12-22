@@ -33,10 +33,10 @@ import           P
 
 import           System.IO (IO, stderr)
 
-import           X.Control.Monad.Trans.Either (EitherT, hoistEither, runEitherT)
+import           X.Control.Monad.Trans.Either (EitherT, hoistEither, runEitherT, firstEitherT)
 
 
-initialize :: EitherT MafiaViolation IO ()
+initialize :: EitherT MafiaError IO ()
 initialize = do
   updates <- determineCacheUpdates
   hasDist <- liftIO $ doesDirectoryExist "dist"
@@ -46,22 +46,24 @@ initialize = do
     mapM_ putUpdateReason sortedUpdates
     mapM_ runCacheUnregister sortedUpdates
 
-    cabal_ "install" [ "-j"
-                     , "--only-dependencies"
-                     , "--force-reinstalls"
-                     , "--enable-tests"
-                     , "--enable-benchmarks"
-                     , "--reorder-goals"
-                     , "--max-backjumps=-1" ]
+    firstEitherT MafiaCabalError $ cabal_ "install"
+      [ "-j"
+      , "--only-dependencies"
+      , "--force-reinstalls"
+      , "--enable-tests"
+      , "--enable-benchmarks"
+      , "--reorder-goals"
+      , "--max-backjumps=-1" ]
 
-    cabal_ "configure" [ "--enable-tests"
-                       , "--enable-benchmarks" ]
+    firstEitherT MafiaCabalError $ cabal_ "configure"
+      [ "--enable-tests"
+      , "--enable-benchmarks" ]
 
     -- but we don't want to commit the modified .cabal files
     -- until we're done, in case an error occurs
     mapM_ runCacheUpdate sortedUpdates
 
-determineCacheUpdates :: EitherT MafiaViolation IO [CacheUpdate]
+determineCacheUpdates :: EitherT MafiaError IO [CacheUpdate]
 determineCacheUpdates = do
     liftGit initSubmodules
     syncCabalSources
@@ -104,7 +106,7 @@ putUpdateReason x =
     Delete file -> do
       liftIO (T.hPutStrLn stderr ("Cache: Removing " <> takeFileName file))
 
-runCacheUpdate :: CacheUpdate -> EitherT MafiaViolation IO ()
+runCacheUpdate :: CacheUpdate -> EitherT MafiaError IO ()
 runCacheUpdate x = handleCacheUpdateError x $
   case x of
     Add src dst -> do
@@ -118,11 +120,11 @@ runCacheUpdate x = handleCacheUpdateError x $
 
 handleCacheUpdateError :: (Functor m, MonadCatch m)
                        => CacheUpdate
-                       -> EitherT MafiaViolation m a
-                       -> EitherT MafiaViolation m a
+                       -> EitherT MafiaError m a
+                       -> EitherT MafiaError m a
 
 handleCacheUpdateError x =
-  handle (\(ex :: IOException) -> hoistEither . Left $ CacheUpdateError x ex)
+  handle (\(ex :: IOException) -> hoistEither . Left $ MafiaCacheUpdateError x ex)
 
 runCacheUnregister :: MonadIO m => CacheUpdate -> m ()
 runCacheUnregister x =
@@ -185,8 +187,8 @@ cacheUpdateDiff src dst = do
   if | src_bytes == dst_bytes -> return (Nothing)
      | otherwise              -> return (Just (Update src dst))
 
-getCacheDir :: EitherT MafiaViolation IO Directory
+getCacheDir :: EitherT MafiaError IO Directory
 getCacheDir = do
-  cacheDir <- (</> "mafia") <$> initSandbox
+  cacheDir <- (</> "mafia") <$> firstEitherT MafiaCabalError initSandbox
   createDirectoryIfMissing False cacheDir
   return cacheDir

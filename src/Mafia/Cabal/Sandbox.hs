@@ -13,7 +13,7 @@ import           Data.Text (Text)
 import qualified Data.Text as T
 
 import           Mafia.Cabal.Process
-import           Mafia.Error
+import           Mafia.Cabal.Types
 import           Mafia.IO
 import           Mafia.Path
 import           Mafia.Process
@@ -26,21 +26,21 @@ import           System.IO (IO)
 import           X.Control.Monad.Trans.Either (EitherT, firstEitherT, left, runEitherT)
 
 
-sandbox :: ProcessResult a => Argument -> [Argument] -> EitherT MafiaViolation IO a
+sandbox :: ProcessResult a => Argument -> [Argument] -> EitherT CabalError IO a
 sandbox cmd args = do
   _ <- initSandbox
   cabal "sandbox" (cmd:args)
 
-sandbox_ :: Argument -> [Argument] -> EitherT MafiaViolation IO ()
+sandbox_ :: Argument -> [Argument] -> EitherT CabalError IO ()
 sandbox_ cmd args = do
   Pass <- sandbox cmd args
   return ()
 
 -- Sandbox initialized if required, this should support sandboxes in parent
 -- directories.
-initSandbox :: EitherT MafiaViolation IO Directory
+initSandbox :: EitherT CabalError IO Directory
 initSandbox = do
-  name <- firstEitherT MafiaProjectError getProjectName
+  name <- firstEitherT CabalProjectError getProjectName
 
   sandboxBase   <- fromMaybe ".cabal-sandbox" <$> liftIO (readUtf8 (name <> ".sandbox"))
   ghcVer        <- getGhcVersion
@@ -52,7 +52,7 @@ initSandbox = do
   dirOk <- doesDirectoryExist sandboxDir
 
   unless (cfgOk && dirOk) $
-    call_ ProcessError "cabal" ["sandbox", "--sandbox", sandboxDir, "init"]
+    call_ CabalProcessError "cabal" ["sandbox", "--sandbox", sandboxDir, "init"]
 
   return sandboxDir
 
@@ -70,12 +70,12 @@ getConfiguredSandboxDir = do
           let dir = T.strip (T.drop (T.length prefix) line)
           Just <$> tryMakeRelativeToCurrent dir
 
-getGhcVersion :: EitherT MafiaViolation IO Text
+getGhcVersion :: EitherT CabalError IO Text
 getGhcVersion = do
-  result <- runEitherT (call ProcessError "ghc" ["--version"])
+  result <- runEitherT (call CabalProcessError "ghc" ["--version"])
   case result of
-    Left  _         -> left GhcNotInstalled
+    Left  _         -> left CabalGhcNotInstalled
     Right (Out out) ->
       case reverse (T.words out) of
-        []      -> left GhcNotInstalled
+        []      -> left CabalGhcNotInstalled
         (ver:_) -> return ver
