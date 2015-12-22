@@ -13,7 +13,7 @@ import           Control.Exception (IOException)
 import           Data.Text (Text)
 import qualified Data.Text as T
 
-import           Mafia.Cabal
+import           Mafia.Cabal.Types
 import           Mafia.Git
 import           Mafia.Process
 import           Mafia.Project

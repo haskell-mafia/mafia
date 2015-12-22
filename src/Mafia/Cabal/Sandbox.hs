@@ -1,9 +1,7 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
-module Mafia.Sandbox
-  ( cabal
-  , cabal_
-  , sandbox
+module Mafia.Cabal.Sandbox
+  ( sandbox
   , sandbox_
   , initSandbox
   ) where
@@ -14,6 +12,7 @@ import qualified Data.List as List
 import           Data.Text (Text)
 import qualified Data.Text as T
 
+import           Mafia.Cabal.Process
 import           Mafia.Error
 import           Mafia.IO
 import           Mafia.Path
@@ -26,14 +25,6 @@ import           System.IO (IO)
 
 import           X.Control.Monad.Trans.Either (EitherT, firstEitherT, left, runEitherT)
 
-
-cabal :: ProcessResult a => Argument -> [Argument] -> EitherT MafiaViolation IO a
-cabal cmd args = call ProcessError "cabal" (cmd : args)
-
-cabal_ :: Argument -> [Argument] -> EitherT MafiaViolation IO ()
-cabal_ cmd args = do
-  Pass <- cabal cmd args
-  return ()
 
 sandbox :: ProcessResult a => Argument -> [Argument] -> EitherT MafiaViolation IO a
 sandbox cmd args = do

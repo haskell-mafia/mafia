@@ -2,7 +2,7 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-module Mafia.Cache
+module Mafia.Init
   ( initialize
   , determineCacheUpdates
   , putUpdateReason
@@ -27,7 +27,6 @@ import           Mafia.Git
 import           Mafia.IO
 import           Mafia.Path
 import           Mafia.Process
-import           Mafia.Sandbox
 import           Mafia.Submodule
 
 import           P
@@ -37,9 +36,6 @@ import           System.IO (IO, stderr)
 import           X.Control.Monad.Trans.Either (EitherT, hoistEither, runEitherT)
 
 
--- Initialize things for a build. This can be made faster by being
--- a lot smarter about doing things conditionally, but for now,
--- brute force wins.
 initialize :: EitherT MafiaViolation IO ()
 initialize = do
   updates <- determineCacheUpdates

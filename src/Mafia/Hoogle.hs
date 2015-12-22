@@ -15,13 +15,13 @@ import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import qualified Data.Text.IO as T
 
-import           Mafia.Cache
+import           Mafia.Cabal
 import           Mafia.Error
 import           Mafia.Home
 import           Mafia.IO
+import           Mafia.Init
 import           Mafia.Path
 import           Mafia.Process
-import           Mafia.Sandbox
 
 import           P
 

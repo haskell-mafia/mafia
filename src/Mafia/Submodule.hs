@@ -20,7 +20,6 @@ import           Mafia.IO
 import           Mafia.Path
 import           Mafia.Process
 import           Mafia.Project
-import           Mafia.Sandbox
 
 import           P
 

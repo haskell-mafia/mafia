@@ -41,18 +41,20 @@ library
   exposed-modules:
                     Paths_ambiata_mafia
                     BuildInfo_ambiata_mafia
-                    Mafia
                     Mafia.Cabal
-                    Mafia.Cache
+                    Mafia.Cabal.Index
+                    Mafia.Cabal.Process
+                    Mafia.Cabal.Sandbox
+                    Mafia.Cabal.Types
                     Mafia.Error
                     Mafia.Git
                     Mafia.Home
                     Mafia.Hoogle
                     Mafia.IO
+                    Mafia.Init
                     Mafia.Path
                     Mafia.Process
                     Mafia.Project
-                    Mafia.Sandbox
                     Mafia.Submodule
 
 executable mafia

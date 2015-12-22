@@ -11,14 +11,14 @@ import qualified Data.Set as Set
 import qualified Data.Text as T
 import           Data.Time (getCurrentTime, diffUTCTime)
 
-import           Mafia.Cache
+import           Mafia.Cabal
 import           Mafia.Error
 import           Mafia.Home
 import           Mafia.Hoogle
 import           Mafia.IO
+import           Mafia.Init
 import           Mafia.Path
 import           Mafia.Process
-import           Mafia.Sandbox
 import           Mafia.Submodule
 
 import           P
