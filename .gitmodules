@@ -7,3 +7,6 @@
 [submodule "lib/x"]
 	path = lib/x
 	url = https://github.com/ambiata/x
+[submodule "lib/twine"]
+	path = lib/twine
+	url = git@github.com:ambiata/twine
