@@ -5,11 +5,14 @@
 
 import           BuildInfo_ambiata_mafia
 
+import           Control.Concurrent (setNumCapabilities)
 import           Control.Monad.IO.Class (MonadIO(..))
 
 import qualified Data.Set as Set
 import qualified Data.Text as T
 import           Data.Time (getCurrentTime, diffUTCTime)
+
+import           GHC.Conc (getNumProcessors)
 
 import           Mafia.Cabal
 import           Mafia.Error
@@ -24,7 +27,6 @@ import           Mafia.Submodule
 
 import           P
 
-import           System.Environment (lookupEnv)
 import           System.Exit (exitSuccess)
 import           System.IO (BufferMode(..), hSetBuffering)
 import           System.IO (IO, stdout, stderr, putStrLn, print)
@@ -41,6 +43,8 @@ import           X.Options.Applicative (dispatch, subparser, safeCommand, comman
 
 main :: IO ()
 main = do
+  nprocs <- getNumProcessors
+  setNumCapabilities nprocs
   hSetBuffering stdout LineBuffering
   hSetBuffering stderr LineBuffering
   dispatch parser >>= \sc ->
@@ -82,8 +86,8 @@ run = \case
   MafiaQuick  incs entry      -> quick  incs entry
   MafiaWatch  incs entry args -> watch  incs entry args
   MafiaHoogle args            -> do
-    hkg <- liftIO . fmap (T.pack . fromMaybe "https://hackage.haskell.org/package") $ lookupEnv "HACKAGE"
-    initialize
+    hkg <- fromMaybe "https://hackage.haskell.org/package" <$> lookupEnv "HACKAGE"
+    firstEitherT MafiaInitError initialize
     hoogle hkg args
 
 parser :: Parser (SafeCommand MafiaCommand)
@@ -180,28 +184,28 @@ update = do
 
 build :: [Argument] -> EitherT MafiaError IO ()
 build args = do
-  initialize
+  firstEitherT MafiaInitError initialize
   liftCabal . cabal_ "build" $ ["--ghc-option=-Werror"] <> args
 
 test :: [Argument] -> EitherT MafiaError IO ()
 test args = do
-  initialize
+  firstEitherT MafiaInitError initialize
   liftCabal . cabal_ "test" $ ["--show-details=streaming"] <> args
 
 testci :: [Argument] -> EitherT MafiaError IO ()
 testci args = do
-  initialize
+  firstEitherT MafiaInitError initialize
   Clean <- liftCabal . cabal "test" $ ["--show-details=streaming"] <> args
   return ()
 
 repl :: [Argument] -> EitherT MafiaError IO ()
 repl args = do
-  initialize
+  firstEitherT MafiaInitError initialize
   liftCabal $ cabal_ "repl" args
 
 bench :: [Argument] -> EitherT MafiaError IO ()
 bench args = do
-  initialize
+  firstEitherT MafiaInitError initialize
   liftCabal $ cabal_ "bench" args
 
 quick :: [GhciInclude] -> File -> EitherT MafiaError IO ()
@@ -221,7 +225,7 @@ ghciArgs extraIncludes path = do
   case exists of
     False -> hoistEither (Left (MafiaEntryPointNotFound path))
     True  -> do
-      initialize
+      firstEitherT MafiaInitError initialize
 
       extras <- concat <$> mapM reifyInclude extraIncludes
 

@@ -15,6 +15,9 @@ import qualified Data.Text as T
 
 import           Mafia.Cabal.Types
 import           Mafia.Git
+import           Mafia.Hash
+import           Mafia.Init
+import           Mafia.Install
 import           Mafia.Process
 import           Mafia.Project
 import           Mafia.Submodule
@@ -39,6 +42,9 @@ data MafiaError
   | MafiaGitError GitError
   | MafiaCabalError CabalError
   | MafiaSubmoduleError SubmoduleError
+  | MafiaInstallError InstallError
+  | MafiaHashError HashError
+  | MafiaInitError InitError
   | MafiaParseError Text
   | MafiaCacheUpdateError CacheUpdate IOException
   | MafiaEntryPointNotFound File
@@ -61,6 +67,15 @@ renderMafiaError = \case
 
   MafiaSubmoduleError e ->
     renderSubmoduleError e
+
+  MafiaInstallError e ->
+    renderInstallError e
+
+  MafiaHashError e ->
+    renderHashError e
+
+  MafiaInitError e ->
+    renderInitError e
 
   MafiaParseError msg ->
     "Parse failed: " <> msg

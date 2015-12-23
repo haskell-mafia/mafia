@@ -31,11 +31,16 @@ module Mafia.IO
 
     -- * Environment
   , findExecutable
+  , lookupEnv
 
     -- * Pre-defined directories
   , getHomeDirectory
+
+    -- * Concurrency
+  , mapConcurrentlyE
   ) where
 
+import qualified Control.Concurrent.Async as Async
 import           Control.Monad.IO.Class (MonadIO(..))
 import           Control.Monad.Trans.Maybe (MaybeT(..))
 
@@ -50,7 +55,11 @@ import           Mafia.Path
 
 import           P
 
+import           System.IO (IO)
 import qualified System.Directory as Directory
+import qualified System.Environment as Environment
+
+import           X.Control.Monad.Trans.Either (EitherT, runEitherT, hoistEither)
 
 ------------------------------------------------------------------------
 -- Directory Operations
@@ -161,8 +170,21 @@ findExecutable name = liftIO $ do
   path <- Directory.findExecutable (T.unpack name)
   return (fmap T.pack path)
 
+lookupEnv :: MonadIO m => Text -> m (Maybe Text)
+lookupEnv key = liftIO $ do
+  value <- Environment.lookupEnv (T.unpack key)
+  return (fmap T.pack value)
+
 ------------------------------------------------------------------------
 -- Pre-defined directories
 
 getHomeDirectory :: MonadIO m => m Directory
 getHomeDirectory = T.pack `liftM` liftIO Directory.getHomeDirectory
+
+------------------------------------------------------------------------
+-- Concurrency
+
+mapConcurrentlyE :: Traversable t => (a -> EitherT x IO b) -> t a -> EitherT x IO (t b)
+mapConcurrentlyE io xs = do
+  ys <- liftIO (Async.mapConcurrently (runEitherT . io) xs)
+  hoistEither (sequence ys)

@@ -48,7 +48,7 @@ hoogle hackageRoot args = do
 
 hooglePackages :: Text -> EitherT MafiaError IO HooglePackagesSandbox
 hooglePackages hackageRoot = do
-  initialize
+  firstEitherT MafiaInitError initialize
   db <- hoogleCacheDir
   hoogleExe <- installHoogle
   Out pkgStr <- liftCabal $ sandbox "hc-pkg" ["list"]

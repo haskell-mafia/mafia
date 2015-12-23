@@ -4,13 +4,13 @@
 {-# LANGUAGE PatternSynonyms #-}
 module Mafia.Home
   ( getMafiaHome
+  , getMafiaDir
   , ensureMafiaDir
   , installBinary
   ) where
 
 import           Control.Monad.IO.Class (MonadIO(..))
 
-import           Data.Text (Text)
 import qualified Data.Text as T
 
 import           Mafia.IO
@@ -26,16 +26,23 @@ import           System.IO.Temp (withTempDirectory)
 import           X.Control.Monad.Trans.Either (EitherT, pattern EitherT, runEitherT)
 
 
-getMafiaHome :: IO Text
-getMafiaHome =
-  (</> T.pack ".ambiata/mafia") <$> getHomeDirectory
+getMafiaHome :: MonadIO m => m Directory
+getMafiaHome = do
+  mhome <- lookupEnv "MAFIA_HOME"
+  case mhome of
+    Just home -> return home
+    Nothing   -> (</> T.pack ".ambiata/mafia") `liftM` getHomeDirectory
 
-ensureMafiaDir :: MonadIO m => Text -> m Text
-ensureMafiaDir path = liftIO $ do
+getMafiaDir :: MonadIO m => Directory -> m Directory
+getMafiaDir path = do
   home <- getMafiaHome
-  let path' = home </> path
+  return (home </> path)
+
+ensureMafiaDir :: MonadIO m => Directory -> m Directory
+ensureMafiaDir path = do
+  path' <- getMafiaDir path
   createDirectoryIfMissing True path'
-  pure path'
+  return path'
 
 -- | Installs a given cabal package at a specific version
 installBinary :: PackageId -> [PackageId] -> EitherT ProcessError IO File

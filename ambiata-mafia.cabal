@@ -16,12 +16,17 @@ library
                       base                            >= 3          && < 5
                     , ambiata-p
                     , ambiata-x-eithert
+                    , ambiata-twine
+                    , aeson                           >= 0.8        && < 0.11
                     , async                           == 2.0.*
+                    , attoparsec                      == 0.12.*
+                    , base16-bytestring               == 0.1.*
                     , bytestring                      == 0.10.*
                     , containers                      == 0.5.*
                     , cryptohash                      == 0.11.*
                     , directory                       == 1.2.*
                     , exceptions                      == 0.8.*
+                    , filelock                        == 0.1.*
                     , filepath                        == 1.4.*
                     , process                         == 1.2.*
                     , tar                             == 0.4.*
@@ -39,25 +44,29 @@ library
                     src gen
 
   exposed-modules:
-                    Paths_ambiata_mafia
                     BuildInfo_ambiata_mafia
                     Mafia.Cabal
                     Mafia.Cabal.Index
+                    Mafia.Cabal.Dependencies
+                    Mafia.Cabal.Package
                     Mafia.Cabal.Process
                     Mafia.Cabal.Sandbox
                     Mafia.Cabal.Types
                     Mafia.Error
                     Mafia.Ghc
                     Mafia.Git
+                    Mafia.Hash
                     Mafia.Home
                     Mafia.Hoogle
                     Mafia.IO
                     Mafia.Init
+                    Mafia.Install
                     Mafia.Package
                     Mafia.Path
                     Mafia.Process
                     Mafia.Project
                     Mafia.Submodule
+                    Paths_ambiata_mafia
 
 executable mafia
   ghc-options:
