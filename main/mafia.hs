@@ -11,14 +11,14 @@ import qualified Data.Set as Set
 import qualified Data.Text as T
 import           Data.Time (getCurrentTime, diffUTCTime)
 
-import           Mafia.Cache
+import           Mafia.Cabal
 import           Mafia.Error
 import           Mafia.Home
 import           Mafia.Hoogle
 import           Mafia.IO
+import           Mafia.Init
 import           Mafia.Path
 import           Mafia.Process
-import           Mafia.Sandbox
 import           Mafia.Submodule
 
 import           P
@@ -49,7 +49,7 @@ main = do
       RunCommand DryRun c ->
         print c >> exitSuccess
       RunCommand RealRun c ->
-        orDie renderViolation (run c)
+        orDie renderMafiaError (run c)
 
 ------------------------------------------------------------------------
 
@@ -70,7 +70,7 @@ data GhciInclude
   | AllLibraries
   deriving (Eq, Show)
 
-run :: MafiaCommand -> EitherT MafiaViolation IO ()
+run :: MafiaCommand -> EitherT MafiaError IO ()
 run = \case
   MafiaUpdate                 -> update
   MafiaBuild  args            -> build  args
@@ -162,7 +162,7 @@ pGhcidArgs =
 
 ------------------------------------------------------------------------
 
-update :: EitherT MafiaViolation IO ()
+update :: EitherT MafiaError IO ()
 update = do
   home <- getHomeDirectory
 
@@ -174,50 +174,51 @@ update = do
   let age    = currentTime `diffUTCTime` indexTime
       oneDay = 24 * 60 * 60
 
-  when (age > oneDay) (cabal_ "update" [])
+  when (age > oneDay) $
+    liftCabal $ cabal_ "update" []
 
-build :: [Argument] -> EitherT MafiaViolation IO ()
+build :: [Argument] -> EitherT MafiaError IO ()
 build args = do
   initialize
-  cabal_ "build" $ ["--ghc-option=-Werror"] <> args
+  liftCabal . cabal_ "build" $ ["--ghc-option=-Werror"] <> args
 
-test :: [Argument] -> EitherT MafiaViolation IO ()
+test :: [Argument] -> EitherT MafiaError IO ()
 test args = do
   initialize
-  cabal_ "test" $ ["--show-details=streaming"] <> args
+  liftCabal . cabal_ "test" $ ["--show-details=streaming"] <> args
 
-testci :: [Argument] -> EitherT MafiaViolation IO ()
+testci :: [Argument] -> EitherT MafiaError IO ()
 testci args = do
   initialize
-  Clean <- cabal "test" $ ["--show-details=streaming"] <> args
+  Clean <- liftCabal . cabal "test" $ ["--show-details=streaming"] <> args
   return ()
 
-repl :: [Argument] -> EitherT MafiaViolation IO ()
+repl :: [Argument] -> EitherT MafiaError IO ()
 repl args = do
   initialize
-  cabal_ "repl" args
+  liftCabal $ cabal_ "repl" args
 
-bench :: [Argument] -> EitherT MafiaViolation IO ()
+bench :: [Argument] -> EitherT MafiaError IO ()
 bench args = do
   initialize
-  cabal_ "bench" args
+  liftCabal $ cabal_ "bench" args
 
-quick :: [GhciInclude] -> File -> EitherT MafiaViolation IO ()
+quick :: [GhciInclude] -> File -> EitherT MafiaError IO ()
 quick extraIncludes path = do
   args <- ghciArgs extraIncludes path
-  exec ProcessError "ghci" args
+  exec MafiaProcessError "ghci" args
 
-watch :: [GhciInclude] -> File -> [Argument] -> EitherT MafiaViolation IO ()
+watch :: [GhciInclude] -> File -> [Argument] -> EitherT MafiaError IO ()
 watch extraIncludes path extraArgs = do
-  ghcidExe <- firstEitherT ProcessError $ installBinary "ghcid" "0.5" []
+  ghcidExe <- firstEitherT MafiaProcessError $ installBinary "ghcid" "0.5" []
   args <- ghciArgs extraIncludes path
-  exec ProcessError ghcidExe $ [ "-c", T.unwords ("ghci" : args) ] <> extraArgs
+  exec MafiaProcessError ghcidExe $ [ "-c", T.unwords ("ghci" : args) ] <> extraArgs
 
-ghciArgs :: [GhciInclude] -> File -> EitherT MafiaViolation IO [Argument]
+ghciArgs :: [GhciInclude] -> File -> EitherT MafiaError IO [Argument]
 ghciArgs extraIncludes path = do
   exists <- doesFileExist path
   case exists of
-    False -> hoistEither (Left (EntryPointNotFound path))
+    False -> hoistEither (Left (MafiaEntryPointNotFound path))
     True  -> do
       initialize
 
@@ -232,11 +233,11 @@ ghciArgs extraIncludes path = do
             <> (fmap ("-package-db=" <>) databases)
             <> [ path ]
 
-reifyInclude :: GhciInclude -> EitherT MafiaViolation IO [Directory]
+reifyInclude :: GhciInclude -> EitherT MafiaError IO [Directory]
 reifyInclude = \case
   Directory dir -> return [dir]
   AllLibraries  -> do
-    absDirs <- Set.toList <$> getSubmoduleSources
+    absDirs <- Set.toList <$> firstEitherT MafiaSubmoduleError getSubmoduleSources
     relDirs <- mapM tryMakeRelativeToCurrent absDirs
     return [ dir </> sub | dir <- relDirs
                          , sub <- ["src", "test", "gen", "dist/build/autogen"] ]
@@ -248,9 +249,9 @@ ensureDirectory dir = do
     False -> return Nothing
     True  -> return (Just dir)
 
-getPackageDatabases :: EitherT MafiaViolation IO [Directory]
+getPackageDatabases :: EitherT MafiaError IO [Directory]
 getPackageDatabases = do
-    sandboxDir <- initSandbox
+    sandboxDir <- liftCabal initSandbox
     filter isPackage <$> getDirectoryListing Recursive sandboxDir
   where
     isPackage = ("-packages.conf.d" `T.isSuffixOf`)

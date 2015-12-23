@@ -1,9 +1,7 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
-module Mafia.Sandbox
-  ( cabal
-  , cabal_
-  , sandbox
+module Mafia.Cabal.Sandbox
+  ( sandbox
   , sandbox_
   , initSandbox
   ) where
@@ -11,10 +9,11 @@ module Mafia.Sandbox
 import           Control.Monad.IO.Class (MonadIO(..))
 
 import qualified Data.List as List
-import           Data.Text (Text)
 import qualified Data.Text as T
 
-import           Mafia.Error
+import           Mafia.Cabal.Process
+import           Mafia.Cabal.Types
+import           Mafia.Ghc
 import           Mafia.IO
 import           Mafia.Path
 import           Mafia.Process
@@ -24,35 +23,27 @@ import           P
 
 import           System.IO (IO)
 
-import           X.Control.Monad.Trans.Either (EitherT, firstEitherT, left, runEitherT)
+import           X.Control.Monad.Trans.Either (EitherT, firstEitherT)
 
 
-cabal :: ProcessResult a => Argument -> [Argument] -> EitherT MafiaViolation IO a
-cabal cmd args = call ProcessError "cabal" (cmd : args)
-
-cabal_ :: Argument -> [Argument] -> EitherT MafiaViolation IO ()
-cabal_ cmd args = do
-  Pass <- cabal cmd args
-  return ()
-
-sandbox :: ProcessResult a => Argument -> [Argument] -> EitherT MafiaViolation IO a
+sandbox :: ProcessResult a => Argument -> [Argument] -> EitherT CabalError IO a
 sandbox cmd args = do
   _ <- initSandbox
   cabal "sandbox" (cmd:args)
 
-sandbox_ :: Argument -> [Argument] -> EitherT MafiaViolation IO ()
+sandbox_ :: Argument -> [Argument] -> EitherT CabalError IO ()
 sandbox_ cmd args = do
   Pass <- sandbox cmd args
   return ()
 
 -- Sandbox initialized if required, this should support sandboxes in parent
 -- directories.
-initSandbox :: EitherT MafiaViolation IO Directory
+initSandbox :: EitherT CabalError IO Directory
 initSandbox = do
-  name <- firstEitherT MafiaProjectError getProjectName
+  name <- firstEitherT CabalProjectError getProjectName
 
   sandboxBase   <- fromMaybe ".cabal-sandbox" <$> liftIO (readUtf8 (name <> ".sandbox"))
-  ghcVer        <- getGhcVersion
+  ghcVer        <- firstEitherT CabalGhcError getGhcVersion
   cfgSandboxDir <- getConfiguredSandboxDir
 
   let sandboxDir = sandboxBase </> ghcVer
@@ -61,7 +52,7 @@ initSandbox = do
   dirOk <- doesDirectoryExist sandboxDir
 
   unless (cfgOk && dirOk) $
-    call_ ProcessError "cabal" ["sandbox", "--sandbox", sandboxDir, "init"]
+    call_ CabalProcessError "cabal" ["sandbox", "--sandbox", sandboxDir, "init"]
 
   return sandboxDir
 
@@ -78,13 +69,3 @@ getConfiguredSandboxDir = do
         (line:_) -> do
           let dir = T.strip (T.drop (T.length prefix) line)
           Just <$> tryMakeRelativeToCurrent dir
-
-getGhcVersion :: EitherT MafiaViolation IO Text
-getGhcVersion = do
-  result <- runEitherT (call ProcessError "ghc" ["--version"])
-  case result of
-    Left  _         -> left GhcNotInstalled
-    Right (Out out) ->
-      case reverse (T.words out) of
-        []      -> left GhcNotInstalled
-        (ver:_) -> return ver
