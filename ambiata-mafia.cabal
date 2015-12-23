@@ -53,6 +53,7 @@ library
                     Mafia.Hoogle
                     Mafia.IO
                     Mafia.Init
+                    Mafia.Package
                     Mafia.Path
                     Mafia.Process
                     Mafia.Project
@@ -102,6 +103,7 @@ test-suite test
                     , ambiata-p
                     , QuickCheck                      == 2.7.*
                     , quickcheck-instances            == 0.3.*
+                    , text
 
 test-suite test-io
   type:

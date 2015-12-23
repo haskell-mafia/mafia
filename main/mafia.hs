@@ -17,6 +17,7 @@ import           Mafia.Home
 import           Mafia.Hoogle
 import           Mafia.IO
 import           Mafia.Init
+import           Mafia.Package
 import           Mafia.Path
 import           Mafia.Process
 import           Mafia.Submodule
@@ -210,7 +211,7 @@ quick extraIncludes path = do
 
 watch :: [GhciInclude] -> File -> [Argument] -> EitherT MafiaError IO ()
 watch extraIncludes path extraArgs = do
-  ghcidExe <- firstEitherT MafiaProcessError $ installBinary "ghcid" "0.5" []
+  ghcidExe <- firstEitherT MafiaProcessError $ installBinary (packageId "ghcid" [0, 5]) []
   args <- ghciArgs extraIncludes path
   exec MafiaProcessError ghcidExe $ [ "-c", T.unwords ("ghci" : args) ] <> extraArgs
 
