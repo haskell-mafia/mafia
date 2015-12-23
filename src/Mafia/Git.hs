@@ -1,7 +1,9 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE LambdaCase #-}
 module Mafia.Git
     ( GitError(..)
+    , renderGitError
     , getProjectRoot
 
     , SubmoduleState
@@ -40,6 +42,14 @@ data Submodule = Submodule
 
 subNeedsInit :: Submodule -> Bool
 subNeedsInit = (== NeedsInit) . subState
+
+renderGitError :: GitError -> Text
+renderGitError = \case
+  GitProcessError e ->
+    renderProcessError e
+
+  GitParseError msg ->
+    "Parse failed: " <> msg
 
 ------------------------------------------------------------------------
 

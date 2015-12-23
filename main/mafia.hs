@@ -237,7 +237,7 @@ reifyInclude :: GhciInclude -> EitherT MafiaError IO [Directory]
 reifyInclude = \case
   Directory dir -> return [dir]
   AllLibraries  -> do
-    absDirs <- Set.toList <$> getSubmoduleSources
+    absDirs <- Set.toList <$> firstEitherT MafiaSubmoduleError getSubmoduleSources
     relDirs <- mapM tryMakeRelativeToCurrent absDirs
     return [ dir </> sub | dir <- relDirs
                          , sub <- ["src", "test", "gen", "dist/build/autogen"] ]

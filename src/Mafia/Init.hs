@@ -33,7 +33,7 @@ import           P
 
 import           System.IO (IO, stderr)
 
-import           X.Control.Monad.Trans.Either (EitherT, hoistEither, runEitherT)
+import           X.Control.Monad.Trans.Either (EitherT, hoistEither, runEitherT, firstEitherT)
 
 
 initialize :: EitherT MafiaError IO ()
@@ -65,11 +65,11 @@ initialize = do
 
 determineCacheUpdates :: EitherT MafiaError IO [CacheUpdate]
 determineCacheUpdates = do
-    liftGit initSubmodules
-    syncCabalSources
+    firstEitherT MafiaGitError initSubmodules
+    firstEitherT MafiaSubmoduleError syncCabalSources
 
     currentDir  <- getCurrentDirectory
-    sandboxSrcs <- Set.toList <$> getSandboxSources
+    sandboxSrcs <- Set.toList <$> firstEitherT MafiaSubmoduleError getSandboxSources
     let allSrcs = currentDir : sandboxSrcs
 
     srcs     <- mkFileMap . concat <$> mapM findCabal allSrcs

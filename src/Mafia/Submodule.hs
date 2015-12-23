@@ -1,7 +1,10 @@
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
 module Mafia.Submodule
-  ( syncCabalSources
+  ( SubmoduleError(..)
+  , renderSubmoduleError
+  , syncCabalSources
   , getSandboxSources
   , getSubmoduleSources
   ) where
@@ -10,11 +13,11 @@ import           Control.Monad.IO.Class (MonadIO(..))
 
 import           Data.Set (Set)
 import qualified Data.Set as Set
+import           Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
 
 import           Mafia.Cabal
-import           Mafia.Error
 import           Mafia.Git
 import           Mafia.IO
 import           Mafia.Path
@@ -28,7 +31,24 @@ import           System.IO (IO, stderr)
 import           X.Control.Monad.Trans.Either (EitherT, firstEitherT)
 
 
-syncCabalSources :: EitherT MafiaError IO ()
+data SubmoduleError =
+    SubmoduleProjectError ProjectError
+  | SubmoduleCabalError CabalError
+  | SubmoduleGitError GitError
+  deriving (Show)
+
+renderSubmoduleError :: SubmoduleError -> Text
+renderSubmoduleError = \case
+  SubmoduleProjectError e ->
+    renderProjectError e
+
+  SubmoduleCabalError e ->
+    renderCabalError e
+
+  SubmoduleGitError e ->
+    renderGitError e
+
+syncCabalSources :: EitherT SubmoduleError IO ()
 syncCabalSources = do
   repairSandbox
   installed <- getSandboxSources
@@ -36,26 +56,26 @@ syncCabalSources = do
   traverse_ addSandboxSource    (required `Set.difference` installed)
   traverse_ removeSandboxSource (installed `Set.difference` required)
 
-repairSandbox :: EitherT MafiaError IO ()
+repairSandbox :: EitherT SubmoduleError IO ()
 repairSandbox = do
-  sandboxDir <- liftCabal initSandbox
-  liftCabal (repairIndexFile sandboxDir)
+  sandboxDir <- firstEitherT SubmoduleCabalError initSandbox
+  firstEitherT SubmoduleCabalError (repairIndexFile sandboxDir)
 
-addSandboxSource :: Directory -> EitherT MafiaError IO ()
+addSandboxSource :: Directory -> EitherT SubmoduleError IO ()
 addSandboxSource dir = do
   rel <- fromMaybe dir <$> makeRelativeToCurrentDirectory dir
   liftIO (T.hPutStrLn stderr ("Sandbox: Adding " <> rel))
-  liftCabal $ sandbox_ "add-source" [dir]
+  firstEitherT SubmoduleCabalError $ sandbox_ "add-source" [dir]
 
-removeSandboxSource :: Directory -> EitherT MafiaError IO ()
+removeSandboxSource :: Directory -> EitherT SubmoduleError IO ()
 removeSandboxSource dir = do
   rel <- fromMaybe dir <$> makeRelativeToCurrentDirectory dir
   liftIO (T.hPutStrLn stderr ("Sandbox: Removing " <> rel))
-  liftCabal $ sandbox_ "delete-source" ["-v0", dir]
+  firstEitherT SubmoduleCabalError $ sandbox_ "delete-source" ["-v0", dir]
 
-getSandboxSources :: EitherT MafiaError IO (Set Directory)
+getSandboxSources :: EitherT SubmoduleError IO (Set Directory)
 getSandboxSources = do
-  Out sources <- liftCabal $ sandbox "list-sources" []
+  Out sources <- firstEitherT SubmoduleCabalError $ sandbox "list-sources" []
 
   let dropHeader = drop 3
       dropFooter = reverse . drop 2 . reverse
@@ -66,14 +86,14 @@ getSandboxSources = do
          . T.lines
          $ sources
 
-getSubmoduleSources :: EitherT MafiaError IO (Set Directory)
+getSubmoduleSources :: EitherT SubmoduleError IO (Set Directory)
 getSubmoduleSources = Set.union <$> getConfiguredSources
-                                <*> liftGit getConventionSources
+                                <*> firstEitherT SubmoduleGitError getConventionSources
 
-getConfiguredSources :: EitherT MafiaError IO (Set Directory)
+getConfiguredSources :: EitherT SubmoduleError IO (Set Directory)
 getConfiguredSources = do
-  root <- liftGit getProjectRoot
-  name <- firstEitherT MafiaProjectError getProjectName
+  root <- firstEitherT SubmoduleGitError getProjectRoot
+  name <- firstEitherT SubmoduleProjectError getProjectName
   cfg  <- readUtf8 (name <> ".submodules")
   return . Set.fromList
          . fmap (root </>)

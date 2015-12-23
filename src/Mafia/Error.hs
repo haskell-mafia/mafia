@@ -6,7 +6,6 @@ module Mafia.Error
   , CacheUpdate (..)
   , renderMafiaError
   , liftCabal
-  , liftGit
   ) where
 
 import           Control.Exception (IOException)
@@ -18,6 +17,7 @@ import           Mafia.Cabal.Types
 import           Mafia.Git
 import           Mafia.Process
 import           Mafia.Project
+import           Mafia.Submodule
 
 import           P
 
@@ -35,8 +35,10 @@ data CacheUpdate
 -- sub-exceptions rather than this module being the root of most dependencies
 data MafiaError
   = MafiaProjectError ProjectError
-  | MafiaCabalError CabalError
   | MafiaProcessError ProcessError
+  | MafiaGitError GitError
+  | MafiaCabalError CabalError
+  | MafiaSubmoduleError SubmoduleError
   | MafiaParseError Text
   | MafiaCacheUpdateError CacheUpdate IOException
   | MafiaEntryPointNotFound File
@@ -48,11 +50,17 @@ renderMafiaError = \case
   MafiaProjectError e ->
     renderProjectError e
 
+  MafiaProcessError e ->
+    renderProcessError e
+
+  MafiaGitError e ->
+    renderGitError e
+
   MafiaCabalError e ->
     renderCabalError e
 
-  MafiaProcessError e ->
-    renderProcessError e
+  MafiaSubmoduleError e ->
+    renderSubmoduleError e
 
   MafiaParseError msg ->
     "Parse failed: " <> msg
@@ -67,9 +75,3 @@ renderMafiaError = \case
 liftCabal :: Functor m => EitherT CabalError m a -> EitherT MafiaError m a
 liftCabal =
   firstEitherT MafiaCabalError
-
-liftGit :: Functor m => EitherT GitError m a -> EitherT MafiaError m a
-liftGit =
-  firstEitherT $ \case
-    GitParseError   msg -> MafiaParseError   msg
-    GitProcessError err -> MafiaProcessError err
