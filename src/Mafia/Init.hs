@@ -83,12 +83,30 @@ initialize = do
   current  <- getMafiaState
   hasDist  <- liftIO $ doesDirectoryExist "dist"
 
-  when (previous /= Just current || not hasDist) $ do
+  packages <- checkPackages
+
+  when (previous /= Just current || not hasDist || packages == PackagesBroken) $ do
     liftIO (T.putStrLn "Installing dependencies...")
     let sdeps = Set.toList (msSourceDependencies current)
     firstEitherT InitInstallError $ installDependencies sdeps
     firstEitherT InitCabalError $ cabal_ "configure" ["--enable-tests" , "--enable-benchmarks"]
     writeMafiaState statePath current
+
+------------------------------------------------------------------------
+
+data PackageState =
+    PackagesOk
+  | PackagesBroken
+    deriving (Eq, Ord, Show)
+
+checkPackages :: EitherT InitError IO PackageState
+checkPackages = do
+  packageDB     <- firstEitherT InitCabalError getPackageDB
+  packages      <- getDirectoryListing (RecursiveDepth 0) packageDB
+  packagesExist <- and <$> traverse doesFileExist packages
+  case packagesExist of
+    True  -> return PackagesOk
+    False -> return PackagesBroken
 
 ------------------------------------------------------------------------
 
