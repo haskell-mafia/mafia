@@ -100,6 +100,9 @@ renderFlag = \case
 
 ------------------------------------------------------------------------
 
+type MinVersion = Version
+type MaxVersion = Version
+
 data CabalError =
     CabalProcessError ProcessError
   | CabalProjectError ProjectError
@@ -111,6 +114,9 @@ data CabalError =
   | CabalSandboxConfigFileNotFound SandboxConfigFile
   | CabalSandboxConfigFieldNotFound SandboxConfigFile Text
   | CabalInstallIsNotReferentiallyTransparent
+  | CabalCouldNotParseVersion Text
+  | CabalInvalidVersion Version MinVersion MaxVersion
+  | CabalNotInstalled
     deriving (Show)
 
 renderCabalError :: CabalError -> Text
@@ -144,6 +150,19 @@ renderCabalError = \case
 
   CabalInstallIsNotReferentiallyTransparent ->
     "The impossible happened, cabal-install gave different answers on subsequent dry runs"
+
+  CabalCouldNotParseVersion out ->
+    "Could not parse or read the cabal-install version number from the following output:\n" <> out
+
+  CabalInvalidVersion ver vmin vmax ->
+    mconcat
+      [ "cabal-install ", renderVersion ver, " is not supported "
+      , "(must be >= ", renderVersion vmin, " && < ", renderVersion vmax, ")" ]
+
+  CabalNotInstalled ->
+    mconcat
+      [ "cabal-install is not installed."
+      , "\nYou can download it from https://www.haskell.org/cabal/download.html" ]
 
 ------------------------------------------------------------------------
 

@@ -21,6 +21,7 @@ import           Mafia.Cabal.Index
 import           Mafia.Cabal.Package
 import           Mafia.Cabal.Process (cabalFrom)
 import           Mafia.Cabal.Types
+import           Mafia.Cabal.Version
 import           Mafia.IO
 import           Mafia.Package
 import           Mafia.Path
@@ -86,6 +87,8 @@ reifyPackageRefs refs =
 
 findRevDeps :: [Directory] -> EitherT CabalError IO [RevDeps]
 findRevDeps sdirs = do
+  checkCabalVersion
+
   EitherT . withSystemTempDirectory "mafia-deps-" $ \tmp0 -> runEitherT $ do
     dir <- getCurrentDirectory
 

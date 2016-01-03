@@ -46,12 +46,13 @@ library
   exposed-modules:
                     BuildInfo_ambiata_mafia
                     Mafia.Cabal
-                    Mafia.Cabal.Index
                     Mafia.Cabal.Dependencies
+                    Mafia.Cabal.Index
                     Mafia.Cabal.Package
                     Mafia.Cabal.Process
                     Mafia.Cabal.Sandbox
                     Mafia.Cabal.Types
+                    Mafia.Cabal.Version
                     Mafia.Error
                     Mafia.Ghc
                     Mafia.Git
