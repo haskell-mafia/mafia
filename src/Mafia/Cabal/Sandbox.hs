@@ -23,7 +23,6 @@ import           Mafia.Ghc
 import           Mafia.IO
 import           Mafia.Path
 import           Mafia.Process
-import           Mafia.Project
 
 import           P
 
@@ -46,21 +45,18 @@ sandbox_ cmd args = do
 -- directories.
 initSandbox :: EitherT CabalError IO Directory
 initSandbox = do
-  name <- firstEitherT CabalProjectError getProjectName
+  ghcVer <- firstEitherT CabalGhcError getGhcVersion
+  let sandboxDir = ".cabal-sandbox" </> ghcVer
 
-  sandboxBase   <- fromMaybe ".cabal-sandbox" <$> liftIO (readUtf8 (name <> ".sandbox"))
-  ghcVer        <- firstEitherT CabalGhcError getGhcVersion
   cfgSandboxDir <- liftIO (runEitherT getSandboxDir)
+  let cfgOk = dropLeft cfgSandboxDir == Just sandboxDir
 
-  let dir = sandboxBase </> ghcVer
-
-  let cfgOk = dropLeft cfgSandboxDir == Just dir
-  dirOk <- doesDirectoryExist dir
+  dirOk <- doesDirectoryExist sandboxDir
 
   unless (cfgOk && dirOk) $
-    call_ CabalProcessError "cabal" ["sandbox", "--sandbox", dir, "init"]
+    call_ CabalProcessError "cabal" ["sandbox", "--sandbox", sandboxDir, "init"]
 
-  return dir
+  return sandboxDir
 
 dropLeft :: Either a b -> Maybe b
 dropLeft =
