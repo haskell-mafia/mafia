@@ -75,8 +75,8 @@ initialize :: EitherT InitError IO ()
 initialize = do
   firstEitherT InitGitError initSubmodules
 
-  cacheDir <- getCacheDir
-  let statePath = cacheDir </> "state.json"
+  sandboxDir <- firstEitherT InitCabalError initSandbox
+  let statePath = sandboxDir </> "mafia/state.json"
 
   liftIO (T.putStrLn "Checking for changes to dependencies...")
   previous <- readMafiaState statePath
@@ -160,10 +160,5 @@ readMafiaState file = do
 
 writeMafiaState :: MonadIO m => File -> MafiaState -> m ()
 writeMafiaState file state = do
+  createDirectoryIfMissing True (takeDirectory file)
   writeBytes file (L.toStrict (A.encode state))
-
-getCacheDir :: EitherT InitError IO Directory
-getCacheDir = do
-  cacheDir <- (</> "mafia") <$> firstEitherT InitCabalError initSandbox
-  createDirectoryIfMissing False cacheDir
-  return cacheDir
