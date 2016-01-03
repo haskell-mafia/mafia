@@ -32,6 +32,8 @@ module Mafia.IO
     -- * Environment
   , findExecutable
   , lookupEnv
+  , setEnv
+  , unsetEnv
 
     -- * Pre-defined directories
   , getHomeDirectory
@@ -174,6 +176,14 @@ lookupEnv :: MonadIO m => Text -> m (Maybe Text)
 lookupEnv key = liftIO $ do
   value <- Environment.lookupEnv (T.unpack key)
   return (fmap T.pack value)
+
+setEnv :: MonadIO m => Text -> Text -> m ()
+setEnv key value = liftIO $
+  Environment.setEnv (T.unpack key) (T.unpack value)
+
+unsetEnv :: MonadIO m => Text -> m ()
+unsetEnv key = liftIO $
+  Environment.unsetEnv (T.unpack key)
 
 ------------------------------------------------------------------------
 -- Pre-defined directories
