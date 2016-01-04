@@ -41,11 +41,15 @@ exec_mafia () {
       # terminates. Unfortunately `mktemp` doesn't behave the same on
       # Linux and OS/X so we need to try two different approaches.
       MAFIA_TEMP=$(mktemp -d 2>/dev/null || mktemp -d -t 'exec_mafia')
-      trap "rm -rf \"$MAFIA_TEMP\"" EXIT
-
       # Create a temporary file in MAFIA_BIN so we can do an atomic copy/move dance.
       MAFIA_PATH_TEMP=$(mktemp --tmpdir=$MAFIA_BIN $MAFIA_FILE-XXXXXX 2>/dev/null || TMPDIR=$MAFIA_BIN mktemp -t $MAFIA_FILE)
-      trap "rm -f \"$MAFIA_PATH_TEMP\"" EXIT
+
+      clean_up () {
+        rm -rf "$MAFIA_TEMP"
+        rm -f "$MAFIA_PATH_TEMP"
+      }
+
+      trap clean_up EXIT
 
       echo "Building $MAFIA_FILE in $MAFIA_TEMP"
 
