@@ -74,6 +74,8 @@ installDependencies spkgs = do
   ignoreIO $ removeDirectoryRecursive packageDB
   createDirectoryIfMissing True packageDB
 
+  -- create symlinks to the relevant package .conf files in the
+  -- package-db, then call recache so that ghc is aware of them.
   env  <- getPackageEnv
   mapM_ (link packageDB env) globals
   Hush <- firstEitherT InstallCabalError $ cabal "sandbox" ["hc-pkg", "recache"]
@@ -101,6 +103,26 @@ link db env p@(Package (PackageRef pid _ _) _ _) = do
   let dest = db </> renderPackageId pid <> ".conf"
   liftIO $ createSymbolicLink (T.unpack pcfg) (T.unpack dest)
 
+-- | Installs a package and its dependencies in to the mafia global package
+--   cache in $MAFIA_HOME by taking the following steps:
+--
+--   1. Checks if the package.conf file already exists, this is what decides
+--      whether we've already installed a package or not.
+--
+--   2. Takes a machine wide lock on the package to make sure that two mafia's
+--      can still run at the same time.
+--
+--   3. Creates a fresh a sandbox in the global cache.
+--
+--   4. Adds the source if the package is a source/submodule dependency.
+--
+--   5. Registers any dependencies in to the sandbox package db by creating
+--      symbolic links.
+--
+--   6. Install the package.
+--
+--   7. Create a package.conf file which can be symlinked in to other package db's.
+--
 install :: PackageEnv -> Package -> EitherT InstallError IO ()
 install env p@(Package (PackageRef pid _ msrc) deps _) = do
   let packageCfg = packageConfigPath env p
@@ -126,9 +148,14 @@ install env p@(Package (PackageRef pid _ msrc) deps _) = do
 
         db <- firstEitherT InstallCabalError (readPackageDB sandboxCfg)
 
+        -- create symlinks to the relevant package .conf files in the
+        -- package-db, then call recache so that ghc is aware of them.
         mapM_ (link db env) (Set.toList (transitiveOfPackages deps))
         Hush <- sbcabal "sandbox" ["hc-pkg", "recache"]
 
+        -- TODO perhaps the --reorder-goals --max-backjumps isn't required here
+        -- TODO as we're so specific about the constraints that there can only
+        -- TODO be one solution.
         let constraints = concatMap (\c -> ["--constraint", c]) (constraintsOfPackage p)
         Pass <- sbcabal "install" $ [ "--reorder-goals"
                                   , "--max-backjumps=-1"
