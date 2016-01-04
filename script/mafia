@@ -32,7 +32,9 @@ exec_mafia () {
     # If we can't find the mafia version, then we need to upgrade the script.
     run_upgrade
   else
-    MAFIA_PATH=$HOME/.ambiata/mafia/bin/mafia-$MAFIA_VERSION
+    MAFIA_BIN=$HOME/.ambiata/mafia/bin
+    MAFIA_FILE=mafia-$MAFIA_VERSION
+    MAFIA_PATH=$MAFIA_BIN/$MAFIA_FILE
 
     [ -f "$MAFIA_PATH" ] || {
       # Create a temporary directory which will be deleted when the script
@@ -41,7 +43,11 @@ exec_mafia () {
       MAFIA_TEMP=$(mktemp -d 2>/dev/null || mktemp -d -t 'exec_mafia')
       trap "rm -rf \"$MAFIA_TEMP\"" EXIT
 
-      echo "Building mafia-$MAFIA_VERSION in $MAFIA_TEMP"
+      # Create a temporary file in MAFIA_BIN so we can do an atomic copy/move dance.
+      MAFIA_PATH_TEMP=$(mktemp --tmpdir=$MAFIA_BIN $MAFIA_FILE-XXXXXX 2>/dev/null || TMPDIR=$MAFIA_BIN mktemp -t $MAFIA_FILE)
+      trap "rm -f \"$MAFIA_PATH_TEMP\"" EXIT
+
+      echo "Building $MAFIA_FILE in $MAFIA_TEMP"
 
       ( cd "$MAFIA_TEMP"
 
@@ -53,8 +59,9 @@ exec_mafia () {
         bin/bootstrap ) || exit $?
 
       mkdir -p $(dirname $MAFIA_PATH)
-      cp "$MAFIA_TEMP/mafia/.cabal-sandbox/bin/mafia" "${MAFIA_PATH}.tmp"
-      mv "${MAFIA_PATH}.tmp" "$MAFIA_PATH"
+      cp "$MAFIA_TEMP/mafia/.cabal-sandbox/bin/mafia" "$MAFIA_PATH_TEMP"
+      chmod +x "$MAFIA_PATH_TEMP"
+      mv "$MAFIA_PATH_TEMP" "$MAFIA_PATH"
     }
 
     exec $MAFIA_PATH "$@"
