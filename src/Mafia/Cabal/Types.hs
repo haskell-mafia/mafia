@@ -114,6 +114,7 @@ data CabalError =
   | CabalSandboxConfigFileNotFound SandboxConfigFile
   | CabalSandboxConfigFieldNotFound SandboxConfigFile Text
   | CabalInstallIsNotReferentiallyTransparent
+  | CabalCouldNotReadPackageId File
   | CabalCouldNotParseVersion Text
   | CabalInvalidVersion Version MinVersion MaxVersion
   | CabalNotInstalled
@@ -150,6 +151,9 @@ renderCabalError = \case
 
   CabalInstallIsNotReferentiallyTransparent ->
     "The impossible happened, cabal-install gave different answers on subsequent dry runs"
+
+  CabalCouldNotReadPackageId cabalFile ->
+    "Failed to read package-id from: " <> cabalFile
 
   CabalCouldNotParseVersion out ->
     "Could not parse or read the cabal-install version number from the following output:\n" <> out

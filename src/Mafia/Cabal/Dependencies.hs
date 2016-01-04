@@ -38,7 +38,7 @@ import           X.Control.Monad.Trans.Either
 
 findDependencies :: [SourcePackage] -> EitherT CabalError IO [Package]
 findDependencies spkgs = do
-  fromRevDeps spkgs <$> findRevDeps (fmap spDirectory spkgs)
+  fromRevDeps spkgs <$> findRevDeps spkgs
 
 fromRevDeps :: [SourcePackage] -> [RevDeps] -> [Package]
 fromRevDeps spkgs rdeps =
@@ -85,8 +85,17 @@ reifyPackageRefs refs =
         mkPackage ref (mapMaybe (\d -> Map.lookup d pkgs) deps)
   in pkgs
 
-findRevDeps :: [Directory] -> EitherT CabalError IO [RevDeps]
-findRevDeps sdirs = do
+mapFromList :: Ord k => (v -> k) -> [v] -> Map k v
+mapFromList f xs = Map.fromList (List.zip (fmap f xs) xs)
+
+toGraphKey :: RevDeps -> (RevDeps, PackageId, [PackageId])
+toGraphKey rev = (rev, refId (revRef rev), revDeps rev)
+
+fromGraphKey :: (RevDeps, PackageId, [PackageId]) -> PackageRef
+fromGraphKey (rev, _, _) = revRef rev
+
+findRevDeps :: [SourcePackage] -> EitherT CabalError IO [RevDeps]
+findRevDeps spkgs = do
   checkCabalVersion
 
   EitherT . withSystemTempDirectory "mafia-deps-" $ \tmp0 -> runEitherT $ do
@@ -98,9 +107,14 @@ findRevDeps sdirs = do
     Hush <- cabal "sandbox" ["init", "--sandbox", tmp]
 
     -- this is a fast 'cabal sandbox add-source'
-    createIndexFile sdirs tmp
+    createIndexFile (fmap spDirectory spkgs) tmp
 
-    let installDryRun args =
+    -- make sure we're installing the source package by
+    -- pinning its version explicitly
+    let constraints =
+          concatMap spConstraintArgs spkgs
+
+        installDryRun args =
           cabal "install" $
             [ "--only-dependencies"
             , "--force-reinstalls"
@@ -108,7 +122,7 @@ findRevDeps sdirs = do
             , "--enable-benchmarks"
             , "--reorder-goals"
             , "--max-backjumps=-1"
-            , "--dry-run" ] <> args
+            , "--dry-run" ] <> constraints <> args
 
     result <- liftIO . runEitherT $ installDryRun ["-v2"]
     case result of
@@ -120,14 +134,12 @@ findRevDeps sdirs = do
         -- this should never happen
         left CabalInstallIsNotReferentiallyTransparent
 
-mapFromList :: Ord k => (v -> k) -> [v] -> Map k v
-mapFromList f xs = Map.fromList (List.zip (fmap f xs) xs)
-
-toGraphKey :: RevDeps -> (RevDeps, PackageId, [PackageId])
-toGraphKey rev = (rev, refId (revRef rev), revDeps rev)
-
-fromGraphKey :: (RevDeps, PackageId, [PackageId]) -> PackageRef
-fromGraphKey (rev, _, _) = revRef rev
+spConstraintArgs :: SourcePackage -> [Text]
+spConstraintArgs sp =
+  let pid  = spPackageId sp
+      name = unPackageName (pkgName pid)
+      ver  = renderVersion (pkgVersion pid)
+  in [ "--constraint", name <> " == " <> ver ]
 
 ------------------------------------------------------------------------
 
