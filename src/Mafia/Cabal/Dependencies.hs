@@ -120,6 +120,7 @@ findRevDeps spkgs = do
             , "--force-reinstalls"
             , "--enable-tests"
             , "--enable-benchmarks"
+            , "--enable-profiling"
             , "--reorder-goals"
             , "--max-backjumps=-1"
             , "--dry-run" ] <> constraints <> args

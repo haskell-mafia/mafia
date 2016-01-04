@@ -153,14 +153,11 @@ install env p@(Package (PackageRef pid _ msrc) deps _) = do
         mapM_ (link db env) (Set.toList (transitiveOfPackages deps))
         Hush <- sbcabal "sandbox" ["hc-pkg", "recache"]
 
-        -- TODO perhaps the --reorder-goals --max-backjumps isn't required here
-        -- TODO as we're so specific about the constraints that there can only
-        -- TODO be one solution.
         let constraints = concatMap (\c -> ["--constraint", c]) (constraintsOfPackage p)
-        Pass <- sbcabal "install" $ [ "--reorder-goals"
-                                  , "--max-backjumps=-1"
-                                  , renderPackageId pid
-                                  ] <> constraints
+        Pass <- sbcabal "install" $ [ "--ghc-options=-j"
+                                    , "--enable-library-profiling"
+                                    , renderPackageId pid
+                                    ] <> constraints
 
         Out out <- sbcabal "sandbox" ["hc-pkg", "--", "describe", renderPackageId pid]
 

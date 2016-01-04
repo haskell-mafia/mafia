@@ -37,7 +37,7 @@ import           X.Control.Monad.Trans.Either (firstEitherT, hoistEither)
 import           X.Control.Monad.Trans.Either.Exit (orDie)
 import           X.Options.Applicative (Parser, CommandFields, Mod)
 import           X.Options.Applicative (SafeCommand(..), RunType(..))
-import           X.Options.Applicative (argument, textRead, metavar, help, long, short, option, flag')
+import           X.Options.Applicative (argument, textRead, metavar, help, long, short, option, flag, flag')
 import           X.Options.Applicative (dispatch, subparser, safeCommand, command')
 
 ------------------------------------------------------------------------
@@ -62,7 +62,7 @@ main = do
 data MafiaCommand
   = MafiaUpdate
   | MafiaHash
-  | MafiaBuild  [Argument]
+  | MafiaBuild  Profiling [Argument]
   | MafiaTest   [Argument]
   | MafiaTestCI [Argument]
   | MafiaRepl   [Argument]
@@ -81,7 +81,7 @@ run :: MafiaCommand -> EitherT MafiaError IO ()
 run = \case
   MafiaUpdate                 -> update
   MafiaHash                   -> hash
-  MafiaBuild  args            -> build  args
+  MafiaBuild  p args          -> build  p args
   MafiaTest   args            -> test   args
   MafiaTestCI args            -> testci args
   MafiaRepl   args            -> repl   args
@@ -90,7 +90,7 @@ run = \case
   MafiaWatch  incs entry args -> watch  incs entry args
   MafiaHoogle args            -> do
     hkg <- fromMaybe "https://hackage.haskell.org/package" <$> lookupEnv "HACKAGE"
-    firstEitherT MafiaInitError initialize
+    firstEitherT MafiaInitError (initialize Nothing)
     hoogle hkg args
 
 parser :: Parser (SafeCommand MafiaCommand)
@@ -108,7 +108,7 @@ commands =
             (pure MafiaHash)
 
  , command' "build" "Build this project, including all executables and test suites."
-            (MafiaBuild <$> many pCabalArgs)
+            (MafiaBuild <$> pProfiling <*> many pCabalArgs)
 
  , command' "test" "Test this project, by default this runs all test suites."
             (MafiaTest <$> many pCabalArgs)
@@ -137,6 +137,13 @@ commands =
  , command' "hoogle" ( "Run a hoogle query across the local dependencies" )
             (MafiaHoogle <$> many pCabalArgs)
  ]
+
+pProfiling :: Parser Profiling
+pProfiling =
+  flag DisableProfiling EnableProfiling $
+       long "enable-profiling"
+    <> short 'p'
+    <> help "Enable profiling for this build."
 
 pGhciEntryPoint :: Parser File
 pGhciEntryPoint =
@@ -196,30 +203,30 @@ hash = do
   sph <- liftCabal (hashSourcePackage ".")
   liftIO (T.putStr (renderSourcePackageHash sph))
 
-build :: [Argument] -> EitherT MafiaError IO ()
-build args = do
-  firstEitherT MafiaInitError initialize
-  liftCabal . cabal_ "build" $ ["--ghc-option=-Werror"] <> args
+build :: Profiling -> [Argument] -> EitherT MafiaError IO ()
+build p args = do
+  firstEitherT MafiaInitError . initialize $ Just p
+  liftCabal . cabal_ "build" $ ["-j", "--ghc-option=-Werror"] <> args
 
 test :: [Argument] -> EitherT MafiaError IO ()
 test args = do
-  firstEitherT MafiaInitError initialize
-  liftCabal . cabal_ "test" $ ["--show-details=streaming"] <> args
+  firstEitherT MafiaInitError . initialize $ Just DisableProfiling
+  liftCabal . cabal_ "test" $ ["-j", "--show-details=streaming"] <> args
 
 testci :: [Argument] -> EitherT MafiaError IO ()
 testci args = do
-  firstEitherT MafiaInitError initialize
-  Clean <- liftCabal . cabal "test" $ ["--show-details=streaming"] <> args
+  firstEitherT MafiaInitError . initialize $ Just DisableProfiling
+  Clean <- liftCabal . cabal "test" $ ["-j", "--show-details=streaming"] <> args
   return ()
 
 repl :: [Argument] -> EitherT MafiaError IO ()
 repl args = do
-  firstEitherT MafiaInitError initialize
+  firstEitherT MafiaInitError . initialize $ Just DisableProfiling
   liftCabal $ cabal_ "repl" args
 
 bench :: [Argument] -> EitherT MafiaError IO ()
 bench args = do
-  firstEitherT MafiaInitError initialize
+  firstEitherT MafiaInitError . initialize $ Just DisableProfiling
   liftCabal $ cabal_ "bench" args
 
 quick :: [GhciInclude] -> File -> EitherT MafiaError IO ()
@@ -239,7 +246,7 @@ ghciArgs extraIncludes path = do
   case exists of
     False -> hoistEither (Left (MafiaEntryPointNotFound path))
     True  -> do
-      firstEitherT MafiaInitError initialize
+      firstEitherT MafiaInitError . initialize $ Just DisableProfiling
 
       extras <- concat <$> mapM reifyInclude extraIncludes
 

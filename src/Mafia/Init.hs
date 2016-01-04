@@ -4,7 +4,8 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE LambdaCase #-}
 module Mafia.Init
-  ( initialize
+  ( Profiling(..)
+  , initialize
 
   , InitError(..)
   , renderInitError
@@ -27,6 +28,7 @@ import           Mafia.Hash
 import           Mafia.IO
 import           Mafia.Install
 import           Mafia.Path
+import           Mafia.Process
 import           Mafia.Submodule
 
 import           P
@@ -42,7 +44,7 @@ data InitError =
   | InitCabalError CabalError
   | InitSubmoduleError SubmoduleError
   | InitInstallError InstallError
-  | InitParseError Text
+  | InitParseError File Text
   | InitCabalFileNotFound Directory
     deriving (Show)
 
@@ -63,16 +65,16 @@ renderInitError = \case
   InitInstallError e ->
     renderInstallError e
 
-  InitParseError err ->
-    "Parse error: " <> err
+  InitParseError file err ->
+    file <> ": parse error: " <> err
 
   InitCabalFileNotFound dir ->
     "Could not find cabal file in: " <> dir
 
 ------------------------------------------------------------------------
 
-initialize :: EitherT InitError IO ()
-initialize = do
+initialize :: Maybe Profiling -> EitherT InitError IO ()
+initialize mprofiling = do
   firstEitherT InitGitError initSubmodules
 
   sandboxDir <- firstEitherT InitCabalError initSandbox
@@ -80,17 +82,35 @@ initialize = do
 
   liftIO (T.putStrLn "Checking for changes to dependencies...")
   previous <- readMafiaState statePath
-  current  <- getMafiaState
+  current  <- getMafiaState (mprofiling <|> fmap msProfiling previous)
   hasDist  <- liftIO $ doesDirectoryExist "dist"
 
   packages <- checkPackages
 
-  when (previous /= Just current || not hasDist || packages == PackagesBroken) $ do
+  let currentInstall  = msInstallState current
+      previousInstall = fmap msInstallState previous
+      needInstall     = previousInstall /= Just currentInstall || packages == PackagesBroken
+
+  when needInstall $ do
     liftIO (T.putStrLn "Installing dependencies...")
-    let sdeps = Set.toList (msSourceDependencies current)
+    let sdeps = Set.toList (isSourceDependencies (msInstallState current))
     firstEitherT InitInstallError $ installDependencies sdeps
-    firstEitherT InitCabalError $ cabal_ "configure" ["--enable-tests" , "--enable-benchmarks"]
+
+  let needConfigure = needInstall || previous /= Just current || not hasDist
+
+  when needConfigure $ do
+    firstEitherT InitCabalError . cabal_ "configure" $
+      profilingArgs (msProfiling current) <>
+      [ "--enable-tests"
+      , "--enable-benchmarks" ]
+
+  when (needInstall || needConfigure) $ do
     writeMafiaState statePath current
+
+profilingArgs :: Profiling -> [Argument]
+profilingArgs = \case
+  DisableProfiling -> ["--disable-profiling"]
+  EnableProfiling  -> ["--enable-profiling"]
 
 ------------------------------------------------------------------------
 
@@ -110,29 +130,71 @@ checkPackages = do
 
 ------------------------------------------------------------------------
 
-data MafiaState =
-  MafiaState {
-      msSourceDependencies :: Set SourcePackage
-    , _msCabalFile          :: Hash
+data Profiling =
+    DisableProfiling
+  | EnableProfiling
+    deriving (Eq, Ord, Show)
+
+data InstallState =
+  InstallState {
+      isSourceDependencies :: Set SourcePackage
+    , _isCabalFile         :: Hash
     } deriving (Eq, Ord, Show)
 
-instance ToJSON MafiaState where
-  toJSON (MafiaState sds cfh) =
+data MafiaState =
+  MafiaState {
+      msInstallState :: InstallState
+    , msProfiling    :: Profiling
+    } deriving (Eq, Ord, Show)
+
+instance ToJSON Profiling where
+  toJSON = \case
+    DisableProfiling ->
+      Bool False
+    EnableProfiling ->
+      Bool True
+
+instance FromJSON Profiling where
+  parseJSON = \case
+    Bool False ->
+      pure DisableProfiling
+    Bool True ->
+      pure EnableProfiling
+    _ ->
+      mzero
+
+instance ToJSON InstallState where
+  toJSON (InstallState sds cfh) =
     A.object
       [ "source-dependencies" .= sds
       , "cabal-file"          .= cfh ]
 
-instance FromJSON MafiaState where
+instance FromJSON InstallState where
   parseJSON = \case
     Object o ->
-      MafiaState <$>
+      InstallState <$>
         o .: "source-dependencies" <*>
         o .: "cabal-file"
     _ ->
       mzero
 
-getMafiaState :: EitherT InitError IO MafiaState
-getMafiaState = do
+instance ToJSON MafiaState where
+  toJSON (MafiaState is p) =
+    A.object
+      [ "install"   .= is
+      , "profiling" .= p ]
+
+instance FromJSON MafiaState where
+  parseJSON = \case
+    Object o ->
+      MafiaState <$>
+        o .: "install" <*>
+        o .: "profiling"
+    _ ->
+      mzero
+
+getMafiaState :: Maybe Profiling -> EitherT InitError IO MafiaState
+getMafiaState mprofiling = do
   sdeps <- getSourceDependencies
   dir   <- getCurrentDirectory
   mfile <- getCabalFile dir
@@ -140,7 +202,8 @@ getMafiaState = do
     Nothing   -> left (InitCabalFileNotFound dir)
     Just file -> do
       hash  <- firstEitherT InitHashError (hashFile file)
-      return (MafiaState sdeps hash)
+      let profiling = fromMaybe DisableProfiling mprofiling
+      return (MafiaState (InstallState sdeps hash) profiling)
 
 getSourceDependencies :: EitherT InitError IO (Set SourcePackage)
 getSourceDependencies = do
@@ -155,7 +218,7 @@ readMafiaState file = do
     Just bs ->
       fmap Just $
       hoistEither $
-      first (InitParseError . T.pack) $
+      first (InitParseError file . T.pack) $
       A.eitherDecodeStrict' bs
 
 writeMafiaState :: MonadIO m => File -> MafiaState -> m ()
