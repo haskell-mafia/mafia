@@ -7,12 +7,16 @@ module Mafia.Cabal.Package
 
   , SourcePackage(..)
   , getSourcePackage
-  , hashSDist
+
+  , SourcePackageHash(..)
+  , renderSourcePackageHash
+  , hashSourcePackage
   ) where
 
 import           Control.Monad.IO.Class (MonadIO(..))
 
 import qualified Data.List as List
+import qualified Data.Set as Set
 import           Data.Text (Text)
 import qualified Data.Text as T
 
@@ -81,12 +85,49 @@ getSourcePackage dir = do
   case mpid of
     Nothing  -> return Nothing -- no .cabal file found
     Just pid -> do
-      hash <- hashSDist dir
-      return (Just (SourcePackage dir pid hash))
+      hash <- hashSourcePackage dir
+      return (Just (SourcePackage dir pid (sphHash hash)))
 
-hashSDist :: Directory -> EitherT CabalError IO Hash
-hashSDist dir = do
+------------------------------------------------------------------------
+
+data SourcePackageHash =
+  SourcePackageHash {
+      sphHash         :: Hash
+    , sphFileListHash :: Hash
+    , sphFileHashes   :: [(File, Hash)]
+    } deriving (Eq, Ord, Show)
+
+renderSourcePackageHash :: SourcePackageHash -> Text
+renderSourcePackageHash (SourcePackageHash h lh fhs) =
+  T.unlines $
+    fmap (uncurry renderHashPart) fhs <>
+    [ renderHashPart "(file list)" lh
+    , renderHashPart "(package)" h ]
+
+renderHashPart :: Text -> Hash -> Text
+renderHashPart title hash =
+  renderHash hash <> "  " <> title
+
+hashSourcePackage :: Directory -> EitherT CabalError IO SourcePackageHash
+hashSourcePackage dir = do
+  ignoredFiles <- Set.fromList <$> readIgnoredFiles dir
+
   OutErr _ err <- callFrom CabalProcessError dir "cabal" ["sdist", "--list-sources=/dev/stderr"]
-  let files = List.sort (fmap normalise (T.lines err))
+
+  let sdistFiles = Set.fromList (fmap normalise (T.lines err))
+      files      = Set.toList (sdistFiles `Set.difference` ignoredFiles)
+
   hashes <- firstEitherT CabalHashError $ mapM (hashFile . (dir </>)) files
-  return $ hashHashes (hashText (T.unlines files) : hashes)
+
+  let fileListHash = hashText (T.unlines files)
+
+  return SourcePackageHash {
+      sphHash         = hashHashes (fileListHash : hashes)
+    , sphFileListHash = fileListHash
+    , sphFileHashes   = List.zip files hashes
+    }
+
+readIgnoredFiles :: Directory -> EitherT CabalError IO [File]
+readIgnoredFiles dir = do
+  mtxt <- readUtf8 (dir </> ".mafiaignore")
+  return (maybe [] T.lines mtxt)

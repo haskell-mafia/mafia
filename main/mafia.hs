@@ -10,6 +10,7 @@ import           Control.Monad.IO.Class (MonadIO(..))
 
 import qualified Data.Set as Set
 import qualified Data.Text as T
+import qualified Data.Text.IO as T
 import           Data.Time (getCurrentTime, diffUTCTime)
 
 import           GHC.Conc (getNumProcessors)
@@ -60,6 +61,7 @@ main = do
 
 data MafiaCommand
   = MafiaUpdate
+  | MafiaHash
   | MafiaBuild  [Argument]
   | MafiaTest   [Argument]
   | MafiaTestCI [Argument]
@@ -78,6 +80,7 @@ data GhciInclude
 run :: MafiaCommand -> EitherT MafiaError IO ()
 run = \case
   MafiaUpdate                 -> update
+  MafiaHash                   -> hash
   MafiaBuild  args            -> build  args
   MafiaTest   args            -> test   args
   MafiaTestCI args            -> testci args
@@ -97,6 +100,12 @@ commands :: [Mod CommandFields MafiaCommand]
 commands =
  [ command' "update" "Cabal update, but limited to retrieving at most once per day."
             (pure MafiaUpdate)
+
+ , command' "hash" ( "Hash the contents of this package. Useful for checking if a "
+                  <> ".mafiaignore file is working correctly. The hash denoted "
+                  <> "by (package) in this command's output is the one used by "
+                  <> "mafia to track changes to source dependencies." )
+            (pure MafiaHash)
 
  , command' "build" "Build this project, including all executables and test suites."
             (MafiaBuild <$> many pCabalArgs)
@@ -181,6 +190,11 @@ update = do
 
   when (age > oneDay) $
     liftCabal $ cabal_ "update" []
+
+hash :: EitherT MafiaError IO ()
+hash = do
+  sph <- liftCabal (hashSourcePackage ".")
+  liftIO (T.putStr (renderSourcePackageHash sph))
 
 build :: [Argument] -> EitherT MafiaError IO ()
 build args = do
