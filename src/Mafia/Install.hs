@@ -204,6 +204,15 @@ data PackageEnv =
     , envMafiaHome  :: Directory
     } deriving (Eq, Ord, Show)
 
+-- the package cache path includes a version number in case the contents or
+-- layout of the cache changes in subsequent mafia versions.
+envPackageCacheVersion :: Int
+envPackageCacheVersion = 0
+
+envPackageCache :: PackageEnv -> Directory
+envPackageCache env =
+  envMafiaHome env </> "packages" </> T.pack (show envPackageCacheVersion) </> envGhcVersion env
+
 getPackageEnv :: EitherT InstallError IO PackageEnv
 getPackageEnv = do
   ghc  <- firstEitherT InstallGhcError getGhcVersion
@@ -231,8 +240,8 @@ packageConfigPath env p =
 
 packageLockPath :: PackageEnv -> Package -> File
 packageLockPath env p =
-  envMafiaHome env </> "sandboxes" </> envGhcVersion env </> ".locks" </> renderHashId p
+  envPackageCache env </> ".locks" </> renderHashId p
 
 packageSandboxPath :: PackageEnv -> Package -> Directory
 packageSandboxPath env p = do
-  envMafiaHome env </> "sandboxes" </> envGhcVersion env </> renderHashId p
+  envPackageCache env </> renderHashId p
