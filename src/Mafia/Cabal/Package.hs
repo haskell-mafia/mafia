@@ -87,6 +87,6 @@ getSourcePackage dir = do
 hashSDist :: Directory -> EitherT CabalError IO Hash
 hashSDist dir = do
   OutErr _ err <- callFrom CabalProcessError dir "cabal" ["sdist", "--list-sources=/dev/stderr"]
-  let files = List.sort (T.lines err)
+  let files = List.sort (fmap normalise (T.lines err))
   hashes <- firstEitherT CabalHashError $ mapM (hashFile . (dir </>)) files
   return $ hashHashes (hashText (T.unlines files) : hashes)
