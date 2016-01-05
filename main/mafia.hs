@@ -141,7 +141,7 @@ commands =
 pProfiling :: Parser Profiling
 pProfiling =
   flag DisableProfiling EnableProfiling $
-       long "enable-profiling"
+       long "profiling"
     <> short 'p'
     <> help "Enable profiling for this build."
 
