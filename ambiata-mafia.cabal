@@ -111,7 +111,7 @@ test-suite test
                     , ambiata-disorder-corpus
                     , ambiata-mafia
                     , ambiata-p
-                    , QuickCheck                      == 2.7.*
+                    , QuickCheck                      == 2.8.*
                     , quickcheck-instances            == 0.3.*
                     , text
 
@@ -137,7 +137,7 @@ test-suite test-io
                     , ambiata-x-eithert
                     , containers                      == 0.5.*
                     , exceptions                      == 0.8.*
-                    , QuickCheck                      == 2.7.*
+                    , QuickCheck                      == 2.8.*
                     , quickcheck-instances            == 0.3.*
                     , temporary                       == 1.2.*
                     , text                            == 1.2.*
