@@ -155,6 +155,7 @@ install env p@(Package (PackageRef pid _ msrc) deps _) = do
 
         let constraints = concatMap (\c -> ["--constraint", c]) (constraintsOfPackage p)
         Pass <- sbcabal "install" $ [ "--ghc-options=-j"
+                                    , "--ghc-options=-fprof-auto-exported"
                                     , "--enable-library-profiling"
                                     , renderPackageId pid
                                     ] <> constraints

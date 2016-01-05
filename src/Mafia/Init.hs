@@ -110,7 +110,7 @@ initialize mprofiling = do
 profilingArgs :: Profiling -> [Argument]
 profilingArgs = \case
   DisableProfiling -> ["--disable-profiling"]
-  EnableProfiling  -> ["--enable-profiling"]
+  EnableProfiling  -> ["--enable-profiling", "--ghc-options=-fprof-auto-top"]
 
 ------------------------------------------------------------------------
 
