@@ -3,6 +3,11 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Mafia.Cabal.Dependencies
   ( findDependencies
+
+    -- exported for testing
+  , RevDeps(..)
+  , parseRevDeps
+  , renderRevDeps
   ) where
 
 import           Control.Monad.IO.Class (liftIO)
@@ -128,7 +133,7 @@ findRevDeps spkgs = do
     result <- liftIO . runEitherT $ installDryRun ["-v2"]
     case result of
       Right (OutErr out _) ->
-        hoistEither (parseRevDeps out)
+        hoistEither (parseInstallDryRun out)
       Left _ -> do
         -- this will fail with the standard cabal dependency error message
         Pass <- installDryRun []
@@ -150,18 +155,29 @@ data RevDeps =
     , revDeps :: [PackageId]
     } deriving (Eq, Ord, Show)
 
-parseRevDeps :: Text -> Either CabalError [RevDeps]
-parseRevDeps =
+parseInstallDryRun :: Text -> Either CabalError [RevDeps]
+parseInstallDryRun =
   first (CabalParseError . T.pack) .
-  traverse parseDep .
+  traverse parseRevDeps .
   List.drop 1 .
   List.dropWhile (/= "In order, the following would be installed:") .
   T.lines
 
-parseDep :: Text -> Either String RevDeps
-parseDep txt =
+parseRevDeps :: Text -> Either String RevDeps
+parseRevDeps txt =
   let go err = "Invalid dependency line: " <> T.unpack txt <> "\nExpected: " <> err
   in first go (A.parseOnly pRevDeps txt)
+
+renderRevDeps :: RevDeps -> Text
+renderRevDeps (RevDeps (PackageRef pid fs _) deps) =
+  mconcat
+   [ renderPackageId pid
+   , " "
+   , T.intercalate " " (fmap renderFlag fs)
+   , case deps of
+       [] -> ""
+       _  -> " (via: " <> T.intercalate " " (fmap renderPackageId deps) <> ")"
+   ]
 
 pRevDeps :: Parser RevDeps
 pRevDeps = do
