@@ -201,6 +201,7 @@ install w env p@(Package (PackageRef pid _ msrc) deps _) = do
                                     , "--haddock-hoogle"
                                     , "--haddock-hyperlink-source"
                                     , "--max-backjumps=0"
+                                    , "--force-reinstalls"
                                     , renderPackageId pid
                                     ] <> constraints
 
