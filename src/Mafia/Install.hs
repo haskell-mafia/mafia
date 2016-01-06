@@ -17,6 +17,7 @@ import qualified Data.Set as Set
 import           Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
+import qualified Data.Text.Read as T
 
 import           GHC.Conc (getNumProcessors)
 
@@ -49,6 +50,7 @@ import           X.Control.Monad.Trans.Either
 data InstallError =
     InstallGhcError GhcError
   | InstallCabalError CabalError
+  | InstallEnvParseError EnvKey EnvValue Text
   | InstallDisaster SomeException
     deriving (Show)
 
@@ -59,6 +61,9 @@ renderInstallError = \case
 
   InstallCabalError e ->
     renderCabalError e
+
+  InstallEnvParseError key val err ->
+    "Failed parsing environment variable " <> key <> "=" <> val <> " (" <> err <> ")"
 
   InstallDisaster ex ->
     "Disaster: " <> T.pack (show ex)
@@ -76,9 +81,9 @@ installDependencies spkgs = do
 
   -- create symlinks to the relevant package .conf files in the
   -- package-db, then call recache so that ghc is aware of them.
-  n    <- getParallelism
+  gw   <- getGhcWorkers
   env  <- getPackageEnv
-  mapM_ (link n packageDB env) globals
+  mapM_ (link gw packageDB env) globals
   Hush <- firstEitherT InstallCabalError $ cabal "sandbox" ["hc-pkg", "recache"]
 
   return ()
@@ -88,24 +93,52 @@ installGlobalDependencies spkgs = do
   deps <- firstEitherT InstallCabalError (findDependencies spkgs)
   let producer q = mapM_ (writeQueue q) deps
 
-  n   <- getParallelism
+  mw  <- getMafiaWorkers
+  gw  <- getGhcWorkers
   env <- getPackageEnv
-  firstEitherT squashRunError $ consume_ producer n (install n env)
+  firstEitherT squashRunError $ consume_ producer mw (install gw env)
 
   return deps
 
 ------------------------------------------------------------------------
 
-type Parallelism = Int
+type NumWorkers = Int
 
-getParallelism :: MonadIO m => m Int
-getParallelism = do
+getDefaultWorkers :: MonadIO m => m NumWorkers
+getDefaultWorkers =
   min 4 `liftM` liftIO getNumProcessors
 
-link :: Parallelism -> Directory -> PackageEnv -> Package -> EitherT InstallError IO ()
-link n db env p@(Package (PackageRef pid _ _) _ _) = do
+getMafiaWorkers :: EitherT InstallError IO NumWorkers
+getMafiaWorkers = do
+  def <- getDefaultWorkers
+  fromMaybe def <$> lookupPositive "MAFIA_WORKERS"
+
+getGhcWorkers :: EitherT InstallError IO NumWorkers
+getGhcWorkers = do
+  def <- getDefaultWorkers
+  fromMaybe def <$> lookupPositive "MAFIA_GHC_WORKERS"
+
+lookupPositive :: Text -> EitherT InstallError IO (Maybe Int)
+lookupPositive key = do
+  mtxt <- lookupEnv key
+  case mtxt of
+    Nothing ->
+      return Nothing
+    Just txt ->
+      case T.decimal txt of
+        Right (x, "") | x > 0 ->
+          return (Just x)
+        Right _ ->
+          left (InstallEnvParseError key txt "not a positive number")
+        Left str ->
+          left (InstallEnvParseError key txt (T.pack str))
+
+------------------------------------------------------------------------
+
+link :: NumWorkers -> Directory -> PackageEnv -> Package -> EitherT InstallError IO ()
+link w db env p@(Package (PackageRef pid _ _) _ _) = do
   let pcfg = packageConfigPath env p
-  unlessM (doesFileExist pcfg) (install n env p)
+  unlessM (doesFileExist pcfg) (install w env p)
 
   let dest = db </> renderPackageId pid <> ".conf"
   liftIO $ createSymbolicLink (T.unpack pcfg) (T.unpack dest)
@@ -130,8 +163,8 @@ link n db env p@(Package (PackageRef pid _ _) _ _) = do
 --
 --   7. Create a package.conf file which can be symlinked in to other package db's.
 --
-install :: Parallelism -> PackageEnv -> Package -> EitherT InstallError IO ()
-install n env p@(Package (PackageRef pid _ msrc) deps _) = do
+install :: NumWorkers -> PackageEnv -> Package -> EitherT InstallError IO ()
+install w env p@(Package (PackageRef pid _ msrc) deps _) = do
   let packageCfg = packageConfigPath env p
   unlessM (doesFileExist packageCfg) $ do
     withPackageLock env p $ do
@@ -157,11 +190,11 @@ install n env p@(Package (PackageRef pid _ msrc) deps _) = do
 
         -- create symlinks to the relevant package .conf files in the
         -- package-db, then call recache so that ghc is aware of them.
-        mapM_ (link n db env) (Set.toList (transitiveOfPackages deps))
+        mapM_ (link w db env) (Set.toList (transitiveOfPackages deps))
         Hush <- sbcabal "sandbox" ["hc-pkg", "recache"]
 
         let constraints = concatMap (\c -> ["--constraint", c]) (constraintsOfPackage p)
-        Pass <- sbcabal "install" $ [ "--ghc-options=-j" <> T.pack (show n)
+        Pass <- sbcabal "install" $ [ "--ghc-options=-j" <> T.pack (show w)
                                     , "--ghc-options=-fprof-auto-exported"
                                     , "--enable-library-profiling"
                                     , "--enable-documentation"
