@@ -7,6 +7,7 @@ module Mafia.Home
   , getMafiaDir
   , ensureMafiaDir
   , installBinary
+  , ensureExeOnPath
   ) where
 
 import           Control.Monad.IO.Class (MonadIO(..))
@@ -74,3 +75,8 @@ installBinary package deps = do
         getDirectoryListing (RecursiveDepth 1) (T.pack sandboxDir </> ".cabal-sandbox" </> "bin") >>= \p ->
           for_ p $ \f -> copyFile f (path </> takeFileName f)
         return path
+
+ensureExeOnPath :: PackageId -> EitherT ProcessError IO ()
+ensureExeOnPath pkg = do
+  dir <- installBinary pkg []
+  setEnv "PATH" . maybe dir (\path -> dir <> ":" <> path) =<< lookupEnv "PATH"

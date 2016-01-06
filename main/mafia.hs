@@ -33,7 +33,7 @@ import           System.IO (BufferMode(..), hSetBuffering)
 import           System.IO (IO, stdout, stderr, putStrLn, print)
 
 import           X.Control.Monad.Trans.Either (EitherT)
-import           X.Control.Monad.Trans.Either (firstEitherT, hoistEither)
+import           X.Control.Monad.Trans.Either (bimapEitherT, firstEitherT, hoistEither)
 import           X.Control.Monad.Trans.Either.Exit (orDie)
 import           X.Options.Applicative (Parser, CommandFields, Mod)
 import           X.Options.Applicative (SafeCommand(..), RunType(..))
@@ -205,38 +205,45 @@ hash = do
 
 build :: Profiling -> [Argument] -> EitherT MafiaError IO ()
 build p args = do
+  initialisePath
   firstEitherT MafiaInitError . initialize $ Just p
   liftCabal . cabal_ "build" $ ["-j", "--ghc-option=-Werror"] <> args
 
 test :: [Argument] -> EitherT MafiaError IO ()
 test args = do
+  initialisePath
   firstEitherT MafiaInitError . initialize $ Just DisableProfiling
   liftCabal . cabal_ "test" $ ["-j", "--show-details=streaming"] <> args
 
 testci :: [Argument] -> EitherT MafiaError IO ()
 testci args = do
+  initialisePath
   firstEitherT MafiaInitError . initialize $ Just DisableProfiling
   Clean <- liftCabal . cabal "test" $ ["-j", "--show-details=streaming"] <> args
   return ()
 
 repl :: [Argument] -> EitherT MafiaError IO ()
 repl args = do
+  initialisePath
   firstEitherT MafiaInitError . initialize $ Just DisableProfiling
   liftCabal $ cabal_ "repl" args
 
 bench :: [Argument] -> EitherT MafiaError IO ()
 bench args = do
+  initialisePath
   firstEitherT MafiaInitError . initialize $ Just DisableProfiling
   liftCabal $ cabal_ "bench" args
 
 quick :: [GhciInclude] -> File -> EitherT MafiaError IO ()
 quick extraIncludes path = do
+  initialisePath
   args <- ghciArgs extraIncludes path
   exec MafiaProcessError "ghci" args
 
 watch :: [GhciInclude] -> File -> [Argument] -> EitherT MafiaError IO ()
 watch extraIncludes path extraArgs = do
   ghcidExe <- bimapEitherT MafiaProcessError (</> "ghcid") $ installBinary (packageId "ghcid" [0, 5]) []
+  initialisePath
   args <- ghciArgs extraIncludes path
   exec MafiaProcessError ghcidExe $ [ "-c", T.unwords ("ghci" : args) ] <> extraArgs
 
@@ -281,3 +288,10 @@ getPackageDatabases = do
     filter isPackage <$> getDirectoryListing Recursive sandboxDir
   where
     isPackage = ("-packages.conf.d" `T.isSuffixOf`)
+
+initialisePath :: EitherT MafiaError IO ()
+initialisePath = do
+  let ensureExeOnPath' e pkg =
+        lookupEnv e >>= mapM_ (\b -> when (b == "true") $ ensureExeOnPath pkg)
+  firstEitherT MafiaProcessError $ ensureExeOnPath' "MAFIA_HAPPY" (packageId "happy" [1, 19, 5])
+  firstEitherT MafiaProcessError $ ensureExeOnPath' "MAFIA_ALEX" (packageId "alex" [3, 1, 6])
