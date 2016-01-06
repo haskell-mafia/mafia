@@ -1,3 +1,4 @@
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE NoMonomorphismRestriction #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -5,9 +6,8 @@ module Mafia.Cabal.Dependencies
   ( findDependencies
 
     -- exported for testing
-  , RevDeps(..)
-  , parseRevDeps
-  , renderRevDeps
+  , parsePackagePlan
+  , renderPackagePlan
   ) where
 
 import           Control.Monad.IO.Class (liftIO)
@@ -43,15 +43,15 @@ import           X.Control.Monad.Trans.Either
 
 findDependencies :: [SourcePackage] -> EitherT CabalError IO [Package]
 findDependencies spkgs = do
-  fromRevDeps spkgs <$> findRevDeps spkgs
+  fromInstallPlan spkgs <$> calculateInstallPlan spkgs
 
-fromRevDeps :: [SourcePackage] -> [RevDeps] -> [Package]
-fromRevDeps spkgs rdeps =
+fromInstallPlan :: [SourcePackage] -> [PackagePlan] -> [Package]
+fromInstallPlan spkgs rdeps =
   let rdMap =
-        mapFromList (refId . revRef) rdeps
+        mapFromList (refId . ppRef) rdeps
 
       spCombine s r =
-        r { revRef = (revRef r) { refSrcPkg = Just s } }
+        r { ppRef = (ppRef r) { refSrcPkg = Just s } }
 
       spMap =
         mapFromList spPackageId spkgs
@@ -93,14 +93,14 @@ reifyPackageRefs refs =
 mapFromList :: Ord k => (v -> k) -> [v] -> Map k v
 mapFromList f xs = Map.fromList (List.zip (fmap f xs) xs)
 
-toGraphKey :: RevDeps -> (RevDeps, PackageId, [PackageId])
-toGraphKey rev = (rev, refId (revRef rev), revDeps rev)
+toGraphKey :: PackagePlan -> (PackagePlan, PackageId, [PackageId])
+toGraphKey pp = (pp, refId (ppRef pp), ppDeps pp)
 
-fromGraphKey :: (RevDeps, PackageId, [PackageId]) -> PackageRef
-fromGraphKey (rev, _, _) = revRef rev
+fromGraphKey :: (PackagePlan, PackageId, [PackageId]) -> PackageRef
+fromGraphKey (pp, _, _) = ppRef pp
 
-findRevDeps :: [SourcePackage] -> EitherT CabalError IO [RevDeps]
-findRevDeps spkgs = do
+calculateInstallPlan :: [SourcePackage] -> EitherT CabalError IO [PackagePlan]
+calculateInstallPlan spkgs = do
   checkCabalVersion
 
   EitherT . withSystemTempDirectory "mafia-deps-" $ \tmp0 -> runEitherT $ do
@@ -122,18 +122,21 @@ findRevDeps spkgs = do
         installDryRun args =
           cabal "install" $
             [ "--only-dependencies"
-            , "--force-reinstalls"
             , "--enable-tests"
             , "--enable-benchmarks"
             , "--enable-profiling"
             , "--reorder-goals"
             , "--max-backjumps=-1"
+            , "--avoid-reinstalls"
             , "--dry-run" ] <> constraints <> args
 
     result <- liftIO . runEitherT $ installDryRun ["-v2"]
     case result of
-      Right (OutErr out _) ->
-        hoistEither (parseInstallDryRun out)
+      Right (OutErr out _) -> do
+        plan <- hoistEither (parseInstallPlan out)
+        case mapMaybe takeReinstall plan of
+          [] -> return plan
+          xs -> left (CabalReinstallsDetected xs)
       Left _ -> do
         -- this will fail with the standard cabal dependency error message
         Pass <- installDryRun []
@@ -147,47 +150,78 @@ spConstraintArgs sp =
       ver  = renderVersion (pkgVersion pid)
   in [ "--constraint", name <> " == " <> ver ]
 
+takeReinstall :: PackagePlan -> Maybe PackagePlan
+takeReinstall p =
+  case p of
+    PackagePlan _ _ _ (Reinstall _) -> Just p
+    PackagePlan _ _ _ _             -> Nothing
+
 ------------------------------------------------------------------------
 
-data RevDeps =
-  RevDeps {
-      revRef  :: PackageRef
-    , revDeps :: [PackageId]
-    } deriving (Eq, Ord, Show)
-
-parseInstallDryRun :: Text -> Either CabalError [RevDeps]
-parseInstallDryRun =
+parseInstallPlan :: Text -> Either CabalError [PackagePlan]
+parseInstallPlan =
   first (CabalParseError . T.pack) .
-  traverse parseRevDeps .
+  traverse parsePackagePlan .
   List.drop 1 .
   List.dropWhile (/= "In order, the following would be installed:") .
   T.lines
 
-parseRevDeps :: Text -> Either String RevDeps
-parseRevDeps txt =
-  let go err = "Invalid dependency line: " <> T.unpack txt <> "\nExpected: " <> err
-  in first go (A.parseOnly pRevDeps txt)
+parsePackagePlan :: Text -> Either String PackagePlan
+parsePackagePlan txt =
+  let go err = "Invalid package plan: " <> T.unpack txt <> "\nExpected: " <> err
+  in first go (A.parseOnly pPackagePlan txt)
 
-renderRevDeps :: RevDeps -> Text
-renderRevDeps (RevDeps (PackageRef pid fs _) deps) =
-  mconcat
-   [ renderPackageId pid
-   , " "
-   , T.intercalate " " (fmap renderFlag fs)
-   , case deps of
-       [] -> ""
-       _  -> " (via: " <> T.intercalate " " (fmap renderPackageId deps) <> ")"
-   ]
+pPackagePlan :: Parser PackagePlan
+pPackagePlan = do
+  pid    <- pPackageId (== ' ')
+  latest <- optional pLatest
+  flags  <- many pFlag
+  deps   <- fromMaybe [] <$> optional pVia
+  status <- pNewPackage <|> pNewVersion <|> pReinstall
+  ()     <- A.endOfInput
+  pure (PackagePlan (PackageRef pid flags Nothing) latest deps status)
 
-pRevDeps :: Parser RevDeps
-pRevDeps = do
-  pid  <- pPackageId (== ' ') <* A.skipSpace
-  _    <- optional pLatest
-  fs   <- many pFlag
-  deps <- fromMaybe [] <$> optional pVia
-  _    <- optional (pNewPackage <|> pNewVersion)
-  ()   <- A.endOfInput
-  pure (RevDeps (PackageRef pid fs Nothing) deps)
+pFlag :: Parser Flag
+pFlag =
+  let flag p = A.char ' ' *> A.char p *> A.takeTill (== ' ')
+  in FlagOff <$> flag '-' <|>
+     FlagOn  <$> flag '+'
+
+pLatest :: Parser Version
+pLatest =
+  A.string " (latest: " *> pVersion (== ')') <* A.char ')'
+
+pVia :: Parser [PackageId]
+pVia = do
+  let pkg = pPackageId (\x -> x == ' ' || x == ')')
+  A.string " (via: " *> pkg `A.sepBy1` A.char ' ' <* A.char ')'
+
+pNewPackage :: Parser PackageStatus
+pNewPackage =
+  A.string " (new package)" *> pure NewPackage
+
+pNewVersion :: Parser PackageStatus
+pNewVersion =
+  A.string " (new version)" *> pure NewVersion
+
+pReinstall :: Parser PackageStatus
+pReinstall = do
+  _  <- A.string " (reinstall) (changes: "
+  cs <- pPackageChange `A.sepBy1` A.string ", "
+  _  <- A.char ')'
+  pure (Reinstall cs)
+
+pPackageChange :: Parser PackageChange
+pPackageChange =
+  let pkg = pPackageId (== ' ')
+      arr = A.string " -> "
+      ver = pVersion (\x -> x == ',' || x == ')')
+  in PackageChange <$> pkg <*> (arr *> ver)
+
+
+-- TODO would be good if parsePackageId/parseVersion were attoparsec parsers
+-- TODO instead of `Text -> Maybe a` so we didn't need these two clunky
+-- TODO wrappers below:
 
 pPackageId :: (Char -> Bool) -> Parser PackageId
 pPackageId p = do
@@ -196,25 +230,9 @@ pPackageId p = do
     Nothing  -> fail ("not a package-id: " <> T.unpack txt)
     Just pid -> pure pid
 
-pFlag :: Parser Flag
-pFlag =
-  let flag p = A.char p *> A.takeTill (== ' ') <* A.skipSpace
-  in FlagOff <$> flag '-' <|>
-     FlagOn  <$> flag '+'
-
-pLatest :: Parser Text
-pLatest =
-  A.string "(latest: " *> A.takeTill (== ')') <* A.char ')' <* A.skipSpace
-
-pVia :: Parser [PackageId]
-pVia = do
-  let pkg = pPackageId (\x -> x == ' ' || x == ')')
-  A.string "(via: " *> pkg `A.sepBy1` A.char ' ' <* A.char ')' <* A.skipSpace
-
-pNewPackage :: Parser ()
-pNewPackage =
-  A.string "(new package)" *> pure () <* A.skipSpace
-
-pNewVersion :: Parser ()
-pNewVersion =
-  A.string "(new version)" *> pure () <* A.skipSpace
+pVersion :: (Char -> Bool) -> Parser Version
+pVersion p = do
+  txt <- A.takeTill p
+  case parseVersion txt of
+    Nothing  -> fail ("not a version number: " <> T.unpack txt)
+    Just ver -> pure ver

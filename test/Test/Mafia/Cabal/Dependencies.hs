@@ -15,8 +15,8 @@ import           Test.QuickCheck
 import           Test.QuickCheck.Instances ()
 
 
-prop_roundtrip_RevDeps =
-  tripping renderRevDeps parseRevDeps
+prop_roundtrip_PackagePlan =
+  tripping renderPackagePlan parsePackagePlan
 
 return []
 tests = $quickCheckAll
