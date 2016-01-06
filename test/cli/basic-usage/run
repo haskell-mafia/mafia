@@ -32,5 +32,6 @@ check() {
 EOF
 }
 
-check p p          src/P.hs
-check x x/x-either src/X/Control/Monad/Trans/Either.hs
+check p p           src/P.hs
+check x x/x-eithert src/X/Control/Monad/Trans/Either.hs
+check x x/x-conduit src/X/Data/Conduit/Binary.hs
