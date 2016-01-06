@@ -28,6 +28,7 @@ module Mafia.IO
   , writeBytes
   , removeFile
   , copyFile
+  , renameFile
 
     -- * Environment
   , findExecutable
@@ -163,6 +164,9 @@ removeFile path = liftIO (Directory.removeFile (T.unpack path))
 
 copyFile :: MonadIO m => File -> File -> m ()
 copyFile src dst = liftIO (Directory.copyFile (T.unpack src) (T.unpack dst))
+
+renameFile :: MonadIO m => File -> File -> m ()
+renameFile src dst = liftIO (Directory.renameFile (T.unpack src) (T.unpack dst))
 
 ------------------------------------------------------------------------
 -- Environment
