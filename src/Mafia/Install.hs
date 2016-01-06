@@ -76,8 +76,9 @@ installDependencies spkgs = do
 
   -- create symlinks to the relevant package .conf files in the
   -- package-db, then call recache so that ghc is aware of them.
+  n    <- getParallelism
   env  <- getPackageEnv
-  mapM_ (link packageDB env) globals
+  mapM_ (link n packageDB env) globals
   Hush <- firstEitherT InstallCabalError $ cabal "sandbox" ["hc-pkg", "recache"]
 
   return ()
@@ -87,18 +88,24 @@ installGlobalDependencies spkgs = do
   deps <- firstEitherT InstallCabalError (findDependencies spkgs)
   let producer q = mapM_ (writeQueue q) deps
 
-  nprocs <- liftIO getNumProcessors
-  env    <- getPackageEnv
-  firstEitherT squashRunError $ consume_ producer nprocs (install env)
+  n   <- getParallelism
+  env <- getPackageEnv
+  firstEitherT squashRunError $ consume_ producer n (install n env)
 
   return deps
 
 ------------------------------------------------------------------------
 
-link :: Directory -> PackageEnv -> Package -> EitherT InstallError IO ()
-link db env p@(Package (PackageRef pid _ _) _ _) = do
+type Parallelism = Int
+
+getParallelism :: MonadIO m => m Int
+getParallelism = do
+  min 4 `liftM` liftIO getNumProcessors
+
+link :: Parallelism -> Directory -> PackageEnv -> Package -> EitherT InstallError IO ()
+link n db env p@(Package (PackageRef pid _ _) _ _) = do
   let pcfg = packageConfigPath env p
-  unlessM (doesFileExist pcfg) (install env p)
+  unlessM (doesFileExist pcfg) (install n env p)
 
   let dest = db </> renderPackageId pid <> ".conf"
   liftIO $ createSymbolicLink (T.unpack pcfg) (T.unpack dest)
@@ -123,8 +130,8 @@ link db env p@(Package (PackageRef pid _ _) _ _) = do
 --
 --   7. Create a package.conf file which can be symlinked in to other package db's.
 --
-install :: PackageEnv -> Package -> EitherT InstallError IO ()
-install env p@(Package (PackageRef pid _ msrc) deps _) = do
+install :: Parallelism -> PackageEnv -> Package -> EitherT InstallError IO ()
+install n env p@(Package (PackageRef pid _ msrc) deps _) = do
   let packageCfg = packageConfigPath env p
   unlessM (doesFileExist packageCfg) $ do
     withPackageLock env p $ do
@@ -150,11 +157,11 @@ install env p@(Package (PackageRef pid _ msrc) deps _) = do
 
         -- create symlinks to the relevant package .conf files in the
         -- package-db, then call recache so that ghc is aware of them.
-        mapM_ (link db env) (Set.toList (transitiveOfPackages deps))
+        mapM_ (link n db env) (Set.toList (transitiveOfPackages deps))
         Hush <- sbcabal "sandbox" ["hc-pkg", "recache"]
 
         let constraints = concatMap (\c -> ["--constraint", c]) (constraintsOfPackage p)
-        Pass <- sbcabal "install" $ [ "--ghc-options=-j"
+        Pass <- sbcabal "install" $ [ "--ghc-options=-j" <> T.pack (show n)
                                     , "--ghc-options=-fprof-auto-exported"
                                     , "--enable-library-profiling"
                                     , "--enable-documentation"
