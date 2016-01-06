@@ -6,9 +6,6 @@ module Mafia.Cabal.Dependencies
   ( findDependencies
 
     -- exported for testing
-  , PackagePlan(..)
-  , PackageStatus(..)
-  , PackageChange(..)
   , parsePackagePlan
   , renderPackagePlan
   ) where
@@ -125,18 +122,21 @@ calculateInstallPlan spkgs = do
         installDryRun args =
           cabal "install" $
             [ "--only-dependencies"
-            , "--force-reinstalls"
             , "--enable-tests"
             , "--enable-benchmarks"
             , "--enable-profiling"
             , "--reorder-goals"
             , "--max-backjumps=-1"
+            , "--avoid-reinstalls"
             , "--dry-run" ] <> constraints <> args
 
     result <- liftIO . runEitherT $ installDryRun ["-v2"]
     case result of
-      Right (OutErr out _) ->
-        hoistEither (parseInstallPlan out)
+      Right (OutErr out _) -> do
+        plan <- hoistEither (parseInstallPlan out)
+        case mapMaybe takeReinstall plan of
+          [] -> return plan
+          xs -> left (CabalReinstallsDetected xs)
       Left _ -> do
         -- this will fail with the standard cabal dependency error message
         Pass <- installDryRun []
@@ -150,27 +150,13 @@ spConstraintArgs sp =
       ver  = renderVersion (pkgVersion pid)
   in [ "--constraint", name <> " == " <> ver ]
 
+takeReinstall :: PackagePlan -> Maybe PackagePlan
+takeReinstall p =
+  case p of
+    PackagePlan _ _ _ (Reinstall _) -> Just p
+    PackagePlan _ _ _ _             -> Nothing
+
 ------------------------------------------------------------------------
-
-data PackageChange =
-  PackageChange {
-      pcPackageId  :: PackageId
-    , pcNewVersion :: Version
-    } deriving (Eq, Ord, Show)
-
-data PackageStatus =
-    NewPackage
-  | NewVersion
-  | Reinstall [PackageChange]
-    deriving (Eq, Ord, Show)
-
-data PackagePlan =
-  PackagePlan {
-      ppRef    :: PackageRef
-    , ppLatest :: Maybe Version
-    , ppDeps   :: [PackageId]
-    , ppStatus :: PackageStatus
-    } deriving (Eq, Ord, Show)
 
 parseInstallPlan :: Text -> Either CabalError [PackagePlan]
 parseInstallPlan =
@@ -184,34 +170,6 @@ parsePackagePlan :: Text -> Either String PackagePlan
 parsePackagePlan txt =
   let go err = "Invalid package plan: " <> T.unpack txt <> "\nExpected: " <> err
   in first go (A.parseOnly pPackagePlan txt)
-
-renderPackagePlan :: PackagePlan -> Text
-renderPackagePlan (PackagePlan (PackageRef pid fs _) latest deps status) =
-  mconcat
-   [ renderPackageId pid
-   , case latest of
-       Nothing  -> ""
-       Just ver -> " (latest: " <> renderVersion ver <> ")"
-   , mconcat $ fmap (\f -> " " <> renderFlag f) fs
-   , case deps of
-       [] -> ""
-       _  -> " (via: " <> T.intercalate " " (fmap renderPackageId deps) <> ")"
-   , " " <> renderPackageStatus status
-   ]
-
-renderPackageStatus :: PackageStatus -> Text
-renderPackageStatus = \case
-  NewPackage ->
-    "(new package)"
-  NewVersion ->
-    "(new version)"
-  Reinstall cs ->
-    "(reinstall) (changes: " <> T.intercalate ", " (fmap renderPackageChange cs) <> ")"
-
-renderPackageChange :: PackageChange -> Text
-renderPackageChange = \case
-  PackageChange pid ver ->
-    renderPackageId pid <> " -> " <> renderVersion ver
 
 pPackagePlan :: Parser PackagePlan
 pPackagePlan = do

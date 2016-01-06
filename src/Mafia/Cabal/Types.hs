@@ -5,14 +5,21 @@ module Mafia.Cabal.Types
   ( SandboxDir
   , SandboxConfigFile
 
+  , Flag(..)
+  , renderFlag
+
   , Package(..)
   , PackageRef(..)
   , SourcePackage(..)
   , mkPackage
   , renderHashId
 
-  , Flag(..)
-  , renderFlag
+  , PackagePlan(..)
+  , PackageStatus(..)
+  , PackageChange(..)
+  , renderPackagePlan
+  , renderPackageStatus
+  , renderPackageChange
 
   , CabalError(..)
   , renderCabalError
@@ -65,6 +72,26 @@ data Package =
     , pkgHash :: Hash
     } deriving (Eq, Ord, Show)
 
+data PackageChange =
+  PackageChange {
+      pcPackageId  :: PackageId
+    , pcNewVersion :: Version
+    } deriving (Eq, Ord, Show)
+
+data PackageStatus =
+    NewPackage
+  | NewVersion
+  | Reinstall [PackageChange]
+    deriving (Eq, Ord, Show)
+
+data PackagePlan =
+  PackagePlan {
+      ppRef    :: PackageRef
+    , ppLatest :: Maybe Version
+    , ppDeps   :: [PackageId]
+    , ppStatus :: PackageStatus
+    } deriving (Eq, Ord, Show)
+
 ------------------------------------------------------------------------
 
 mkPackage :: PackageRef -> [Package] -> Package
@@ -98,6 +125,34 @@ renderFlag = \case
   FlagOff f -> "-" <> f
   FlagOn  f -> "+" <> f
 
+renderPackagePlan :: PackagePlan -> Text
+renderPackagePlan (PackagePlan (PackageRef pid fs _) latest deps status) =
+  mconcat
+   [ renderPackageId pid
+   , case latest of
+       Nothing  -> ""
+       Just ver -> " (latest: " <> renderVersion ver <> ")"
+   , mconcat $ fmap (\f -> " " <> renderFlag f) fs
+   , case deps of
+       [] -> ""
+       _  -> " (via: " <> T.intercalate " " (fmap renderPackageId deps) <> ")"
+   , " " <> renderPackageStatus status
+   ]
+
+renderPackageStatus :: PackageStatus -> Text
+renderPackageStatus = \case
+  NewPackage ->
+    "(new package)"
+  NewVersion ->
+    "(new version)"
+  Reinstall cs ->
+    "(reinstall) (changes: " <> T.intercalate ", " (fmap renderPackageChange cs) <> ")"
+
+renderPackageChange :: PackageChange -> Text
+renderPackageChange = \case
+  PackageChange pid ver ->
+    renderPackageId pid <> " -> " <> renderVersion ver
+
 ------------------------------------------------------------------------
 
 type MinVersion = Version
@@ -114,6 +169,7 @@ data CabalError =
   | CabalSandboxConfigFileNotFound SandboxConfigFile
   | CabalSandboxConfigFieldNotFound SandboxConfigFile Text
   | CabalInstallIsNotReferentiallyTransparent
+  | CabalReinstallsDetected [PackagePlan]
   | CabalCouldNotReadPackageId File
   | CabalCouldNotParseVersion Text
   | CabalInvalidVersion Version MinVersion MaxVersion
@@ -157,6 +213,11 @@ renderCabalError = \case
 
   CabalCouldNotParseVersion out ->
     "Could not parse or read the cabal-install version number from the following output:\n" <> out
+
+  CabalReinstallsDetected pps ->
+    "Cabal's install plan suggested the following reinstalls:" <>
+    mconcat (fmap (\pp -> "\n  " <> renderPackagePlan pp) pps) <>
+    "\nReinstalls are not allowed as it would break the global package cache."
 
   CabalInvalidVersion ver vmin vmax ->
     mconcat

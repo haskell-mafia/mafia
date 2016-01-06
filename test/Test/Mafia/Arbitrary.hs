@@ -9,7 +9,6 @@ import qualified Data.Text as T
 
 import           Disorder.Corpus (muppets, cooking)
 
-import           Mafia.Cabal.Dependencies
 import           Mafia.Cabal.Types
 import           Mafia.Package
 
