@@ -2,193 +2,226 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE LambdaCase #-}
 module Mafia.Init
-  ( initialize
-  , determineCacheUpdates
-  , putUpdateReason
-  , runCacheUnregister
+  ( Profiling(..)
+  , initialize
+
+  , InitError(..)
+  , renderInitError
   ) where
 
-import           Control.Exception (IOException)
-import           Control.Monad.Catch (MonadCatch(..), handle)
 import           Control.Monad.IO.Class (MonadIO(..))
 
-import           Data.Map (Map)
-import qualified Data.Map as Map
-import qualified Data.List as List
+import qualified Data.Aeson as A
+import           Data.Aeson (Value(..), ToJSON(..), FromJSON(..), (.:), (.=))
+import qualified Data.ByteString.Lazy as L
+import           Data.Set (Set)
 import qualified Data.Set as Set
+import           Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
-import           Data.Time (getCurrentTime)
 
 import           Mafia.Cabal
-import           Mafia.Error
 import           Mafia.Git
+import           Mafia.Hash
 import           Mafia.IO
+import           Mafia.Install
 import           Mafia.Path
 import           Mafia.Process
 import           Mafia.Submodule
 
 import           P
 
-import           System.IO (IO, stderr)
+import           System.IO (IO)
 
-import           X.Control.Monad.Trans.Either (EitherT, hoistEither, runEitherT, firstEitherT)
+import           X.Control.Monad.Trans.Either (EitherT, left, hoistEither, firstEitherT)
 
 
-initialize :: EitherT MafiaError IO ()
-initialize = do
-  updates <- determineCacheUpdates
-  hasDist <- liftIO $ doesDirectoryExist "dist"
-  when (updates /= [] || not hasDist) $ do
-    -- we want to know up front why we're doing an install/configure
-    let sortedUpdates = List.sort updates
-    mapM_ putUpdateReason sortedUpdates
-    mapM_ runCacheUnregister sortedUpdates
+data InitError =
+    InitHashError HashError
+  | InitGitError GitError
+  | InitCabalError CabalError
+  | InitSubmoduleError SubmoduleError
+  | InitInstallError InstallError
+  | InitParseError File Text
+  | InitCabalFileNotFound Directory
+    deriving (Show)
 
-    liftCabal $ cabal_ "install"
-      [ "-j"
-      , "--only-dependencies"
-      , "--force-reinstalls"
-      , "--enable-tests"
-      , "--enable-benchmarks"
-      , "--reorder-goals"
-      , "--max-backjumps=-1" ]
+renderInitError :: InitError -> Text
+renderInitError = \case
+  InitHashError e ->
+    renderHashError e
 
-    liftCabal $ cabal_ "configure"
+  InitGitError e ->
+    renderGitError e
+
+  InitCabalError e ->
+    renderCabalError e
+
+  InitSubmoduleError e ->
+    renderSubmoduleError e
+
+  InitInstallError e ->
+    renderInstallError e
+
+  InitParseError file err ->
+    file <> ": parse error: " <> err
+
+  InitCabalFileNotFound dir ->
+    "Could not find cabal file in: " <> dir
+
+------------------------------------------------------------------------
+
+initialize :: Maybe Profiling -> EitherT InitError IO ()
+initialize mprofiling = do
+  firstEitherT InitGitError initSubmodules
+
+  sandboxDir <- firstEitherT InitCabalError initSandbox
+  let statePath = sandboxDir </> "mafia/state.json"
+
+  liftIO (T.putStrLn "Checking for changes to dependencies...")
+  previous <- readMafiaState statePath
+  current  <- getMafiaState (mprofiling <|> fmap msProfiling previous)
+  hasDist  <- liftIO $ doesDirectoryExist "dist"
+
+  packages <- checkPackages
+
+  let currentInstall  = msInstallState current
+      previousInstall = fmap msInstallState previous
+      needInstall     = previousInstall /= Just currentInstall || packages == PackagesBroken
+
+  when needInstall $ do
+    liftIO (T.putStrLn "Installing dependencies...")
+    let sdeps = Set.toList (isSourceDependencies (msInstallState current))
+    firstEitherT InitInstallError $ installDependencies sdeps
+
+  let needConfigure = needInstall || previous /= Just current || not hasDist
+
+  when needConfigure $ do
+    firstEitherT InitCabalError . cabal_ "configure" $
+      profilingArgs (msProfiling current) <>
       [ "--enable-tests"
       , "--enable-benchmarks" ]
 
-    -- but we don't want to commit the modified .cabal files
-    -- until we're done, in case an error occurs
-    mapM_ runCacheUpdate sortedUpdates
+  when (needInstall || needConfigure) $ do
+    writeMafiaState statePath current
 
-determineCacheUpdates :: EitherT MafiaError IO [CacheUpdate]
-determineCacheUpdates = do
-    firstEitherT MafiaGitError initSubmodules
-    firstEitherT MafiaSubmoduleError syncCabalSources
+profilingArgs :: Profiling -> [Argument]
+profilingArgs = \case
+  DisableProfiling -> ["--disable-profiling"]
+  EnableProfiling  -> ["--enable-profiling", "--ghc-options=-fprof-auto-top"]
 
-    currentDir  <- getCurrentDirectory
-    sandboxSrcs <- Set.toList <$> firstEitherT MafiaSubmoduleError getSandboxSources
-    let allSrcs = currentDir : sandboxSrcs
+------------------------------------------------------------------------
 
-    srcs     <- mkFileMap . concat <$> mapM findCabal allSrcs
-    cacheDir <- getCacheDir
-    dsts     <- mkFileMap <$> getDirectoryListing (RecursiveDepth 0) cacheDir
+data PackageState =
+    PackagesOk
+  | PackagesBroken
+    deriving (Eq, Ord, Show)
 
-    let mkAdd src = Add src (cacheDir </> takeFileName src)
+checkPackages :: EitherT InitError IO PackageState
+checkPackages = do
+  packageDB     <- firstEitherT InitCabalError getPackageDB
+  packages      <- getDirectoryListing (RecursiveDepth 0) packageDB
+  packagesExist <- and <$> traverse doesFileExist packages
+  case packagesExist of
+    True  -> return PackagesOk
+    False -> return PackagesBroken
 
-        fresh = fmap mkAdd  (Map.elems (srcs `Map.difference` dsts))
-        stale = fmap Delete (Map.elems (dsts `Map.difference` srcs))
+------------------------------------------------------------------------
 
-    updates <- sequence (Map.elems (Map.intersectionWith cacheUpdate srcs dsts))
+data Profiling =
+    DisableProfiling
+  | EnableProfiling
+    deriving (Eq, Ord, Show)
 
-    return (stale <> fresh <> catMaybes updates)
+data InstallState =
+  InstallState {
+      isSourceDependencies :: Set SourcePackage
+    , _isCabalFile         :: Hash
+    } deriving (Eq, Ord, Show)
 
-findCabal :: MonadIO m => Directory -> m [Path]
-findCabal dir = filter (extension ".cabal")
-        `liftM` getDirectoryListing (RecursiveDepth 0) dir
+data MafiaState =
+  MafiaState {
+      msInstallState :: InstallState
+    , msProfiling    :: Profiling
+    } deriving (Eq, Ord, Show)
 
-mkFileMap :: [Path] -> Map File Path
-mkFileMap = Map.fromList . fmap (\path -> (takeFileName path, path))
+instance ToJSON Profiling where
+  toJSON = \case
+    DisableProfiling ->
+      Bool False
+    EnableProfiling ->
+      Bool True
 
-putUpdateReason :: (Functor m, MonadIO m) => CacheUpdate -> m ()
-putUpdateReason x =
-  case x of
-    Add src _ -> do
-      rel <- fromMaybe src <$> makeRelativeToCurrentDirectory src
-      liftIO (T.hPutStrLn stderr ("Cache: Adding " <> rel))
+instance FromJSON Profiling where
+  parseJSON = \case
+    Bool False ->
+      pure DisableProfiling
+    Bool True ->
+      pure EnableProfiling
+    _ ->
+      mzero
 
-    Update src _ -> do
-      rel <- fromMaybe src <$> makeRelativeToCurrentDirectory src
-      liftIO (T.hPutStrLn stderr ("Cache: Updating " <> rel))
+instance ToJSON InstallState where
+  toJSON (InstallState sds cfh) =
+    A.object
+      [ "source-dependencies" .= sds
+      , "cabal-file"          .= cfh ]
 
-    Delete file -> do
-      liftIO (T.hPutStrLn stderr ("Cache: Removing " <> takeFileName file))
+instance FromJSON InstallState where
+  parseJSON = \case
+    Object o ->
+      InstallState <$>
+        o .: "source-dependencies" <*>
+        o .: "cabal-file"
+    _ ->
+      mzero
 
-runCacheUpdate :: CacheUpdate -> EitherT MafiaError IO ()
-runCacheUpdate x = handleCacheUpdateError x $
-  case x of
-    Add src dst -> do
-      copyFile src dst
+instance ToJSON MafiaState where
+  toJSON (MafiaState is p) =
+    A.object
+      [ "install"   .= is
+      , "profiling" .= p ]
 
-    Update src dst -> do
-      copyFile src dst
+instance FromJSON MafiaState where
+  parseJSON = \case
+    Object o ->
+      MafiaState <$>
+        o .: "install" <*>
+        o .: "profiling"
+    _ ->
+      mzero
 
-    Delete file -> do
-      removeFile file
+getMafiaState :: Maybe Profiling -> EitherT InitError IO MafiaState
+getMafiaState mprofiling = do
+  sdeps <- getSourceDependencies
+  dir   <- getCurrentDirectory
+  mfile <- getCabalFile dir
+  case mfile of
+    Nothing   -> left (InitCabalFileNotFound dir)
+    Just file -> do
+      hash  <- firstEitherT InitHashError (hashFile file)
+      let profiling = fromMaybe DisableProfiling mprofiling
+      return (MafiaState (InstallState sdeps hash) profiling)
 
-handleCacheUpdateError :: (Functor m, MonadCatch m)
-                       => CacheUpdate
-                       -> EitherT MafiaError m a
-                       -> EitherT MafiaError m a
+getSourceDependencies :: EitherT InitError IO (Set SourcePackage)
+getSourceDependencies = do
+  sources <- Set.toList <$> firstEitherT InitSubmoduleError getSubmoduleSources
+  Set.fromList . catMaybes <$> firstEitherT InitCabalError (mapConcurrentlyE getSourcePackage sources)
 
-handleCacheUpdateError x =
-  handle (\(ex :: IOException) -> hoistEither . Left $ MafiaCacheUpdateError x ex)
+readMafiaState :: File -> EitherT InitError IO (Maybe MafiaState)
+readMafiaState file = do
+  mbs <- readBytes file
+  case mbs of
+    Nothing -> return Nothing
+    Just bs ->
+      fmap Just $
+      hoistEither $
+      first (InitParseError file . T.pack) $
+      A.eitherDecodeStrict' bs
 
-runCacheUnregister :: MonadIO m => CacheUpdate -> m ()
-runCacheUnregister x =
-  case x of
-    Add src dst -> do
-      tryUnregisterPackage src
-      tryUnregisterPackage dst
-      invalidateCache dst
-
-    Update src dst -> do
-      tryUnregisterPackage src
-      tryUnregisterPackage dst
-      invalidateCache dst
-
-    Delete file -> do
-      tryUnregisterPackage file
-      invalidateCache file
-
-tryUnregisterPackage :: MonadIO m => File -> m ()
-tryUnregisterPackage cabalFile = do
-  mpkg <- readPackageName cabalFile
-  case mpkg of
-    Nothing  -> return ()
-    Just pkg -> do
-      -- This is only best effort, if unregistering fails it means we've probably
-      -- already unregistered the package or it was never registered, no harm is
-      -- done because we'll be reinstalling it later if it's required.
-
-      result <- liftIO . runEitherT $ do
-        Hush <- cabal "sandbox" ["hc-pkg", "--", "unregister", "--force", pkg]
-        return ()
-
-      case result of
-        Left  _ -> return ()
-        Right _ -> liftIO (T.putStrLn ("Sandbox: Unregistered " <> pkg))
-
-invalidateCache :: MonadIO m => File -> m ()
-invalidateCache cabalFile = do
-  mtxt <- readUtf8 cabalFile
-  case mtxt of
-    Nothing  -> return ()
-    Just txt -> do
-      time <- liftIO getCurrentTime
-      let header = "-- " <> T.pack (show time) <> "\n"
-      writeUtf8 cabalFile (header <> txt)
-
-cacheUpdate :: (Functor m, MonadIO m) => File -> File -> m (Maybe CacheUpdate)
-cacheUpdate src dst = do
-  src_missing <- not <$> doesFileExist src
-  dst_missing <- not <$> doesFileExist dst
-  if | src_missing && dst_missing -> return (Nothing)
-     | src_missing                -> return (Just (Delete dst))
-     | dst_missing                -> return (Just (Update src dst))
-     | otherwise                  -> cacheUpdateDiff src dst
-
-cacheUpdateDiff :: MonadIO m => File -> File -> m (Maybe CacheUpdate)
-cacheUpdateDiff src dst = do
-  src_bytes <- readBytes src
-  dst_bytes <- readBytes dst
-  if | src_bytes == dst_bytes -> return (Nothing)
-     | otherwise              -> return (Just (Update src dst))
-
-getCacheDir :: EitherT MafiaError IO Directory
-getCacheDir = do
-  cacheDir <- (</> "mafia") <$> liftCabal initSandbox
-  createDirectoryIfMissing False cacheDir
-  return cacheDir
+writeMafiaState :: MonadIO m => File -> MafiaState -> m ()
+writeMafiaState file state = do
+  createDirectoryIfMissing True (takeDirectory file)
+  writeBytes file (L.toStrict (A.encode state))

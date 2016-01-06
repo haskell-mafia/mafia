@@ -9,7 +9,7 @@
 module Test.IO.Mafia.Chaos where
 
 import           Control.Exception (IOException)
-import           Control.Monad.Catch (MonadCatch(..), bracket, handle)
+import           Control.Monad.Catch (MonadCatch(..), MonadMask(..), bracket, handle)
 import           Control.Monad.IO.Class (MonadIO(..))
 
 import           Disorder.Corpus (muppets, viruses)
@@ -40,6 +40,7 @@ import qualified Test.QuickCheck as QC
 
 import           X.Control.Monad.Trans.Either (EitherT, runEitherT)
 import           X.Control.Monad.Trans.Either (firstEitherT, hoistEither)
+import           X.Control.Monad.Trans.Either (bracketEitherT')
 
 ------------------------------------------------------------------------
 
@@ -383,35 +384,53 @@ gitRemoveSubmodule repoDir dep = do
 
 ------------------------------------------------------------------------
 
-prop_chaos (Actions actions) = withTempDirectory $ \temp -> do
-  liftIO (print actions)
+prop_chaos (Actions actions) =
+  withTempDirectory $ \temp -> do
+    liftIO (print actions)
 
-  mafia <- (</> "dist/build/mafia/mafia") <$> getCurrentDirectory
+    mafia <- (</> "dist/build/mafia/mafia") <$> getCurrentDirectory
 
-  let githubDir = temp </> "github"
-      repoDir   = temp </> "repo"
-      focusDir  = repoDir </> focusPackageName
+    let githubDir = temp </> "github"
+        repoDir   = temp </> "repo"
+        homeDir   = temp </> "home"
+        focusDir  = repoDir </> focusPackageName
 
-  createGitHub githubDir
+    createGitHub githubDir
 
-  createDirectoryIfMissing False repoDir
-  createDirectoryIfMissing False focusDir
+    createDirectoryIfMissing False repoDir
+    createDirectoryIfMissing False focusDir
+    createDirectoryIfMissing False homeDir
 
-  Pass <- git repoDir "init" []
-  Pass <- git repoDir "config" ["user.name", "Doris"]
-  Pass <- git repoDir "config" ["user.email", "doris@megacorp.com"]
+    withEnv "MAFIA_HOME" homeDir $ do
+      Pass <- git repoDir "init" []
+      Pass <- git repoDir "config" ["user.name", "Doris"]
+      Pass <- git repoDir "config" ["user.email", "doris@megacorp.com"]
 
-  setCurrentDirectory focusDir
-  writeRepo repoDir emptyRepo
+      setCurrentDirectory focusDir
+      writeRepo repoDir emptyRepo
 
-  case fromActions actions of
-    Nothing -> do
-      return (QC.counterexample "Invalid set of actions" (property False))
+      case fromActions actions of
+        Nothing -> do
+          return (QC.counterexample "Invalid set of actions" (property False))
 
-    Just testRun -> do
-      forM_ testRun $ \(action, repo) -> do
-        runAction mafia githubDir repoDir repo action
-      return (property True)
+        Just testRun -> do
+          forM_ testRun $ \(action, repo) -> do
+            runAction mafia githubDir repoDir repo action
+          return (property True)
+
+withEnv :: (MonadMask m, MonadIO m) => Text -> Text -> EitherT e m b -> EitherT e m b
+withEnv key new io =
+  let acquire = do
+        old <- lookupEnv key
+        setEnv key new
+        return old
+
+      release = \case
+        Nothing  -> unsetEnv key
+        Just old -> setEnv key old
+
+  in bracketEitherT' acquire release (const io)
+
 
 runAction :: File -> Directory -> Directory -> Repo -> Action -> EitherT ChaosError IO ()
 runAction mafia github repoDir repo@(Repo focus _) = \case

@@ -5,11 +5,15 @@
 
 import           BuildInfo_ambiata_mafia
 
+import           Control.Concurrent (setNumCapabilities)
 import           Control.Monad.IO.Class (MonadIO(..))
 
 import qualified Data.Set as Set
 import qualified Data.Text as T
+import qualified Data.Text.IO as T
 import           Data.Time (getCurrentTime, diffUTCTime)
+
+import           GHC.Conc (getNumProcessors)
 
 import           Mafia.Cabal
 import           Mafia.Error
@@ -24,7 +28,6 @@ import           Mafia.Submodule
 
 import           P
 
-import           System.Environment (lookupEnv)
 import           System.Exit (exitSuccess)
 import           System.IO (BufferMode(..), hSetBuffering)
 import           System.IO (IO, stdout, stderr, putStrLn, print)
@@ -34,13 +37,15 @@ import           X.Control.Monad.Trans.Either (firstEitherT, hoistEither)
 import           X.Control.Monad.Trans.Either.Exit (orDie)
 import           X.Options.Applicative (Parser, CommandFields, Mod)
 import           X.Options.Applicative (SafeCommand(..), RunType(..))
-import           X.Options.Applicative (argument, textRead, metavar, help, long, short, option, flag')
+import           X.Options.Applicative (argument, textRead, metavar, help, long, short, option, flag, flag')
 import           X.Options.Applicative (dispatch, subparser, safeCommand, command')
 
 ------------------------------------------------------------------------
 
 main :: IO ()
 main = do
+  nprocs <- getNumProcessors
+  setNumCapabilities nprocs
   hSetBuffering stdout LineBuffering
   hSetBuffering stderr LineBuffering
   dispatch parser >>= \sc ->
@@ -56,7 +61,8 @@ main = do
 
 data MafiaCommand
   = MafiaUpdate
-  | MafiaBuild  [Argument]
+  | MafiaHash
+  | MafiaBuild  Profiling [Argument]
   | MafiaTest   [Argument]
   | MafiaTestCI [Argument]
   | MafiaRepl   [Argument]
@@ -74,7 +80,8 @@ data GhciInclude
 run :: MafiaCommand -> EitherT MafiaError IO ()
 run = \case
   MafiaUpdate                 -> update
-  MafiaBuild  args            -> build  args
+  MafiaHash                   -> hash
+  MafiaBuild  p args          -> build  p args
   MafiaTest   args            -> test   args
   MafiaTestCI args            -> testci args
   MafiaRepl   args            -> repl   args
@@ -82,8 +89,8 @@ run = \case
   MafiaQuick  incs entry      -> quick  incs entry
   MafiaWatch  incs entry args -> watch  incs entry args
   MafiaHoogle args            -> do
-    hkg <- liftIO . fmap (T.pack . fromMaybe "https://hackage.haskell.org/package") $ lookupEnv "HACKAGE"
-    initialize
+    hkg <- fromMaybe "https://hackage.haskell.org/package" <$> lookupEnv "HACKAGE"
+    firstEitherT MafiaInitError (initialize Nothing)
     hoogle hkg args
 
 parser :: Parser (SafeCommand MafiaCommand)
@@ -94,8 +101,14 @@ commands =
  [ command' "update" "Cabal update, but limited to retrieving at most once per day."
             (pure MafiaUpdate)
 
+ , command' "hash" ( "Hash the contents of this package. Useful for checking if a "
+                  <> ".mafiaignore file is working correctly. The hash denoted "
+                  <> "by (package) in this command's output is the one used by "
+                  <> "mafia to track changes to source dependencies." )
+            (pure MafiaHash)
+
  , command' "build" "Build this project, including all executables and test suites."
-            (MafiaBuild <$> many pCabalArgs)
+            (MafiaBuild <$> pProfiling <*> many pCabalArgs)
 
  , command' "test" "Test this project, by default this runs all test suites."
             (MafiaTest <$> many pCabalArgs)
@@ -124,6 +137,13 @@ commands =
  , command' "hoogle" ( "Run a hoogle query across the local dependencies" )
             (MafiaHoogle <$> many pCabalArgs)
  ]
+
+pProfiling :: Parser Profiling
+pProfiling =
+  flag DisableProfiling EnableProfiling $
+       long "profiling"
+    <> short 'p'
+    <> help "Enable profiling for this build."
 
 pGhciEntryPoint :: Parser File
 pGhciEntryPoint =
@@ -178,30 +198,35 @@ update = do
   when (age > oneDay) $
     liftCabal $ cabal_ "update" []
 
-build :: [Argument] -> EitherT MafiaError IO ()
-build args = do
-  initialize
-  liftCabal . cabal_ "build" $ ["--ghc-option=-Werror"] <> args
+hash :: EitherT MafiaError IO ()
+hash = do
+  sph <- liftCabal (hashSourcePackage ".")
+  liftIO (T.putStr (renderSourcePackageHash sph))
+
+build :: Profiling -> [Argument] -> EitherT MafiaError IO ()
+build p args = do
+  firstEitherT MafiaInitError . initialize $ Just p
+  liftCabal . cabal_ "build" $ ["-j", "--ghc-option=-Werror"] <> args
 
 test :: [Argument] -> EitherT MafiaError IO ()
 test args = do
-  initialize
-  liftCabal . cabal_ "test" $ ["--show-details=streaming"] <> args
+  firstEitherT MafiaInitError . initialize $ Just DisableProfiling
+  liftCabal . cabal_ "test" $ ["-j", "--show-details=streaming"] <> args
 
 testci :: [Argument] -> EitherT MafiaError IO ()
 testci args = do
-  initialize
-  Clean <- liftCabal . cabal "test" $ ["--show-details=streaming"] <> args
+  firstEitherT MafiaInitError . initialize $ Just DisableProfiling
+  Clean <- liftCabal . cabal "test" $ ["-j", "--show-details=streaming"] <> args
   return ()
 
 repl :: [Argument] -> EitherT MafiaError IO ()
 repl args = do
-  initialize
+  firstEitherT MafiaInitError . initialize $ Just DisableProfiling
   liftCabal $ cabal_ "repl" args
 
 bench :: [Argument] -> EitherT MafiaError IO ()
 bench args = do
-  initialize
+  firstEitherT MafiaInitError . initialize $ Just DisableProfiling
   liftCabal $ cabal_ "bench" args
 
 quick :: [GhciInclude] -> File -> EitherT MafiaError IO ()
@@ -221,7 +246,7 @@ ghciArgs extraIncludes path = do
   case exists of
     False -> hoistEither (Left (MafiaEntryPointNotFound path))
     True  -> do
-      initialize
+      firstEitherT MafiaInitError . initialize $ Just DisableProfiling
 
       extras <- concat <$> mapM reifyInclude extraIncludes
 

@@ -3,7 +3,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 module Mafia.Cabal.Index
   ( repairIndexFile
-  , readPackageName
+  , createIndexFile
   ) where
 
 import           Control.Exception (IOException)
@@ -12,17 +12,18 @@ import           Control.Monad.IO.Class (MonadIO(..))
 
 import           Data.ByteString (ByteString)
 import qualified Data.ByteString.Lazy as L
-import           Data.Text (Text)
-import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 
 import qualified Codec.Archive.Tar as Tar
+import qualified Codec.Archive.Tar.Entry as Tar
 
 import           Mafia.Cabal.Types
 import           Mafia.IO
 import           Mafia.Path
 
 import           P
+
+import qualified Prelude as Prelude
 
 import           System.IO (IO)
 
@@ -43,11 +44,23 @@ readEntries bs = do
 isTreeRef :: Tar.Entry -> Bool
 isTreeRef x = Tar.entryPath x == "local-build-tree-reference/"
 
+treeRef :: Tar.TarPath
+treeRef =
+  -- This conversion cannot fail because the path is shorter than 255 characters.
+  either (Prelude.error "Mafia.Cabal.Index.treeRef: impossible") id
+         (Tar.toTarPath True "local-build-tree-reference")
+
 fromEntry :: Tar.Entry -> Maybe Directory
 fromEntry x =
   case Tar.entryContent x of
     Tar.OtherEntryType _ lbs _ | isTreeRef x -> Just (T.decodeUtf32LE (L.toStrict lbs))
     _                                        -> Nothing
+
+fromDirectory :: Directory -> Tar.Entry
+fromDirectory dir =
+  let lbs     = L.fromStrict (T.encodeUtf32LE dir)
+      content = Tar.OtherEntryType 'C' lbs (L.length lbs)
+  in Tar.simpleEntry treeRef content
 
 ------------------------------------------------------------------------
 
@@ -72,13 +85,16 @@ filterEntries pred sandboxDir = do
 
 ------------------------------------------------------------------------
 
-readPackageName :: MonadIO m => File -> m (Maybe Text)
-readPackageName cabalFile = do
-  text <- fromMaybe T.empty `liftM` readUtf8 cabalFile
+-- This will replace/overwrite and existing index file
+createIndexFile :: [Directory] -> SandboxDir -> EitherT CabalError IO ()
+createIndexFile sources sandboxDir = do
+  let packagesDir = sandboxDir  </> "packages"
+      indexFile   = packagesDir </> "00-index.tar"
 
-  let findName ("name:":name:_) = Just name
-      findName _                = Nothing
+  removeDirectoryRecursive packagesDir
+  createDirectoryIfMissing True packagesDir
 
-  return . listToMaybe
-         . mapMaybe (findName . T.words)
-         $ T.lines text
+  let entries = fmap fromDirectory sources
+      bytes   = L.toStrict (Tar.write entries)
+
+  writeBytes indexFile bytes

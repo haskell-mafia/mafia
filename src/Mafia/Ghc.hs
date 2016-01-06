@@ -43,7 +43,7 @@ renderGhcError = \case
       , "\n - ln -s $HOME/haskell/ghc-$VERSION $HOME/haskell/ghc"
       , "\n - add $HOME/haskell/ghc/bin to your $PATH" ]
 
-getGhcVersion :: EitherT GhcError IO Text
+getGhcVersion :: EitherT GhcError IO GhcVersion
 getGhcVersion = do
   result <- runEitherT (call GhcProcessError "ghc" ["--version"])
   case result of

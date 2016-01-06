@@ -58,8 +58,8 @@ syncCabalSources = do
 
 repairSandbox :: EitherT SubmoduleError IO ()
 repairSandbox = do
-  sandboxDir <- firstEitherT SubmoduleCabalError initSandbox
-  firstEitherT SubmoduleCabalError (repairIndexFile sandboxDir)
+  dir <- firstEitherT SubmoduleCabalError initSandbox
+  firstEitherT SubmoduleCabalError (repairIndexFile dir)
 
 addSandboxSource :: Directory -> EitherT SubmoduleError IO ()
 addSandboxSource dir = do
