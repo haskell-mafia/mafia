@@ -7,6 +7,7 @@ module Mafia.Home
   , getMafiaDir
   , ensureMafiaDir
   , installBinary
+  , ensureExeOnPath
   ) where
 
 import           Control.Monad.IO.Class (MonadIO(..))
@@ -44,14 +45,21 @@ ensureMafiaDir path = do
   createDirectoryIfMissing True path'
   return path'
 
--- | Installs a given cabal package at a specific version
-installBinary :: PackageId -> [PackageId] -> EitherT ProcessError IO File
+-- | Installs a given cabal package at a specific version and return a directory containing all executables
+installBinary :: PackageId -> [PackageId] -> EitherT ProcessError IO Directory
 installBinary package deps = do
   tmp <- ensureMafiaDir "tmp"
   let nv = renderPackageId package
   bin <- ensureMafiaDir "bin"
   let path = bin </> nv
-  liftIO (doesFileExist path) >>= \case
+  -- This is to support old versions of mafia that had installed a single executable
+  -- We can remove this at some point
+  -- NOTE: This makes no attempt at being threadsafe
+  liftIO (doesFileExist path) >>= \b -> when b $ do
+    renameFile path (path <> ".tmp")
+    createDirectoryIfMissing True path
+    renameFile (path <> ".tmp") (path </> (unPackageName . pkgName) package)
+  liftIO (doesDirectoryExist path) >>= \case
     True ->
       pure path
     False -> do
@@ -63,5 +71,12 @@ installBinary package deps = do
           Pass <- callFrom id (T.pack sandboxDir) "cabal" ["install", renderPackageId p]
           pure ()
         Pass <- callFrom id (T.pack sandboxDir) "cabal" ["install", nv]
-        copyFile (T.pack sandboxDir </> ".cabal-sandbox" </> "bin" </> (unPackageName . pkgName) package) path
+        createDirectoryIfMissing True path
+        getDirectoryListing (RecursiveDepth 1) (T.pack sandboxDir </> ".cabal-sandbox" </> "bin") >>= \p ->
+          for_ p $ \f -> copyFile f (path </> takeFileName f)
         return path
+
+ensureExeOnPath :: PackageId -> EitherT ProcessError IO ()
+ensureExeOnPath pkg = do
+  dir <- installBinary pkg []
+  setEnv "PATH" . maybe dir (\path -> dir <> ":" <> path) =<< lookupEnv "PATH"
