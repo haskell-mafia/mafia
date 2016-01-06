@@ -157,6 +157,10 @@ install env p@(Package (PackageRef pid _ msrc) deps _) = do
         Pass <- sbcabal "install" $ [ "--ghc-options=-j"
                                     , "--ghc-options=-fprof-auto-exported"
                                     , "--enable-library-profiling"
+                                    , "--enable-documentation"
+                                    , "--haddock-hoogle"
+                                    , "--haddock-hyperlink-source"
+                                    , "--max-backjumps=0"
                                     , renderPackageId pid
                                     ] <> constraints
 
