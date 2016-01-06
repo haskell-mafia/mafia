@@ -236,7 +236,7 @@ quick extraIncludes path = do
 
 watch :: [GhciInclude] -> File -> [Argument] -> EitherT MafiaError IO ()
 watch extraIncludes path extraArgs = do
-  ghcidExe <- firstEitherT MafiaProcessError $ installBinary (packageId "ghcid" [0, 5]) []
+  ghcidExe <- bimapEitherT MafiaProcessError (</> "ghcid") $ installBinary (packageId "ghcid" [0, 5]) []
   args <- ghciArgs extraIncludes path
   exec MafiaProcessError ghcidExe $ [ "-c", T.unwords ("ghci" : args) ] <> extraArgs
 

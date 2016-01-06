@@ -33,7 +33,7 @@ import           P
 
 import           System.IO (IO, stderr)
 
-import           X.Control.Monad.Trans.Either (EitherT, firstEitherT, hoistEither, runEitherT)
+import           X.Control.Monad.Trans.Either (EitherT, bimapEitherT, firstEitherT, hoistEither, runEitherT)
 
 
 newtype HooglePackagesSandbox = HooglePackagesSandbox [PackageId]
@@ -110,7 +110,8 @@ hoogleCacheDir =
 
 installHoogle :: EitherT MafiaError IO File
 installHoogle =
-  firstEitherT MafiaProcessError $ installBinary (packageId "hoogle" [4, 2, 43]) [packageId "happy" [1, 19, 5]]
+  bimapEitherT MafiaProcessError (</> "hoogle") $
+    installBinary (packageId "hoogle" [4, 2, 43]) [packageId "happy" [1, 19, 5]]
 
 hoogleDbFile :: Directory -> PackageId -> File
 hoogleDbFile db pkg =
