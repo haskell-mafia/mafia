@@ -9,4 +9,4 @@
 	url = https://github.com/ambiata/x
 [submodule "lib/twine"]
 	path = lib/twine
-	url = git@github.com:ambiata/twine
+	url = https://github.com/ambiata/twine
