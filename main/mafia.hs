@@ -67,7 +67,7 @@ data MafiaCommand
   | MafiaTestCI [Argument]
   | MafiaRepl   [Argument]
   | MafiaBench  [Argument]
-  | MafiaQuick  [GhciInclude] File
+  | MafiaQuick  [GhciInclude] [File]
   | MafiaWatch  [GhciInclude] File [Argument]
   | MafiaHoogle [Argument]
   deriving (Eq, Show)
@@ -86,7 +86,7 @@ run = \case
   MafiaTestCI args            -> testci args
   MafiaRepl   args            -> repl   args
   MafiaBench  args            -> bench  args
-  MafiaQuick  incs entry      -> quick  incs entry
+  MafiaQuick  incs entries    -> quick  incs entries
   MafiaWatch  incs entry args -> watch  incs entry args
   MafiaHoogle args            -> do
     hkg <- fromMaybe "https://hackage.haskell.org/package" <$> lookupEnv "HACKAGE"
@@ -125,7 +125,7 @@ commands =
 
  , command' "quick" ( "Start the repl directly skipping cabal, this is useful "
                    <> "developing across multiple source trees at once." )
-            (MafiaQuick <$> pGhciIncludes <*> pGhciEntryPoint)
+            (MafiaQuick <$> pGhciIncludes <*> some pGhciEntryPoint)
 
  , command' "watch" ( "Watches filesystem for changes and stays running, compiles "
                    <> "and gives quick feedback. "
@@ -234,37 +234,39 @@ bench args = do
   firstEitherT MafiaInitError . initialize $ Just DisableProfiling
   liftCabal $ cabal_ "bench" args
 
-quick :: [GhciInclude] -> File -> EitherT MafiaError IO ()
-quick extraIncludes path = do
+quick :: [GhciInclude] -> [File] -> EitherT MafiaError IO ()
+quick extraIncludes paths = do
   initialisePath
-  args <- ghciArgs extraIncludes path
+  args <- ghciArgs extraIncludes paths
   exec MafiaProcessError "ghci" args
 
 watch :: [GhciInclude] -> File -> [Argument] -> EitherT MafiaError IO ()
 watch extraIncludes path extraArgs = do
   ghcidExe <- bimapEitherT MafiaProcessError (</> "ghcid") $ installBinary (packageId "ghcid" [0, 5]) []
   initialisePath
-  args <- ghciArgs extraIncludes path
+  args <- ghciArgs extraIncludes [path]
   exec MafiaProcessError ghcidExe $ [ "-c", T.unwords ("ghci" : args) ] <> extraArgs
 
-ghciArgs :: [GhciInclude] -> File -> EitherT MafiaError IO [Argument]
-ghciArgs extraIncludes path = do
-  exists <- doesFileExist path
-  case exists of
-    False -> hoistEither (Left (MafiaEntryPointNotFound path))
-    True  -> do
-      firstEitherT MafiaInitError . initialize $ Just DisableProfiling
+ghciArgs :: [GhciInclude] -> [File] -> EitherT MafiaError IO [Argument]
+ghciArgs extraIncludes paths = do
+  mapM_ checkEntryPoint paths
+  firstEitherT MafiaInitError . initialize $ Just DisableProfiling
 
-      extras <- concat <$> mapM reifyInclude extraIncludes
+  extras <- concat <$> mapM reifyInclude extraIncludes
 
-      let dirs = ["src", "test", "gen", "dist/build/autogen"] <> extras
-      includes  <- catMaybes <$> mapM ensureDirectory dirs
-      databases <- getPackageDatabases
+  let dirs = ["src", "test", "gen", "dist/build/autogen"] <> extras
+  includes  <- catMaybes <$> mapM ensureDirectory dirs
+  databases <- getPackageDatabases
 
-      return $ [ "-no-user-package-db" ]
-            <> (fmap ("-i" <>)           includes)
-            <> (fmap ("-package-db=" <>) databases)
-            <> [ path ]
+  return $ [ "-no-user-package-db" ]
+        <> (fmap ("-i" <>)           includes)
+        <> (fmap ("-package-db=" <>) databases)
+        <> paths
+
+checkEntryPoint :: File -> EitherT MafiaError IO ()
+checkEntryPoint file = do
+  unlessM (doesFileExist file) $
+    hoistEither (Left (MafiaEntryPointNotFound file))
 
 reifyInclude :: GhciInclude -> EitherT MafiaError IO [Directory]
 reifyInclude = \case
