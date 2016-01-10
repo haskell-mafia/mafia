@@ -2,8 +2,9 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 module Mafia.Cabal.Index
-  ( repairIndexFile
-  , createIndexFile
+  ( createIndexFile
+  , readIndexFile
+  , repairIndexFile
   ) where
 
 import           Control.Exception (IOException)
@@ -31,13 +32,27 @@ import           X.Control.Monad.Trans.Either (EitherT, hoistEither)
 
 ------------------------------------------------------------------------
 
-readIndexFile :: MonadIO m => File -> EitherT CabalError m ByteString
-readIndexFile file = do
+packagesDirOfSandbox :: SandboxDir -> Directory
+packagesDirOfSandbox dir =
+  dir </> "packages"
+
+indexFileOfSandbox :: SandboxDir -> File
+indexFileOfSandbox dir =
+  packagesDirOfSandbox dir </> "00-index.tar"
+
+indexCacheOfSandbox :: SandboxDir -> File
+indexCacheOfSandbox dir =
+  packagesDirOfSandbox dir </> "00-index.cache"
+
+------------------------------------------------------------------------
+
+readIndexFileBytes :: MonadIO m => File -> EitherT CabalError m ByteString
+readIndexFileBytes file = do
   mbs <- readBytes file
   hoistEither $ maybe (Left (CabalIndexFileNotFound file)) Right mbs
 
-readEntries :: Monad m => ByteString -> EitherT CabalError m [Tar.Entry]
-readEntries bs = do
+readTarEntries :: Monad m => ByteString -> EitherT CabalError m [Tar.Entry]
+readTarEntries bs = do
   let tar = Tar.read (L.fromStrict bs)
   hoistEither $ Tar.foldEntries (\x -> fmap (x :)) (Right []) (Left . CabalCorruptIndexFile) tar
 
@@ -69,11 +84,11 @@ repairIndexFile = filterEntries doesDirectoryExist
 
 filterEntries :: (Directory -> IO Bool) -> File -> EitherT CabalError IO ()
 filterEntries pred sandboxDir = do
-  let indexFile  = sandboxDir </> "packages/00-index.tar"
-      indexCache = sandboxDir </> "packages/00-index.cache"
+  let indexFile  = indexFileOfSandbox  sandboxDir
+      indexCache = indexCacheOfSandbox sandboxDir
 
-  bytes   <- readIndexFile indexFile
-  entries <- readEntries bytes
+  bytes   <- readIndexFileBytes indexFile
+  entries <- readTarEntries bytes
 
   let pred' = maybe (pure True) pred . fromEntry
   entries' <- liftIO (filterM pred' entries)
@@ -88,8 +103,8 @@ filterEntries pred sandboxDir = do
 -- This will replace/overwrite and existing index file
 createIndexFile :: [Directory] -> SandboxDir -> EitherT CabalError IO ()
 createIndexFile sources sandboxDir = do
-  let packagesDir = sandboxDir  </> "packages"
-      indexFile   = packagesDir </> "00-index.tar"
+  let packagesDir = packagesDirOfSandbox sandboxDir
+      indexFile   = indexFileOfSandbox   sandboxDir
 
   removeDirectoryRecursive packagesDir
   createDirectoryIfMissing True packagesDir
@@ -98,3 +113,9 @@ createIndexFile sources sandboxDir = do
       bytes   = L.toStrict (Tar.write entries)
 
   writeBytes indexFile bytes
+
+readIndexFile :: MonadIO m => SandboxDir -> EitherT CabalError m [Directory]
+readIndexFile sandboxDir = do
+  bytes   <- readIndexFileBytes (indexFileOfSandbox sandboxDir)
+  entries <- readTarEntries bytes
+  return (mapMaybe fromEntry entries)

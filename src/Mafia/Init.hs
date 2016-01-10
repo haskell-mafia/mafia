@@ -80,6 +80,8 @@ initialize mprofiling = do
   sandboxDir <- firstEitherT InitCabalError initSandbox
   let statePath = sandboxDir </> "mafia/state.json"
 
+  clearAddSourceDependencies sandboxDir
+
   liftIO (T.putStrLn "Checking for changes to dependencies...")
   previous <- readMafiaState statePath
   current  <- getMafiaState (mprofiling <|> fmap msProfiling previous)
@@ -111,6 +113,19 @@ profilingArgs :: Profiling -> [Argument]
 profilingArgs = \case
   DisableProfiling -> ["--disable-profiling"]
   EnableProfiling  -> ["--enable-profiling", "--ghc-options=-fprof-auto-top"]
+
+-- If a user or an older version of mafia has used 'cabal sandbox add-source'
+-- then some source dependencies can get installed twice unecessarily. This
+-- removes all the add-source dependencies by creating an empty index file.
+clearAddSourceDependencies :: SandboxDir -> EitherT InitError IO ()
+clearAddSourceDependencies sandboxDir = do
+  deps <- firstEitherT InitCabalError $ readIndexFile sandboxDir
+
+  for_ deps $ \dep -> do
+    dep' <- fromMaybe dep <$> makeRelativeToCurrentDirectory dep
+    liftIO . T.putStrLn $ "Removing add-source dependency: " <> dep'
+
+  firstEitherT InitCabalError $ createIndexFile [] sandboxDir
 
 ------------------------------------------------------------------------
 
