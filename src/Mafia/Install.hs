@@ -256,6 +256,11 @@ createPackageSandbox penv p@(Package (PackageRef pid _ msrc) deps _) = do
   case msrc of
     -- hackage package
     Nothing -> do
+      -- We install hackage packages by unpacking them in to a src/ directory
+      -- inside the package's location in the global cache. This allows us to
+      -- cheaply upgrade non-profiling builds to profiling builds as the .o
+      -- files are kept around in the dist/ directory. It also has the benefit
+      -- of not polluting the $TMPDIR on the build bot.
       createDirectoryIfMissing True sbsrc
       Hush <- sbcabal "unpack" ["--destdir=" <> sbsrc, renderPackageId pid]
       Hush <- sbcabal "sandbox" ["add-source", sbsrc </> renderPackageId pid]
