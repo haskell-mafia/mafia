@@ -66,18 +66,23 @@ data PackageDeps = PackageDeps {
 newtype Actions = Actions { unActions :: [Action] }
   deriving (Eq, Ord, Show)
 
+data Profiling =
+    NoProfiling
+  | Profiling
+    deriving (Eq, Ord, Show)
+
 data Action =
-    Build
-  | AddLocal     PackageName   PackageName
+    Build Profiling
+  | AddLocal PackageName PackageName
   | AddSubmodule SubmoduleName PackageName
-  | RemoveLocal     PackageName
+  | RemoveLocal PackageName
   | RemoveSubmodule SubmoduleName
   -- Sidestep = temporarily move out the way, try to build, then move back to
   -- the valid location. Useful to test that caching works even across invalid
   -- source states.
-  | SidestepLocal     PackageName
+  | SidestepLocal PackageName
   | SidestepSubmodule SubmoduleName
-  deriving (Eq, Ord, Show)
+    deriving (Eq, Ord, Show)
 
 repoSubmodules :: Repo -> Set SubmoduleName
 repoSubmodules (Repo focus others) =
@@ -132,7 +137,8 @@ shrinkAction = \case
   AddSubmodule dep pkg
    | pkg /= focusPackageName -> [AddSubmodule dep focusPackageName]
    | otherwise               -> []
-  Build                      -> []
+  Build NoProfiling          -> []
+  Build Profiling            -> [Build NoProfiling]
   RemoveLocal     _          -> []
   RemoveSubmodule _          -> []
   SidestepLocal     _        -> []
@@ -153,6 +159,8 @@ genTestRun n
 
 genAction :: Repo -> Gen Action
 genAction repo@(Repo _ others) = do
+  profiling <- QC.elements [NoProfiling, Profiling]
+
   mbLocalPackageNames <- oneOfSet localPackageNames
   mbSubmoduleNames    <- oneOfSet submoduleNames
 
@@ -166,7 +174,7 @@ genAction repo@(Repo _ others) = do
   mbRemovableSubmodules <- oneOfSet (repoSubmodules repo)
 
   QC.elements $ catMaybes [
-      Just Build
+      pure (Build profiling)
     , AddLocal          <$> mbLocalPackageNames <*> mbAvailableLocals
     , AddSubmodule      <$> mbSubmoduleNames    <*> mbAvailableLocals
     , RemoveLocal       <$> mbRemovableLocals
@@ -195,7 +203,7 @@ applyAction action =
                             then Nothing
                             else Just (f (repo, g repo))
   in case action of
-    Build                     -> Just . id
+    Build             _       -> Just . id
     AddLocal          dep pkg -> mustModify snd (addLocal        dep pkg)
     AddSubmodule      dep pkg -> mustModify snd (addSubmodule    dep pkg)
     RemoveLocal       dep     -> mustModify snd (removeLocal     dep)
@@ -434,9 +442,9 @@ withEnv key new io =
 
 runAction :: File -> Directory -> Directory -> Repo -> Action -> EitherT ChaosError IO ()
 runAction mafia github repoDir repo@(Repo focus _) = \case
-  Build -> do
-    liftIO (T.putStrLn "$ mafia build")
-    expectBuildSuccess mafia
+  Build prof -> do
+    liftIO . T.putStrLn $ "$ mafia " <> T.intercalate " " (["build"] <> profilingArgs prof)
+    expectBuildSuccess mafia prof
 
   AddLocal dep pkg -> do
     putAdd (dep <> " -> " <> pkg)
@@ -462,8 +470,8 @@ runAction mafia github repoDir repo@(Repo focus _) = \case
     removeDirectoryRecursive (repoDir </> dep)
 
     if Set.member dep (recursiveLocals repo focus)
-    then expectBuildFailure mafia
-    else expectBuildSuccess mafia
+    then expectBuildFailure mafia NoProfiling
+    else expectBuildSuccess mafia NoProfiling
 
     writeRepo repoDir repo
 
@@ -472,21 +480,26 @@ runAction mafia github repoDir repo@(Repo focus _) = \case
     gitRemoveSubmodule repoDir dep
 
     if Set.member dep (recursiveSubmodules repo focus)
-    then expectBuildFailure mafia
-    else expectBuildSuccess mafia
+    then expectBuildFailure mafia NoProfiling
+    else expectBuildSuccess mafia NoProfiling
 
     gitAddSubmodule github repoDir dep
 
-expectBuildSuccess :: File -> EitherT ChaosError IO ()
-expectBuildSuccess mafia =
-  call_ ProcessError mafia ["build"]
+expectBuildSuccess :: File -> Profiling -> EitherT ChaosError IO ()
+expectBuildSuccess mafia prof =
+  call_ ProcessError mafia $ ["build"] <> profilingArgs prof
 
-expectBuildFailure :: File -> EitherT ChaosError IO ()
-expectBuildFailure mafia = do
-  result <- liftIO . runEitherT $ call_ id mafia ["build"]
+expectBuildFailure :: File -> Profiling -> EitherT ChaosError IO ()
+expectBuildFailure mafia prof = do
+  result <- liftIO . runEitherT . call_ id mafia $ ["build"] <> profilingArgs prof
   hoistEither $ case result of
     Left _   -> Right ()
     Right () -> Left ExpectedBuildFailure
+
+profilingArgs :: Profiling -> [Argument]
+profilingArgs = \case
+  NoProfiling -> []
+  Profiling   -> ["--profiling"]
 
 putAdd :: MonadIO m => Text -> m ()
 putAdd x = liftIO (T.putStrLn ("+ " <> x))
