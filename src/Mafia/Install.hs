@@ -3,15 +3,18 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE LambdaCase #-}
 module Mafia.Install
-  ( InstallError(..)
-  , renderInstallError
+  ( Flavour(..)
   , installDependencies
+
+  , InstallError(..)
+  , renderInstallError
   ) where
 
 import           Control.Exception (SomeException, IOException)
 import           Control.Monad.Catch (MonadCatch, handle)
 import           Control.Monad.IO.Class (MonadIO(..))
 
+import qualified Data.ByteString as B
 import           Data.Set (Set)
 import qualified Data.Set as Set
 import           Data.Text (Text)
@@ -50,6 +53,7 @@ import           X.Control.Monad.Trans.Either
 data InstallError =
     InstallGhcError GhcError
   | InstallCabalError CabalError
+  | InstallLinkError Package File
   | InstallEnvParseError EnvKey EnvValue Text
   | InstallDisaster SomeException
     deriving (Show)
@@ -62,6 +66,9 @@ renderInstallError = \case
   InstallCabalError e ->
     renderCabalError e
 
+  InstallLinkError p pcfg ->
+    "Failed to create symlink for " <> renderHashId p <> ", package config did not exist: " <> pcfg
+
   InstallEnvParseError key val err ->
     "Failed parsing environment variable " <> key <> "=" <> val <> " (" <> err <> ")"
 
@@ -70,9 +77,9 @@ renderInstallError = \case
 
 ------------------------------------------------------------------------
 
-installDependencies :: [SourcePackage] -> EitherT InstallError IO ()
-installDependencies spkgs = do
-  globals   <- installGlobalDependencies spkgs
+installDependencies :: Flavour -> [SourcePackage] -> EitherT InstallError IO ()
+installDependencies flavour spkgs = do
+  globals   <- installGlobalDependencies flavour spkgs
   _         <- firstEitherT InstallCabalError initSandbox
   packageDB <- firstEitherT InstallCabalError getPackageDB
 
@@ -81,22 +88,21 @@ installDependencies spkgs = do
 
   -- create symlinks to the relevant package .conf files in the
   -- package-db, then call recache so that ghc is aware of them.
-  gw   <- getGhcWorkers
-  env  <- getPackageEnv
-  mapM_ (link gw packageDB env) globals
+  env <- getPackageEnv
+  mapM_ (link packageDB env) globals
   Hush <- firstEitherT InstallCabalError $ cabal "sandbox" ["hc-pkg", "recache"]
 
   return ()
 
-installGlobalDependencies :: [SourcePackage] -> EitherT InstallError IO [Package]
-installGlobalDependencies spkgs = do
+installGlobalDependencies :: Flavour -> [SourcePackage] -> EitherT InstallError IO [Package]
+installGlobalDependencies flavour spkgs = do
   deps <- firstEitherT InstallCabalError (findDependencies spkgs)
   let producer q = mapM_ (writeQueue q) deps
 
   mw  <- getMafiaWorkers
   gw  <- getGhcWorkers
   env <- getPackageEnv
-  firstEitherT squashRunError $ consume_ producer mw (install gw env)
+  firstEitherT squashRunError $ consume_ producer mw (install gw env flavour)
 
   return deps
 
@@ -135,13 +141,25 @@ lookupPositive key = do
 
 ------------------------------------------------------------------------
 
-link :: NumWorkers -> Directory -> PackageEnv -> Package -> EitherT InstallError IO ()
-link w db env p@(Package (PackageRef pid _ _) _ _) = do
-  let pcfg = packageConfigPath env p
-  unlessM (doesFileExist pcfg) (install w env p)
+data Flavour =
+    Vanilla
+  | Profiling
+  | Documentation
+    deriving (Eq, Ord, Show)
 
-  let dest = db </> renderPackageId pid <> ".conf"
-  liftIO $ createSymbolicLink (T.unpack pcfg) (T.unpack dest)
+renderFlavour :: Flavour -> Text
+renderFlavour = \case
+  Vanilla       -> "vanilla"
+  Profiling     -> "profiling"
+  Documentation -> "documentation"
+
+renderFlavourSuffix :: Flavour -> Text
+renderFlavourSuffix = \case
+  Vanilla       -> ""
+  Profiling     -> " [profiling]"
+  Documentation -> " [documentation]"
+
+------------------------------------------------------------------------
 
 -- | Installs a package and its dependencies in to the mafia global package
 --   cache in $MAFIA_HOME by taking the following steps:
@@ -163,50 +181,113 @@ link w db env p@(Package (PackageRef pid _ _) _ _) = do
 --
 --   7. Create a package.conf file which can be symlinked in to other package db's.
 --
-install :: NumWorkers -> PackageEnv -> Package -> EitherT InstallError IO ()
-install w env p@(Package (PackageRef pid _ msrc) deps _) = do
-  let packageCfg = packageConfigPath env p
-  unlessM (doesFileExist packageCfg) $ do
-    withPackageLock env p $ do
-      unlessM (doesFileExist packageCfg) $ do
-        liftIO $ T.putStrLn ("Building " <> renderHashId p)
+install :: NumWorkers -> PackageEnv -> Flavour -> Package -> EitherT InstallError IO ()
+install w penv flavour p@(Package (PackageRef pid _ _) deps _) = do
+  -- install package dependencies
+  mapM_ (install w penv flavour) (Set.toList (transitiveOfPackages deps))
 
-        let dir = packageSandboxPath env p
-        ignoreIO (removeDirectoryRecursive dir)
-        createDirectoryIfMissing True dir
+  -- the vanilla flavour must always be installed first:
+  --  + it creates and sets up the package's sandbox
+  --  + profiling builds need the vanilla build for template haskell to run
+  --  + documentation builds need the vanilla build to harvest the .hi files
+  when (flavour /= Vanilla) $
+    install w penv Vanilla p
 
-        let sandboxCfg = dir </> "sandbox.config"
-            sbcabal x xs = firstEitherT InstallCabalError $ cabalFrom dir (Just sandboxCfg) x xs
+  let fmark = packageFlavourMarker penv p flavour
+  unlessM (doesFileExist fmark) $ do
+    withPackageLock penv p flavour $ do
+      unlessM (doesFileExist fmark) $ do
+        when (flavour == Vanilla) $
+          createPackageSandbox penv p
 
-        Hush <- sbcabal "sandbox" ["init", "--sandbox", dir]
+        let sbdir = packageSandboxDir penv p
+            sbcfg = packageSandboxConfig penv p
 
-        case msrc of
-          Nothing  -> return () -- hackage package
-          Just src -> do
-            Hush <- sbcabal "sandbox" ["add-source", spDirectory src]
-            return ()
+        let sbcabal x xs =
+              firstEitherT InstallCabalError $ cabalFrom sbdir (Just sbcfg) x xs
 
-        db <- firstEitherT InstallCabalError (readPackageDB sandboxCfg)
+        liftIO . T.putStrLn $ "Building " <> renderHashId p <> renderFlavourSuffix flavour
 
-        -- create symlinks to the relevant package .conf files in the
-        -- package-db, then call recache so that ghc is aware of them.
-        mapM_ (link w db env) (Set.toList (transitiveOfPackages deps))
-        Hush <- sbcabal "sandbox" ["hc-pkg", "recache"]
+        Pass <- sbcabal "install" $
+          [ "--ghc-options=-j" <> T.pack (show w)
+          , "--max-backjumps=0"
+          , renderPackageId pid ] <>
+          flavourArgs flavour <>
+          concatMap (\c -> ["--constraint", c]) (constraintsOfPackage p)
 
-        let constraints = concatMap (\c -> ["--constraint", c]) (constraintsOfPackage p)
-        Pass <- sbcabal "install" $ [ "--ghc-options=-j" <> T.pack (show w)
-                                    , "--ghc-options=-fprof-auto-exported"
-                                    , "--enable-library-profiling"
-                                    , "--enable-documentation"
-                                    , "--haddock-hoogle"
-                                    , "--haddock-hyperlink-source"
-                                    , "--max-backjumps=0"
-                                    , renderPackageId pid
-                                    ] <> constraints
+        when (flavour == Vanilla) $ do
+          Out out <- sbcabal "sandbox" ["hc-pkg", "--", "describe", renderPackageId pid]
+          writeUtf8 (packageConfig penv p) out
 
-        Out out <- sbcabal "sandbox" ["hc-pkg", "--", "describe", renderPackageId pid]
+        writeBytes fmark B.empty
 
-        writeUtf8 packageCfg out
+flavourArgs :: Flavour -> [Argument]
+flavourArgs = \case
+  Vanilla ->
+    []
+  Profiling ->
+    [ "--reinstall"
+    , "--ghc-options=-fprof-auto-exported"
+    , "--enable-library-profiling" ]
+  Documentation ->
+    [ "--reinstall"
+    , "--enable-documentation"
+    , "--haddock-hoogle"
+    , "--haddock-hyperlink-source" ]
+
+-- | Creates and installs/links the dependencies for a package in to its well
+--   known global sandbox.
+createPackageSandbox :: PackageEnv -> Package -> EitherT InstallError IO ()
+createPackageSandbox penv p@(Package (PackageRef pid _ msrc) deps _) = do
+  liftIO . T.putStrLn $ "Creating sandbox for " <> renderHashId p
+
+  let sbdir = packageSandboxDir penv p
+      sbcfg = packageSandboxConfig penv p
+      sbsrc = packageSourceDir penv p
+
+  let sbcabal x xs =
+        firstEitherT InstallCabalError $ cabalFrom sbdir (Just sbcfg) x xs
+
+  ignoreIO (removeDirectoryRecursive sbdir)
+  createDirectoryIfMissing True sbdir
+
+  Hush <- sbcabal "sandbox" ["init", "--sandbox", sbdir]
+
+  case msrc of
+    -- hackage package
+    Nothing -> do
+      -- We install hackage packages by unpacking them in to a src/ directory
+      -- inside the package's location in the global cache. This allows us to
+      -- cheaply upgrade non-profiling builds to profiling builds as the .o
+      -- files are kept around in the dist/ directory. It also has the benefit
+      -- of not polluting the $TMPDIR on the build bot.
+      createDirectoryIfMissing True sbsrc
+      Hush <- sbcabal "unpack" ["--destdir=" <> sbsrc, renderPackageId pid]
+      Hush <- sbcabal "sandbox" ["add-source", sbsrc </> renderPackageId pid]
+      return ()
+
+    -- source package
+    Just src -> do
+      Hush <- sbcabal "sandbox" ["add-source", spDirectory src]
+      return ()
+
+  db <- firstEitherT InstallCabalError (readPackageDB sbcfg)
+
+  -- create symlinks to the relevant package .conf files in the
+  -- package-db, then call recache so that ghc is aware of them.
+  mapM_ (link db penv) (Set.toList (transitiveOfPackages deps))
+  Hush <- sbcabal "sandbox" ["hc-pkg", "recache"]
+
+  return ()
+
+link :: Directory -> PackageEnv -> Package -> EitherT InstallError IO ()
+link db env p@(Package (PackageRef pid _ _) _ _) = do
+  let pcfg = packageConfig env p
+  unlessM (doesFileExist pcfg) $
+    left (InstallLinkError p pcfg)
+
+  let dest = db </> renderPackageId pid <> ".conf"
+  liftIO $ createSymbolicLink (T.unpack pcfg) (T.unpack dest)
 
 ignoreIO :: MonadCatch m => m () -> m ()
 ignoreIO =
@@ -252,7 +333,7 @@ data PackageEnv =
 -- the package cache path includes a version number in case the contents or
 -- layout of the cache changes in subsequent mafia versions.
 envPackageCacheVersion :: Int
-envPackageCacheVersion = 0
+envPackageCacheVersion = 1
 
 envPackageCache :: PackageEnv -> Directory
 envPackageCache env =
@@ -264,29 +345,41 @@ getPackageEnv = do
   home <- getMafiaHome
   return (PackageEnv ghc home)
 
-withPackageLock :: PackageEnv -> Package -> EitherT InstallError IO a -> EitherT InstallError IO a
-withPackageLock env p io =
-  bracketEitherT' (lockPackage env p) (liftIO . unlockFile) (const io)
+withPackageLock :: PackageEnv -> Package -> Flavour -> EitherT InstallError IO a -> EitherT InstallError IO a
+withPackageLock env p f io =
+  bracketEitherT' (lockPackage env p f) (liftIO . unlockFile) (const io)
 
-lockPackage :: PackageEnv -> Package -> EitherT InstallError IO FileLock
-lockPackage env p = do
+lockPackage :: PackageEnv -> Package -> Flavour -> EitherT InstallError IO FileLock
+lockPackage env p f = do
   let path = packageLockPath env p
   ignoreIO $ createDirectoryIfMissing True (takeDirectory path)
   mlock <- liftIO $ tryLockFile (T.unpack path) Exclusive
   case mlock of
     Just lock -> return lock
     Nothing   -> liftIO $ do
-      T.putStrLn ("Waiting for " <> renderHashId p)
+      T.putStrLn ("Waiting for " <> renderHashId p <> renderFlavourSuffix f)
       lockFile (T.unpack path) Exclusive
 
-packageConfigPath :: PackageEnv -> Package -> File
-packageConfigPath env p =
-  packageSandboxPath env p </> "package.conf"
+packageConfig :: PackageEnv -> Package -> File
+packageConfig env p =
+  packageSandboxDir env p </> "package.conf"
+
+packageFlavourMarker :: PackageEnv -> Package -> Flavour -> File
+packageFlavourMarker env p flav =
+  packageSandboxDir env p </> "package." <> renderFlavour flav
 
 packageLockPath :: PackageEnv -> Package -> File
 packageLockPath env p =
   envPackageCache env </> ".locks" </> renderHashId p
 
-packageSandboxPath :: PackageEnv -> Package -> Directory
-packageSandboxPath env p = do
+packageSandboxDir :: PackageEnv -> Package -> SandboxDir
+packageSandboxDir env p = do
   envPackageCache env </> renderHashId p
+
+packageSandboxConfig :: PackageEnv -> Package -> SandboxConfigFile
+packageSandboxConfig env p = do
+  packageSandboxDir env p </> "sandbox.config"
+
+packageSourceDir :: PackageEnv -> Package -> Directory
+packageSourceDir env p = do
+  packageSandboxDir env p </> "src"
