@@ -21,10 +21,11 @@ import           Mafia.Process
 
 import           P
 
+import           System.FileLock (SharedExclusive (..), lockFile, unlockFile)
 import           System.IO (IO)
 import           System.IO.Temp (withTempDirectory)
 
-import           X.Control.Monad.Trans.Either (EitherT, pattern EitherT, runEitherT)
+import           X.Control.Monad.Trans.Either (EitherT, pattern EitherT, runEitherT, bracketEitherT')
 
 
 getMafiaHome :: MonadIO m => m Directory
@@ -53,24 +54,26 @@ installBinary package deps = do
   bin <- ensureMafiaDir "bin"
   let prefix = bin </> nv
       path = prefix </> "bin"
+      lock = T.unpack (prefix </> "lock")
+      marker = prefix </> "installed"
+      withLock = bracketEitherT' (liftIO (lockFile lock Exclusive)) (liftIO . unlockFile) . const
       installArgs p = [ "install", renderPackageId p, "--prefix=" <> prefix ]
   -- This is to support old versions of mafia that had installed a single executable
   -- We can remove this at some point
   -- NOTE: This makes no attempt at being threadsafe
-  liftIO (doesFileExist prefix) >>= \b -> when b $ do
-    renameFile prefix (prefix <> ".tmp")
-    createDirectoryIfMissing True prefix
-    renameFile (prefix <> ".tmp") (prefix </> (unPackageName . pkgName) package)
-  unlessM (liftIO (doesDirectoryExist path)) $
-    EitherT . withTempDirectory (T.unpack tmp) (T.unpack $ nv <> ".") $ \sandboxDir -> runEitherT $ do
-      -- Build the binary and its dependencies in a new sandbox.
-      -- Sandbox necessary as binary's deps could clash with the local project
-      Pass <- callFrom id (T.pack sandboxDir) "cabal" ["sandbox", "init"]
-      -- Install any required executables first
-      for_ deps ensureExeOnPath
-      createDirectoryIfMissing True prefix
-      Pass <- callFrom id (T.pack sandboxDir) "cabal" (installArgs package)
-      pure ()
+  whenM (liftIO (doesFileExist prefix)) (removeFile prefix)
+  unlessM (liftIO (doesFileExist marker)) . withLock $
+    unlessM (liftIO (doesFileExist marker)) $
+      EitherT . withTempDirectory (T.unpack tmp) (T.unpack $ nv <> ".") $ \sandboxDir -> runEitherT $ do
+        -- Build the binary and its dependencies in a new sandbox.
+        -- Sandbox necessary as binary's deps could clash with the local project
+        Pass <- callFrom id (T.pack sandboxDir) "cabal" ["sandbox", "init"]
+        -- Install any required executables first
+        for_ deps ensureExeOnPath
+        createDirectoryIfMissing True prefix
+        Pass <- callFrom id (T.pack sandboxDir) "cabal" (installArgs package)
+        writeBytes marker mempty
+        pure ()
   pure path
 
 ensureExeOnPath :: PackageId -> EitherT ProcessError IO ()
