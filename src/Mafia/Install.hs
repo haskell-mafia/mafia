@@ -200,9 +200,11 @@ install w penv flavour p@(Package (PackageRef pid _ _) deps _) = do
         when (flavour == Vanilla) $
           createPackageSandbox penv p
 
-        let sbdir        = packageSandboxDir penv p
-            sbcfg        = packageSandboxConfig penv p
-            sbcabal x xs = firstEitherT InstallCabalError $ cabalFrom sbdir (Just sbcfg) x xs
+        let sbdir = packageSandboxDir penv p
+            sbcfg = packageSandboxConfig penv p
+
+        let sbcabal x xs =
+              firstEitherT InstallCabalError $ cabalFrom sbdir (Just sbcfg) x xs
 
         liftIO . T.putStrLn $ "Building " <> renderHashId p <> renderFlavourSuffix flavour
 
@@ -236,12 +238,15 @@ flavourArgs = \case
 -- | Creates and installs/links the dependencies for a package in to its well
 --   known global sandbox.
 createPackageSandbox :: PackageEnv -> Package -> EitherT InstallError IO ()
-createPackageSandbox penv p@(Package (PackageRef _ _ msrc) deps _) = do
+createPackageSandbox penv p@(Package (PackageRef pid _ msrc) deps _) = do
   liftIO . T.putStrLn $ "Creating sandbox for " <> renderHashId p
 
-  let sbdir        = packageSandboxDir penv p
-      sbcfg        = packageSandboxConfig penv p
-      sbcabal x xs = firstEitherT InstallCabalError $ cabalFrom sbdir (Just sbcfg) x xs
+  let sbdir = packageSandboxDir penv p
+      sbcfg = packageSandboxConfig penv p
+      sbsrc = packageSourceDir penv p
+
+  let sbcabal x xs =
+        firstEitherT InstallCabalError $ cabalFrom sbdir (Just sbcfg) x xs
 
   ignoreIO (removeDirectoryRecursive sbdir)
   createDirectoryIfMissing True sbdir
@@ -249,7 +254,14 @@ createPackageSandbox penv p@(Package (PackageRef _ _ msrc) deps _) = do
   Hush <- sbcabal "sandbox" ["init", "--sandbox", sbdir]
 
   case msrc of
-    Nothing  -> return () -- hackage package
+    -- hackage package
+    Nothing -> do
+      createDirectoryIfMissing True sbsrc
+      Hush <- sbcabal "unpack" ["--destdir=" <> sbsrc, renderPackageId pid]
+      Hush <- sbcabal "sandbox" ["add-source", sbsrc </> renderPackageId pid]
+      return ()
+
+    -- source package
     Just src -> do
       Hush <- sbcabal "sandbox" ["add-source", spDirectory src]
       return ()
@@ -362,3 +374,7 @@ packageSandboxDir env p = do
 packageSandboxConfig :: PackageEnv -> Package -> SandboxConfigFile
 packageSandboxConfig env p = do
   packageSandboxDir env p </> "sandbox.config"
+
+packageSourceDir :: PackageEnv -> Package -> Directory
+packageSourceDir env p = do
+  packageSandboxDir env p </> "src"
