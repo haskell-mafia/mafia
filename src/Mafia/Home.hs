@@ -21,10 +21,11 @@ import           Mafia.Process
 
 import           P
 
+import           System.FileLock (SharedExclusive (..), lockFile, unlockFile)
 import           System.IO (IO)
 import           System.IO.Temp (withTempDirectory)
 
-import           X.Control.Monad.Trans.Either (EitherT, pattern EitherT, runEitherT)
+import           X.Control.Monad.Trans.Either (EitherT, pattern EitherT, runEitherT, bracketEitherT')
 
 
 getMafiaHome :: MonadIO m => m Directory
@@ -51,30 +52,29 @@ installBinary package deps = do
   tmp <- ensureMafiaDir "tmp"
   let nv = renderPackageId package
   bin <- ensureMafiaDir "bin"
-  let path = bin </> nv
+  let prefix = bin </> nv
+      path = prefix </> "bin"
+      lock = T.unpack (prefix </> "lock")
+      marker = prefix </> "installed"
+      withLock = bracketEitherT' (liftIO (lockFile lock Exclusive)) (liftIO . unlockFile) . const
+      installArgs p = [ "install", renderPackageId p, "--prefix=" <> prefix ]
   -- This is to support old versions of mafia that had installed a single executable
   -- We can remove this at some point
   -- NOTE: This makes no attempt at being threadsafe
-  liftIO (doesFileExist path) >>= \b -> when b $ do
-    renameFile path (path <> ".tmp")
-    createDirectoryIfMissing True path
-    renameFile (path <> ".tmp") (path </> (unPackageName . pkgName) package)
-  liftIO (doesDirectoryExist path) >>= \case
-    True ->
-      pure path
-    False -> do
+  whenM (liftIO (doesFileExist prefix)) (removeFile prefix)
+  unlessM (liftIO (doesFileExist marker)) . withLock $
+    unlessM (liftIO (doesFileExist marker)) $
       EitherT . withTempDirectory (T.unpack tmp) (T.unpack $ nv <> ".") $ \sandboxDir -> runEitherT $ do
+        -- Build the binary and its dependencies in a new sandbox.
+        -- Sandbox necessary as binary's deps could clash with the local project
         Pass <- callFrom id (T.pack sandboxDir) "cabal" ["sandbox", "init"]
         -- Install any required executables first
-        -- This could also recursively call `installBinary` and copy the output in to the sandbox if we do this again
-        for_ deps $ \p -> do
-          Pass <- callFrom id (T.pack sandboxDir) "cabal" ["install", renderPackageId p]
-          pure ()
-        Pass <- callFrom id (T.pack sandboxDir) "cabal" ["install", nv]
-        createDirectoryIfMissing True path
-        getDirectoryListing (RecursiveDepth 1) (T.pack sandboxDir </> ".cabal-sandbox" </> "bin") >>= \p ->
-          for_ p $ \f -> copyFile f (path </> takeFileName f)
-        return path
+        for_ deps ensureExeOnPath
+        createDirectoryIfMissing True prefix
+        Pass <- callFrom id (T.pack sandboxDir) "cabal" (installArgs package)
+        writeBytes marker mempty
+        pure ()
+  pure path
 
 ensureExeOnPath :: PackageId -> EitherT ProcessError IO ()
 ensureExeOnPath pkg = do
