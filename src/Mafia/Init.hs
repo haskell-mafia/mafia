@@ -78,7 +78,7 @@ initialize mprofiling = do
   firstEitherT InitGitError initSubmodules
 
   sandboxDir <- firstEitherT InitCabalError initSandbox
-  let statePath = sandboxDir </> "mafia/state.json"
+  let statePath = sandboxDir </> "mafia/state." <> T.pack (show mafiaStateVersion) <> ".json"
 
   clearAddSourceDependencies sandboxDir
 
@@ -89,16 +89,15 @@ initialize mprofiling = do
 
   packages <- checkPackages
 
-  let currentInstall  = msInstallState current
-      previousInstall = fmap msInstallState previous
-      needInstall     = previousInstall /= Just currentInstall || packages == PackagesBroken
+  let needInstall = previous /= Just current || packages == PackagesBroken
 
   when needInstall $ do
     liftIO (T.putStrLn "Installing dependencies...")
-    let sdeps = Set.toList (isSourceDependencies (msInstallState current))
-    firstEitherT InitInstallError $ installDependencies sdeps
+    let sdeps    = Set.toList (msSourceDependencies current)
+        flavours = profilingFlavour (msProfiling current)
+    firstEitherT InitInstallError $ installDependencies flavours sdeps
 
-  let needConfigure = needInstall || previous /= Just current || not hasDist
+  let needConfigure = needInstall || not hasDist
 
   when needConfigure $ do
     firstEitherT InitCabalError . cabal_ "configure" $
@@ -108,6 +107,11 @@ initialize mprofiling = do
 
   when (needInstall || needConfigure) $ do
     writeMafiaState statePath current
+
+profilingFlavour :: Profiling -> Flavour
+profilingFlavour = \case
+  DisableProfiling -> Vanilla
+  EnableProfiling  -> Profiling
 
 profilingArgs :: Profiling -> [Argument]
 profilingArgs = \case
@@ -150,17 +154,15 @@ data Profiling =
   | EnableProfiling
     deriving (Eq, Ord, Show)
 
-data InstallState =
-  InstallState {
-      isSourceDependencies :: Set SourcePackage
-    , _isCabalFile         :: Hash
-    } deriving (Eq, Ord, Show)
-
 data MafiaState =
   MafiaState {
-      msInstallState :: InstallState
+      msSourceDependencies :: Set SourcePackage
+    , _msCabalFile         :: Hash
     , msProfiling    :: Profiling
     } deriving (Eq, Ord, Show)
+
+mafiaStateVersion :: Int
+mafiaStateVersion = 0
 
 instance ToJSON Profiling where
   toJSON = \case
@@ -178,32 +180,19 @@ instance FromJSON Profiling where
     _ ->
       mzero
 
-instance ToJSON InstallState where
-  toJSON (InstallState sds cfh) =
+instance ToJSON MafiaState where
+  toJSON (MafiaState sds cfh p) =
     A.object
       [ "source-dependencies" .= sds
-      , "cabal-file"          .= cfh ]
-
-instance FromJSON InstallState where
-  parseJSON = \case
-    Object o ->
-      InstallState <$>
-        o .: "source-dependencies" <*>
-        o .: "cabal-file"
-    _ ->
-      mzero
-
-instance ToJSON MafiaState where
-  toJSON (MafiaState is p) =
-    A.object
-      [ "install"   .= is
-      , "profiling" .= p ]
+      , "cabal-file"          .= cfh
+      , "profiling"           .= p ]
 
 instance FromJSON MafiaState where
   parseJSON = \case
     Object o ->
       MafiaState <$>
-        o .: "install" <*>
+        o .: "source-dependencies" <*>
+        o .: "cabal-file" <*>
         o .: "profiling"
     _ ->
       mzero
@@ -218,7 +207,7 @@ getMafiaState mprofiling = do
     Just file -> do
       hash  <- firstEitherT InitHashError (hashFile file)
       let profiling = fromMaybe DisableProfiling mprofiling
-      return (MafiaState (InstallState sdeps hash) profiling)
+      return (MafiaState sdeps hash profiling)
 
 getSourceDependencies :: EitherT InitError IO (Set SourcePackage)
 getSourceDependencies = do
