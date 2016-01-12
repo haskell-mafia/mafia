@@ -123,7 +123,6 @@ profilingArgs = \case
       "--enable-profiling"
     , "--disable-executable-stripping"
     , "--ghc-options=-fprof-auto-top"
-    , "--ghc-options=-eventlog"
     ]
 
 -- If a user or an older version of mafia has used 'cabal sandbox add-source'
