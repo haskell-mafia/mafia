@@ -41,7 +41,7 @@ module Mafia.Process
   ) where
 
 import           Control.Concurrent.Async (Async, async, waitCatch)
-import           Control.Exception (SomeException, IOException)
+import           Control.Exception (SomeException, IOException, toException)
 import           Control.Monad.Catch (MonadCatch(..), handle, bracket_)
 import           Control.Monad.IO.Class (MonadIO(..))
 
@@ -273,7 +273,7 @@ callFrom_ up dir cmd args = do
 -- | Execute a process, this call never returns.
 --
 execProcess :: (MonadIO m, MonadCatch m) => Process -> EitherT ProcessError m a
-execProcess p = handleAll p $ do
+execProcess p = handleIO p $ do
     case processDirectory p of
       Nothing  -> return ()
       Just dir -> setCurrentDirectory dir
@@ -319,7 +319,7 @@ withProcess :: (MonadIO m, MonadCatch m)
             -> EitherT ProcessError m (ExitCode, a)
             -> EitherT ProcessError m a
 
-withProcess p io = handleAll p $ do
+withProcess p io = handleIO p $ do
   (code, result) <- io
   case code of
     ExitSuccess   -> return result
@@ -351,8 +351,10 @@ fromProcess' p = (cmd, args, cwd, env)
 
 ------------------------------------------------------------------------
 
-handleAll :: MonadCatch m => Process -> EitherT ProcessError m a -> EitherT ProcessError m a
-handleAll p = handle (hoistEither . Left . ProcessException p)
+handleIO :: MonadCatch m => Process -> EitherT ProcessError m a -> EitherT ProcessError m a
+handleIO p =
+  let fromIO = toException :: IOException -> SomeException
+  in handle (hoistEither . Left . ProcessException p . fromIO)
 
 waitCatchE :: (Functor m, MonadIO m) => Process -> Async a -> EitherT ProcessError m a
 waitCatchE p = firstEitherT (ProcessException p) . EitherT . liftIO . waitCatch
