@@ -183,43 +183,50 @@ renderFlavourSuffix = \case
 --
 install :: NumWorkers -> PackageEnv -> Flavour -> Package -> EitherT InstallError IO ()
 install w penv flavour p@(Package (PackageRef pid _ _) deps _) = do
-  -- install package dependencies
-  mapM_ (install w penv flavour) (Set.toList (transitiveOfPackages deps))
-
-  -- the vanilla flavour must always be installed first:
-  --  + it creates and sets up the package's sandbox
-  --  + profiling builds need the vanilla build for template haskell to run
-  --  + documentation builds need the vanilla build to harvest the .hi files
-  when (flavour /= Vanilla) $
-    install w penv Vanilla p
-
+  -- only try to install this package/flavour if we haven't done it already.
+  -- it's important to do this before we do the same for any dependencies
+  -- otherwise we end up doing an exponential number of checks.
   let fmark = packageFlavourMarker penv p flavour
   unlessM (doesFileExist fmark) $ do
-    withPackageLock penv p flavour $ do
-      unlessM (doesFileExist fmark) $ do
-        when (flavour == Vanilla) $
-          createPackageSandbox penv p
 
-        let sbdir = packageSandboxDir penv p
-            sbcfg = packageSandboxConfig penv p
+    -- install package dependencies
+    mapM_ (install w penv flavour) (Set.toList (transitiveOfPackages deps))
 
-        let sbcabal x xs =
-              firstEitherT InstallCabalError $ cabalFrom sbdir (Just sbcfg) x xs
+    -- the vanilla flavour must always be installed first:
+    --  + it creates and sets up the package's sandbox
+    --  + profiling builds need the vanilla build for template haskell to run
+    --  + documentation builds need the vanilla build to harvest the .hi files
+    when (flavour /= Vanilla) $
+      install w penv Vanilla p
 
-        liftIO . T.putStrLn $ "Building " <> renderHashId p <> renderFlavourSuffix flavour
+    -- we take this lock *after* all the package dependencies have been
+    -- installed, otherwise we can prevent some parallelism from occurring
+    unlessM (doesFileExist fmark) $
+      withPackageLock penv p flavour $
+        unlessM (doesFileExist fmark) $ do
+          when (flavour == Vanilla) $
+            createPackageSandbox penv p
 
-        Pass <- sbcabal "install" $
-          [ "--ghc-options=-j" <> T.pack (show w)
-          , "--max-backjumps=0"
-          , renderPackageId pid ] <>
-          flavourArgs flavour <>
-          concatMap (\c -> ["--constraint", c]) (constraintsOfPackage p)
+          let sbdir = packageSandboxDir penv p
+              sbcfg = packageSandboxConfig penv p
 
-        when (flavour == Vanilla) $ do
-          Out out <- sbcabal "sandbox" ["hc-pkg", "--", "describe", renderPackageId pid]
-          writeUtf8 (packageConfig penv p) out
+          let sbcabal x xs =
+                firstEitherT InstallCabalError $ cabalFrom sbdir (Just sbcfg) x xs
 
-        writeBytes fmark B.empty
+          liftIO . T.putStrLn $ "Building " <> renderHashId p <> renderFlavourSuffix flavour
+
+          Pass <- sbcabal "install" $
+            [ "--ghc-options=-j" <> T.pack (show w)
+            , "--max-backjumps=0"
+            , renderPackageId pid ] <>
+            flavourArgs flavour <>
+            concatMap (\c -> ["--constraint", c]) (constraintsOfPackage p)
+
+          when (flavour == Vanilla) $ do
+            Out out <- sbcabal "sandbox" ["hc-pkg", "--", "describe", renderPackageId pid]
+            writeUtf8 (packageConfig penv p) out
+
+          writeBytes fmark B.empty
 
 flavourArgs :: Flavour -> [Argument]
 flavourArgs = \case
