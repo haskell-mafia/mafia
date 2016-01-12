@@ -27,7 +27,9 @@ import qualified Data.Text.IO as T
 import           Mafia.Git
 import           Mafia.IO
 import           Mafia.Path
-import           Mafia.Process
+import           Mafia.Process (ProcessError, ProcessResult, Argument)
+import           Mafia.Process (Hush(..), Pass(..))
+import           Mafia.Process (call_, callFrom)
 
 import           P
 
@@ -72,7 +74,8 @@ data Profiling =
     deriving (Eq, Ord, Show)
 
 data Action =
-    Build Profiling
+    Clean
+  | Build Profiling
   | AddLocal PackageName PackageName
   | AddSubmodule SubmoduleName PackageName
   | RemoveLocal PackageName
@@ -137,6 +140,7 @@ shrinkAction = \case
   AddSubmodule dep pkg
    | pkg /= focusPackageName -> [AddSubmodule dep focusPackageName]
    | otherwise               -> []
+  Clean                      -> []
   Build NoProfiling          -> []
   Build Profiling            -> [Build NoProfiling]
   RemoveLocal     _          -> []
@@ -174,7 +178,8 @@ genAction repo@(Repo _ others) = do
   mbRemovableSubmodules <- oneOfSet (repoSubmodules repo)
 
   QC.elements $ catMaybes [
-      pure (Build profiling)
+      pure Clean
+    , pure (Build profiling)
     , AddLocal          <$> mbLocalPackageNames <*> mbAvailableLocals
     , AddSubmodule      <$> mbSubmoduleNames    <*> mbAvailableLocals
     , RemoveLocal       <$> mbRemovableLocals
@@ -203,6 +208,7 @@ applyAction action =
                             then Nothing
                             else Just (f (repo, g repo))
   in case action of
+    Clean                     -> Just . id
     Build             _       -> Just . id
     AddLocal          dep pkg -> mustModify snd (addLocal        dep pkg)
     AddSubmodule      dep pkg -> mustModify snd (addSubmodule    dep pkg)
@@ -442,6 +448,10 @@ withEnv key new io =
 
 runAction :: File -> Directory -> Directory -> Repo -> Action -> EitherT ChaosError IO ()
 runAction mafia github repoDir repo@(Repo focus _) = \case
+  Clean -> do
+    liftIO . T.putStrLn $ "$ mafia clean"
+    call_ ProcessError mafia ["clean"]
+
   Build prof -> do
     liftIO . T.putStrLn $ "$ mafia " <> T.intercalate " " (["build"] <> profilingArgs prof)
     expectBuildSuccess mafia prof
