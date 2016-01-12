@@ -62,6 +62,7 @@ installBinary package deps = do
   -- We can remove this at some point
   -- NOTE: This makes no attempt at being threadsafe
   whenM (liftIO (doesFileExist prefix)) (removeFile prefix)
+  createDirectoryIfMissing True prefix
   unlessM (liftIO (doesFileExist marker)) . withLock $
     unlessM (liftIO (doesFileExist marker)) $
       EitherT . withTempDirectory (T.unpack tmp) (T.unpack $ nv <> ".") $ \sandboxDir -> runEitherT $ do
@@ -70,7 +71,6 @@ installBinary package deps = do
         Pass <- callFrom id (T.pack sandboxDir) "cabal" ["sandbox", "init"]
         -- Install any required executables first
         for_ deps ensureExeOnPath
-        createDirectoryIfMissing True prefix
         Pass <- callFrom id (T.pack sandboxDir) "cabal" (installArgs package)
         writeBytes marker mempty
         pure ()
