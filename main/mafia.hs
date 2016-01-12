@@ -8,6 +8,7 @@ import           BuildInfo_ambiata_mafia
 import           Control.Concurrent (setNumCapabilities)
 import           Control.Monad.IO.Class (MonadIO(..))
 
+import           Data.ByteString (ByteString)
 import qualified Data.Set as Set
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
@@ -62,6 +63,7 @@ main = do
 data MafiaCommand
   = MafiaUpdate
   | MafiaHash
+  | MafiaClean
   | MafiaBuild  Profiling [Argument]
   | MafiaTest   [Argument]
   | MafiaTestCI [Argument]
@@ -81,6 +83,7 @@ run :: MafiaCommand -> EitherT MafiaError IO ()
 run = \case
   MafiaUpdate                 -> update
   MafiaHash                   -> hash
+  MafiaClean                  -> clean
   MafiaBuild  p args          -> build  p args
   MafiaTest   args            -> test   args
   MafiaTestCI args            -> testci args
@@ -106,6 +109,9 @@ commands =
                   <> "by (package) in this command's output is the one used by "
                   <> "mafia to track changes to source dependencies." )
             (pure MafiaHash)
+
+ , command' "clean" "Clean up after build. Removes the sandbox and the dist directory."
+            (pure MafiaClean)
 
  , command' "build" "Build this project, including all executables and test suites."
             (MafiaBuild <$> pProfiling <*> many pCabalArgs)
@@ -202,6 +208,12 @@ hash :: EitherT MafiaError IO ()
 hash = do
   sph <- liftCabal (hashSourcePackage ".")
   liftIO (T.putStr (renderSourcePackageHash sph))
+
+clean :: EitherT MafiaError IO ()
+clean = do
+  -- "Out _" ignores the spurious "cleaning..." message that cabal emits on success
+  Out (_ :: ByteString) <- liftCabal $ cabal "clean" []
+  liftCabal removeSandbox
 
 build :: Profiling -> [Argument] -> EitherT MafiaError IO ()
 build p args = do

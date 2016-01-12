@@ -10,8 +10,7 @@ module Mafia.Install
   , renderInstallError
   ) where
 
-import           Control.Exception (SomeException, IOException)
-import           Control.Monad.Catch (MonadCatch, handle)
+import           Control.Exception (SomeException)
 import           Control.Monad.IO.Class (MonadIO(..))
 
 import qualified Data.ByteString as B
@@ -295,10 +294,6 @@ link db env p@(Package (PackageRef pid _ _) _ _) = do
 
   let dest = db </> renderPackageId pid <> ".conf"
   liftIO $ createSymbolicLink (T.unpack pcfg) (T.unpack dest)
-
-ignoreIO :: MonadCatch m => m () -> m ()
-ignoreIO =
-  handle (\(_ :: IOException) -> return ())
 
 squashRunError :: RunError InstallError -> InstallError
 squashRunError = \case

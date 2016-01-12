@@ -82,6 +82,7 @@ executable mafia
                     , ambiata-p
                     , ambiata-x-eithert
                     , ambiata-x-optparse
+                    , bytestring                      == 0.10.*
                     , containers                      == 0.5.*
                     , directory                       == 1.2.*
                     , filepath                        == 1.4.*
