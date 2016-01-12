@@ -115,8 +115,16 @@ profilingFlavour = \case
 
 profilingArgs :: Profiling -> [Argument]
 profilingArgs = \case
-  DisableProfiling -> ["--disable-profiling"]
-  EnableProfiling  -> ["--enable-profiling", "--ghc-options=-fprof-auto-top"]
+  DisableProfiling -> [
+      "--disable-profiling"
+    , "--enable-executable-stripping"
+    ]
+  EnableProfiling  -> [
+      "--enable-profiling"
+    , "--disable-executable-stripping"
+    , "--ghc-options=-fprof-auto-top"
+    , "--ghc-options=-eventlog"
+    ]
 
 -- If a user or an older version of mafia has used 'cabal sandbox add-source'
 -- then some source dependencies can get installed twice unecessarily. This
