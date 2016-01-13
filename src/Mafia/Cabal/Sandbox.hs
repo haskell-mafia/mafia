@@ -4,6 +4,7 @@ module Mafia.Cabal.Sandbox
   ( sandbox
   , sandbox_
   , initSandbox
+  , removeSandbox
 
   , getSandboxDir
   , getPackageDB
@@ -43,11 +44,9 @@ sandbox_ cmd args = do
 
 -- Sandbox initialized if required, this should support sandboxes in parent
 -- directories.
-initSandbox :: EitherT CabalError IO Directory
+initSandbox :: EitherT CabalError IO SandboxDir
 initSandbox = do
-  ghcVer <- firstEitherT CabalGhcError getGhcVersion
-  let sandboxDir = ".cabal-sandbox" </> ghcVer
-
+  sandboxDir <- getInferredSandboxDir
   cfgSandboxDir <- liftIO (runEitherT getSandboxDir)
   let cfgOk = dropLeft cfgSandboxDir == Just sandboxDir
 
@@ -62,17 +61,47 @@ dropLeft :: Either a b -> Maybe b
 dropLeft =
   either (const Nothing) Just
 
+removeSandbox :: EitherT CabalError IO ()
+removeSandbox = do
+  dir <- getInferredSandboxDir
+
+  -- remove sandbox directory
+  whenM (doesDirectoryExist dir) $
+    removeDirectoryRecursive dir
+
+  -- remvoe sandbox config file
+  whenM (doesFileExist dir) $
+    removeFile defaultConfig
+
+  -- remove root sandbox directory if it is now empty
+  whenM (doesDirectoryExist sandboxRoot) $ do
+    entries <- getDirectoryContents sandboxRoot
+    when (null entries) $
+      removeDirectoryRecursive sandboxRoot
+
 ------------------------------------------------------------------------
 
 defaultConfig :: SandboxConfigFile
 defaultConfig =
   "cabal.sandbox.config"
 
-getSandboxDir :: EitherT CabalError IO Directory
+sandboxRoot :: Directory
+sandboxRoot =
+  ".cabal-sandbox"
+
+-- | The location where the sandbox is inferred to be (based on the GHC version)
+getInferredSandboxDir :: EitherT CabalError IO SandboxDir
+getInferredSandboxDir = do
+  ghcVer <- firstEitherT CabalGhcError getGhcVersion
+  return $ sandboxRoot </> ghcVer
+
+-- | The location where the sandbox is configured to be (based on the cabal.sandbox.config)
+getSandboxDir :: EitherT CabalError IO SandboxDir
 getSandboxDir = do
   dir <- readSandboxDir defaultConfig
   liftIO (tryMakeRelativeToCurrent dir)
 
+-- | The location where the package database is configured to be (based on the cabal.sandbox.config)
 getPackageDB :: EitherT CabalError IO Directory
 getPackageDB = do
   dir <- readPackageDB defaultConfig

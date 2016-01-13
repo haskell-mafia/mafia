@@ -41,9 +41,14 @@ module Mafia.IO
 
     -- * Concurrency
   , mapConcurrentlyE
+
+    -- * Exceptions
+  , ignoreIO
   ) where
 
 import qualified Control.Concurrent.Async as Async
+import           Control.Exception (IOException)
+import           Control.Monad.Catch (MonadCatch(..), handle)
 import           Control.Monad.IO.Class (MonadIO(..))
 import           Control.Monad.Trans.Maybe (MaybeT(..))
 
@@ -202,3 +207,10 @@ mapConcurrentlyE :: Traversable t => (a -> EitherT x IO b) -> t a -> EitherT x I
 mapConcurrentlyE io xs = do
   ys <- liftIO (Async.mapConcurrently (runEitherT . io) xs)
   hoistEither (sequence ys)
+
+------------------------------------------------------------------------
+-- Exceptions
+
+ignoreIO :: MonadCatch m => m () -> m ()
+ignoreIO =
+  handle (\(_ :: IOException) -> return ())
