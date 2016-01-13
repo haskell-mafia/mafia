@@ -57,7 +57,9 @@ exec_mafia () {
       # terminates. Unfortunately `mktemp` doesn't behave the same on
       # Linux and OS/X so we need to try two different approaches.
       MAFIA_TEMP=$(mktemp -d 2>/dev/null || mktemp -d -t 'exec_mafia')
+
       # Create a temporary file in MAFIA_BIN so we can do an atomic copy/move dance.
+      mkdir -p $MAFIA_BIN
       MAFIA_PATH_TEMP=$(mktemp --tmpdir=$MAFIA_BIN $MAFIA_FILE-XXXXXX 2>/dev/null || TMPDIR=$MAFIA_BIN mktemp -t $MAFIA_FILE)
 
       clean_up () {
@@ -78,7 +80,6 @@ exec_mafia () {
 
         bin/bootstrap ) || exit $?
 
-      mkdir -p $(dirname $MAFIA_PATH)
       cp "$MAFIA_TEMP/mafia/.cabal-sandbox/bin/mafia" "$MAFIA_PATH_TEMP"
       chmod +x "$MAFIA_PATH_TEMP"
       mv "$MAFIA_PATH_TEMP" "$MAFIA_PATH"
