@@ -9,24 +9,40 @@ fetch_latest () {
   fi
 }
 
+latest_version () {
+  git ls-remote https://github.com/ambiata/mafia | grep refs/heads/master | cut -f 1
+}
+
+local_version () {
+  awk '/^# Version: / { print $3; exit 0; }' $0
+}
+
 run_upgrade () {
+  MAFIA_TEMP=$(mktemp 2>/dev/null || mktemp -t 'upgrade_mafia')
+
+  clean_up () {
+    rm -f "$MAFIA_TEMP"
+  }
+
+  trap clean_up EXIT
+
   echo "Checking for a new version of mafia ..."
-  fetch_latest > /tmp/mafia
+  fetch_latest > $MAFIA_TEMP
 
-  COMMIT_VERSION=$(git ls-remote https://github.com/ambiata/mafia | grep refs/heads/master | cut -f 1)
-  echo "# Version: $COMMIT_VERSION" >> /tmp/mafia
+  LATEST_VERSION=$(latest_version)
+  echo "# Version: $LATEST_VERSION" >> $MAFIA_TEMP
 
-  if ! cmp ./mafia /tmp/mafia >/dev/null 2>&1; then
+  if ! cmp ./mafia $MAFIA_TEMP >/dev/null 2>&1; then
     echo "New version found and upgraded. You can now commit it to your git repo."
-    mv /tmp/mafia ./mafia
+    mv $MAFIA_TEMP ./mafia
     chmod +x ./mafia
   else
-    echo "You have latest mafia script"
+    echo "You have latest mafia."
   fi
 }
 
 exec_mafia () {
-  MAFIA_VERSION=$(awk '/^# Version: / { print $3; exit 0; }' $0)
+  MAFIA_VERSION=$(local_version)
 
   if [ "x$MAFIA_VERSION" = "x" ]; then
     # If we can't find the mafia version, then we need to upgrade the script.
@@ -83,6 +99,6 @@ else
 fi
 
 case "$MODE" in
-upgrade) shift; run_$MODE "$@" ;;
+upgrade) shift; run_upgrade "$@" ;;
 *) exec_mafia "$@"
 esac
