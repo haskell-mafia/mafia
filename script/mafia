@@ -33,9 +33,9 @@ run_upgrade () {
   echo "# Version: $LATEST_VERSION" >> $MAFIA_TEMP
 
   if ! cmp ./mafia $MAFIA_TEMP >/dev/null 2>&1; then
-    echo "New version found and upgraded. You can now commit it to your git repo."
     mv $MAFIA_TEMP ./mafia
     chmod +x ./mafia
+    echo "New version found and upgraded. You can now commit it to your git repo."
   else
     echo "You have latest mafia."
   fi
