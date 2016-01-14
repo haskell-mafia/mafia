@@ -19,6 +19,7 @@ local_version () {
 
 run_upgrade () {
   MAFIA_TEMP=$(mktemp 2>/dev/null || mktemp -t 'upgrade_mafia')
+  MAFIA_CUR="$0"
 
   clean_up () {
     rm -f "$MAFIA_TEMP"
@@ -32,9 +33,9 @@ run_upgrade () {
   LATEST_VERSION=$(latest_version)
   echo "# Version: $LATEST_VERSION" >> $MAFIA_TEMP
 
-  if ! cmp ./mafia $MAFIA_TEMP >/dev/null 2>&1; then
-    mv $MAFIA_TEMP ./mafia
-    chmod +x ./mafia
+  if ! cmp $MAFIA_CUR $MAFIA_TEMP >/dev/null 2>&1; then
+    mv $MAFIA_TEMP $MAFIA_CUR
+    chmod +x $MAFIA_CUR
     echo "New version found and upgraded. You can now commit it to your git repo."
   else
     echo "You have latest mafia."
