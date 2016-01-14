@@ -26,16 +26,23 @@ run_upgrade () {
 
   trap clean_up EXIT
 
+  MAFIA_CUR="$0"
+
+  if [ -L "$MAFIA_CUR" ]; then
+    echo 'Refusing to overwrite a symlink; run `upgrade` from the canonical path.' >&2
+    exit 1
+  fi
+
   echo "Checking for a new version of mafia ..."
   fetch_latest > $MAFIA_TEMP
 
   LATEST_VERSION=$(latest_version)
   echo "# Version: $LATEST_VERSION" >> $MAFIA_TEMP
 
-  if ! cmp ./mafia $MAFIA_TEMP >/dev/null 2>&1; then
+  if ! cmp $MAFIA_CUR $MAFIA_TEMP >/dev/null 2>&1; then
+    mv $MAFIA_TEMP $MAFIA_CUR
+    chmod +x $MAFIA_CUR
     echo "New version found and upgraded. You can now commit it to your git repo."
-    mv $MAFIA_TEMP ./mafia
-    chmod +x ./mafia
   else
     echo "You have latest mafia."
   fi
