@@ -19,13 +19,19 @@ local_version () {
 
 run_upgrade () {
   MAFIA_TEMP=$(mktemp 2>/dev/null || mktemp -t 'upgrade_mafia')
-  MAFIA_CUR="$0"
 
   clean_up () {
     rm -f "$MAFIA_TEMP"
   }
 
   trap clean_up EXIT
+
+  MAFIA_CUR="$0"
+
+  if [ -L "$MAFIA_CUR" ]; then
+    echo 'Refusing to overwrite a symlink; run `upgrade` from the canonical path.' >&2
+    exit 1
+  fi
 
   echo "Checking for a new version of mafia ..."
   fetch_latest > $MAFIA_TEMP
