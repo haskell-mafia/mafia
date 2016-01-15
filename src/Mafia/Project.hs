@@ -42,7 +42,7 @@ renderProjectError = \case
 
 getProjectName :: EitherT ProjectError IO ProjectName
 getProjectName = EitherT $ do
-  entries <- getDirectoryContents "."
+  entries <- filterM doesFileExist =<< getDirectoryContents "."
 
   let projects = fmap dropExtension
                . filter ((== ".cabal") . takeExtension)

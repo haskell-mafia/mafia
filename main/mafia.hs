@@ -25,6 +25,7 @@ import           Mafia.Init
 import           Mafia.Package
 import           Mafia.Path
 import           Mafia.Process
+import           Mafia.Project
 import           Mafia.Submodule
 
 import           P
@@ -217,52 +218,46 @@ clean = do
 
 build :: Profiling -> [Argument] -> EitherT MafiaError IO ()
 build p args = do
-  initialisePath
-  firstEitherT MafiaInitError . initialize $ Just p
+  initMafia $ Just p
   liftCabal . cabal_ "build" $ ["-j", "--ghc-option=-Werror"] <> args
 
 test :: [Argument] -> EitherT MafiaError IO ()
 test args = do
-  initialisePath
-  firstEitherT MafiaInitError . initialize $ Just DisableProfiling
+  initMafia $ Just DisableProfiling
   liftCabal . cabal_ "test" $ ["-j", "--show-details=streaming"] <> args
 
 testci :: [Argument] -> EitherT MafiaError IO ()
 testci args = do
-  initialisePath
-  firstEitherT MafiaInitError . initialize $ Just DisableProfiling
+  initMafia $ Just DisableProfiling
   Clean <- liftCabal . cabal "test" $ ["-j", "--show-details=streaming"] <> args
   return ()
 
 repl :: [Argument] -> EitherT MafiaError IO ()
 repl args = do
-  initialisePath
-  firstEitherT MafiaInitError . initialize $ Just DisableProfiling
+  initMafia $ Just DisableProfiling
   liftCabal $ cabal_ "repl" args
 
 bench :: [Argument] -> EitherT MafiaError IO ()
 bench args = do
-  initialisePath
-  firstEitherT MafiaInitError . initialize $ Just DisableProfiling
+  initMafia $ Just DisableProfiling
   liftCabal $ cabal_ "bench" args
 
 quick :: [GhciInclude] -> [File] -> EitherT MafiaError IO ()
 quick extraIncludes paths = do
-  initialisePath
   args <- ghciArgs extraIncludes paths
+  initMafia $ Just DisableProfiling
   exec MafiaProcessError "ghci" args
 
 watch :: [GhciInclude] -> File -> [Argument] -> EitherT MafiaError IO ()
 watch extraIncludes path extraArgs = do
   ghcidExe <- bimapEitherT MafiaProcessError (</> "ghcid") $ installBinary (packageId "ghcid" [0, 5]) []
-  initialisePath
   args <- ghciArgs extraIncludes [path]
+  initMafia $ Just DisableProfiling
   exec MafiaProcessError ghcidExe $ [ "-c", T.unwords ("ghci" : args) ] <> extraArgs
 
 ghciArgs :: [GhciInclude] -> [File] -> EitherT MafiaError IO [Argument]
 ghciArgs extraIncludes paths = do
   mapM_ checkEntryPoint paths
-  firstEitherT MafiaInitError . initialize $ Just DisableProfiling
 
   extras <- concat <$> mapM reifyInclude extraIncludes
 
@@ -303,9 +298,14 @@ getPackageDatabases = do
   where
     isPackage = ("-packages.conf.d" `T.isSuffixOf`)
 
-initialisePath :: EitherT MafiaError IO ()
-initialisePath = do
+initMafia :: Maybe Profiling -> EitherT MafiaError IO ()
+initMafia mproj = do
+  -- we just call this for the side-effect, if we can't find a .cabal file then
+  -- mafia should fail fast and not polute the directory with a sandbox.
+  (_ :: ProjectName) <- firstEitherT MafiaProjectError getProjectName
+
   let ensureExeOnPath' e pkg =
         lookupEnv e >>= mapM_ (\b -> when (b == "true") $ ensureExeOnPath pkg)
   firstEitherT MafiaProcessError $ ensureExeOnPath' "MAFIA_HAPPY" (packageId "happy" [1, 19, 5])
   firstEitherT MafiaProcessError $ ensureExeOnPath' "MAFIA_ALEX" (packageId "alex" [3, 1, 6])
+  firstEitherT MafiaInitError $ initialize mproj
