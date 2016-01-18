@@ -13,8 +13,11 @@ module Mafia.Git
     , getSubmodules
     ) where
 
+import           Control.Monad.IO.Class (liftIO)
+
 import           Data.Text (Text)
 import qualified Data.Text as T
+import qualified Data.Text.IO as T
 
 import           Mafia.Path
 import           Mafia.Process
@@ -30,18 +33,27 @@ import           X.Control.Monad.Trans.Either (EitherT, left)
 data GitError =
     GitProcessError ProcessError
   | GitParseError Text
-  deriving (Show)
+    deriving (Show)
 
-data SubmoduleState = NeedsInit | Ready
-  deriving (Eq, Ord, Show)
+data SubmoduleState =
+    NeedsInit
+  | OutOfSync
+  | Ready
+    deriving (Eq, Ord, Show)
 
-data Submodule = Submodule
-  { subState :: SubmoduleState
-  , subName  :: Directory
-  } deriving (Eq, Ord, Show)
+data Submodule =
+  Submodule {
+      subState :: SubmoduleState
+    , subName  :: Directory
+    } deriving (Eq, Ord, Show)
 
 subNeedsInit :: Submodule -> Bool
-subNeedsInit = (== NeedsInit) . subState
+subNeedsInit =
+  (== NeedsInit) . subState
+
+subOutOfSync :: Submodule -> Bool
+subOutOfSync =
+  (== OutOfSync) . subState
 
 renderGitError :: GitError -> Text
 renderGitError = \case
@@ -66,10 +78,14 @@ getProjectRoot =
 initSubmodules :: EitherT GitError IO ()
 initSubmodules = do
   root <- getProjectRoot
-  ss   <- fmap subName . filter subNeedsInit <$> getSubmodules
+  nss  <- fmap subName . filter subNeedsInit <$> getSubmodules
+  oss  <- fmap subName . filter subOutOfSync <$> getSubmodules
 
-  forM_ ss $ \s ->
+  forM_ nss $ \s ->
     callFrom_ GitProcessError root "git" ["submodule", "update", "--init", s]
+
+  forM_ oss $ \s ->
+    liftIO . T.putStrLn $ "Warning: " <> s <> " is out of sync with the git index"
 
 getSubmodules :: EitherT GitError IO [Submodule]
 getSubmodules = do
@@ -84,6 +100,7 @@ parseSubmoduleLine line = Submodule (parseSubmoduleState line) <$> parseSubmodul
 parseSubmoduleState :: Text -> SubmoduleState
 parseSubmoduleState line
   | "-" `T.isPrefixOf` line = NeedsInit
+  | "+" `T.isPrefixOf` line = OutOfSync
   | otherwise               = Ready
 
 parseSubmoduleName :: Text -> EitherT GitError IO Text
