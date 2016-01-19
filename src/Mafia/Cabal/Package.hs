@@ -112,7 +112,9 @@ hashSourcePackage :: Directory -> EitherT CabalError IO SourcePackageHash
 hashSourcePackage dir = do
   ignoredFiles <- Set.fromList <$> readIgnoredFiles dir
 
-  OutErr _ err <- callFrom CabalProcessError dir "cabal" ["sdist", "--list-sources=/dev/stderr"]
+  rdir <- tryMakeRelativeToCurrent dir
+  let sdistError _ = CabalSDistFailed rdir
+  OutErr _ err <- callFrom sdistError dir "cabal" ["sdist", "--list-sources=/dev/stderr"]
 
   let sdistFiles = Set.fromList (fmap normalise (T.lines err))
       files      = Set.toList (sdistFiles `Set.difference` ignoredFiles)
