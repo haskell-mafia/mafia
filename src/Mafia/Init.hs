@@ -73,8 +73,8 @@ renderInitError = \case
 
 ------------------------------------------------------------------------
 
-initialize :: Maybe Profiling -> EitherT InitError IO ()
-initialize mprofiling = do
+initialize :: Maybe Profiling -> Maybe [Flag] -> EitherT InitError IO ()
+initialize mprofiling mflags = do
   firstT InitGitError initSubmodules
 
   sandboxDir <- firstT InitCabalError initSandbox
@@ -84,8 +84,8 @@ initialize mprofiling = do
 
   liftIO (T.putStrLn "Checking for changes to dependencies...")
   previous <- readMafiaState statePath
-  current  <- getMafiaState (mprofiling <|> fmap msProfiling previous)
-  hasDist  <- liftIO $ doesDirectoryExist "dist"
+  current <- getMafiaState (mprofiling <|> fmap msProfiling previous) (mflags <|> fmap msFlags previous)
+  hasDist <- liftIO $ doesDirectoryExist "dist"
 
   packages <- checkPackages
 
@@ -102,6 +102,7 @@ initialize mprofiling = do
   when needConfigure $ do
     firstT InitCabalError . cabal_ "configure" $
       profilingArgs (msProfiling current) <>
+      fmap flagArg (msFlags current) <>
       [ "--enable-tests"
       , "--enable-benchmarks" ]
 
@@ -124,6 +125,13 @@ profilingArgs = \case
     , "--disable-executable-stripping"
     , "--ghc-options=-fprof-auto-top"
     ]
+
+flagArg :: Flag -> Argument
+flagArg = \case
+  FlagOff f ->
+    "--flags=-" <> f
+  FlagOn f ->
+    "--flags=" <> f
 
 -- If a user or an older version of mafia has used 'cabal sandbox add-source'
 -- then some source dependencies can get installed twice unecessarily. This
@@ -164,12 +172,13 @@ data Profiling =
 data MafiaState =
   MafiaState {
       msSourceDependencies :: Set SourcePackage
-    , _msCabalFile         :: Hash
-    , msProfiling    :: Profiling
+    , _msCabalFile :: Hash
+    , msProfiling :: Profiling
+    , msFlags :: [Flag]
     } deriving (Eq, Ord, Show)
 
 mafiaStateVersion :: Int
-mafiaStateVersion = 0
+mafiaStateVersion = 1
 
 instance ToJSON Profiling where
   toJSON = \case
@@ -188,11 +197,12 @@ instance FromJSON Profiling where
       mzero
 
 instance ToJSON MafiaState where
-  toJSON (MafiaState sds cfh p) =
+  toJSON (MafiaState sds cfh p fs) =
     A.object
       [ "source-dependencies" .= sds
-      , "cabal-file"          .= cfh
-      , "profiling"           .= p ]
+      , "cabal-file" .= cfh
+      , "profiling" .= p
+      , "flags" .= fmap renderFlag fs ]
 
 instance FromJSON MafiaState where
   parseJSON = \case
@@ -200,12 +210,17 @@ instance FromJSON MafiaState where
       MafiaState <$>
         o .: "source-dependencies" <*>
         o .: "cabal-file" <*>
-        o .: "profiling"
+        o .: "profiling" <*>
+        (o .: "flags" >>= parseFlags)
     _ ->
       mzero
 
-getMafiaState :: Maybe Profiling -> EitherT InitError IO MafiaState
-getMafiaState mprofiling = do
+parseFlags :: Alternative f => [Text] -> f [Flag]
+parseFlags =
+  traverse (maybe empty pure . parseFlag)
+
+getMafiaState :: Maybe Profiling -> Maybe [Flag] -> EitherT InitError IO MafiaState
+getMafiaState mprofiling mflags = do
   sdeps <- getSourceDependencies
   dir   <- getCurrentDirectory
   mfile <- getCabalFile dir
@@ -213,8 +228,10 @@ getMafiaState mprofiling = do
     Nothing   -> left (InitCabalFileNotFound dir)
     Just file -> do
       hash  <- firstT InitHashError (hashFile file)
-      let profiling = fromMaybe DisableProfiling mprofiling
-      return (MafiaState sdeps hash profiling)
+      let
+        profiling = fromMaybe DisableProfiling mprofiling
+        flags = fromMaybe [] mflags
+      return (MafiaState sdeps hash profiling flags)
 
 getSourceDependencies :: EitherT InitError IO (Set SourcePackage)
 getSourceDependencies = do

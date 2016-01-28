@@ -7,6 +7,7 @@ module Mafia.Cabal.Types
 
   , Flag(..)
   , renderFlag
+  , parseFlag
 
   , Package(..)
   , PackageRef(..)
@@ -28,6 +29,7 @@ module Mafia.Cabal.Types
 import qualified Codec.Archive.Tar as Tar
 
 import           Data.Aeson (Value(..), ToJSON(..), FromJSON(..), (.:), (.=), object)
+import           Data.Char (isAlpha)
 import           Data.Text (Text)
 import qualified Data.Text as T
 
@@ -124,6 +126,20 @@ renderFlag :: Flag -> Text
 renderFlag = \case
   FlagOff f -> "-" <> f
   FlagOn  f -> "+" <> f
+
+parseFlag :: Alternative f => Text -> f Flag
+parseFlag f0 =
+  case T.uncons f0 of
+    Just ('-', f1) ->
+      pure $ FlagOff f1
+    Just ('+', f1) ->
+      pure $ FlagOn f1
+    Just (x, _) | isAlpha x ->
+      pure $ FlagOn f0
+    Just _ ->
+      empty
+    Nothing ->
+      empty
 
 renderPackagePlan :: PackagePlan -> Text
 renderPackagePlan (PackagePlan (PackageRef pid fs _) latest deps status) =

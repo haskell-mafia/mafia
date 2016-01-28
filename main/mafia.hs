@@ -63,13 +63,13 @@ data MafiaCommand =
     MafiaUpdate
   | MafiaHash
   | MafiaClean
-  | MafiaBuild Profiling [Argument]
-  | MafiaTest [Argument]
-  | MafiaTestCI [Argument]
-  | MafiaRepl [Argument]
-  | MafiaBench [Argument]
-  | MafiaQuick [GhciInclude] [File]
-  | MafiaWatch [GhciInclude] File [Argument]
+  | MafiaBuild Profiling [Flag] [Argument]
+  | MafiaTest [Flag] [Argument]
+  | MafiaTestCI [Flag] [Argument]
+  | MafiaRepl [Flag] [Argument]
+  | MafiaBench [Flag] [Argument]
+  | MafiaQuick [Flag] [GhciInclude] [File]
+  | MafiaWatch [Flag] [GhciInclude] File [Argument]
   | MafiaHoogle [Argument]
     deriving (Eq, Show)
 
@@ -86,20 +86,20 @@ run = \case
     mafiaHash
   MafiaClean ->
     mafiaClean
-  MafiaBuild p args ->
-    mafiaBuild p args
-  MafiaTest args ->
-    mafiaTest args
-  MafiaTestCI args ->
-    mafiaTestCI args
-  MafiaRepl args ->
-    mafiaRepl args
-  MafiaBench args ->
-    mafiaBench args
-  MafiaQuick incs entries ->
-    mafiaQuick incs entries
-  MafiaWatch incs entry args ->
-    mafiaWatch incs entry args
+  MafiaBuild p flags args ->
+    mafiaBuild p flags args
+  MafiaTest flags args ->
+    mafiaTest flags args
+  MafiaTestCI flags args ->
+    mafiaTestCI flags args
+  MafiaRepl flags args ->
+    mafiaRepl flags args
+  MafiaBench flags args ->
+    mafiaBench flags args
+  MafiaQuick flags incs entries ->
+    mafiaQuick flags incs entries
+  MafiaWatch flags incs entry args ->
+    mafiaWatch flags incs entry args
   MafiaHoogle args -> do
     mafiaHoogle args
 
@@ -121,31 +121,31 @@ commands =
             (pure MafiaClean)
 
  , command' "build" "Build this project, including all executables and test suites."
-            (MafiaBuild <$> pProfiling <*> many pCabalArgs)
+            (MafiaBuild <$> pProfiling <*> many pFlag <*> many pCabalArgs)
 
  , command' "test" "Test this project, by default this runs all test suites."
-            (MafiaTest <$> many pCabalArgs)
+            (MafiaTest <$> many pFlag <*> many pCabalArgs)
 
  , command' "testci" ("Test this project, but process control characters (\\b, \\r) which "
                    <> "reposition the cursor, prior to emitting each line of output.")
-            (MafiaTestCI <$> many pCabalArgs)
+            (MafiaTestCI <$> many pFlag <*> many pCabalArgs)
 
  , command' "repl" "Start the repl, by default on the main library source."
-            (MafiaRepl <$> many pCabalArgs)
+            (MafiaRepl <$> many pFlag <*> many pCabalArgs)
 
  , command' "bench" "Run project benchmarks"
-            (MafiaBench <$> many pCabalArgs)
+            (MafiaBench <$> many pFlag <*> many pCabalArgs)
 
  , command' "quick" ( "Start the repl directly skipping cabal, this is useful "
                    <> "developing across multiple source trees at once." )
-            (MafiaQuick <$> pGhciIncludes <*> some pGhciEntryPoint)
+            (MafiaQuick <$> many pFlag <*> pGhciIncludes <*> some pGhciEntryPoint)
 
  , command' "watch" ( "Watches filesystem for changes and stays running, compiles "
                    <> "and gives quick feedback. "
                    <> "Similarly to quick needs an entrypoint. "
                    <> "To run tests use '-T EXPR' i.e. "
                    <> "mafia watch test/test.hs -- -T Test.Pure.tests" )
-            (MafiaWatch <$> pGhciIncludes <*> pGhciEntryPoint <*> many pGhcidArgs)
+            (MafiaWatch <$> many pFlag <*> pGhciIncludes <*> pGhciEntryPoint <*> many pGhcidArgs)
 
  , command' "hoogle" ( "Run a hoogle query across the local dependencies" )
             (MafiaHoogle <$> many pCabalArgs)
@@ -181,6 +181,14 @@ pGhciIncludeDirectory =
     <> short 'i'
     <> metavar "DIRECTORY"
     <> help "An additional source directory for GHCi."
+
+pFlag :: Parser Flag
+pFlag =
+  option (parseFlag =<< textRead) $
+       long "flag"
+    <> short 'f'
+    <> metavar "FLAG"
+    <> help "Flag to pass to cabal configure."
 
 pCabalArgs :: Parser Argument
 pCabalArgs =
@@ -222,49 +230,49 @@ mafiaClean = do
   Out (_ :: ByteString) <- liftCabal $ cabal "clean" []
   liftCabal removeSandbox
 
-mafiaBuild :: Profiling -> [Argument] -> EitherT MafiaError IO ()
-mafiaBuild p args = do
-  initMafia $ Just p
+mafiaBuild :: Profiling -> [Flag] -> [Argument] -> EitherT MafiaError IO ()
+mafiaBuild p flags args = do
+  initMafia p flags
   liftCabal . cabal_ "build" $ ["-j", "--ghc-option=-Werror"] <> args
 
-mafiaTest :: [Argument] -> EitherT MafiaError IO ()
-mafiaTest args = do
-  initMafia $ Just DisableProfiling
+mafiaTest :: [Flag] -> [Argument] -> EitherT MafiaError IO ()
+mafiaTest flags args = do
+  initMafia DisableProfiling flags
   liftCabal . cabal_ "test" $ ["-j", "--show-details=streaming"] <> args
 
-mafiaTestCI :: [Argument] -> EitherT MafiaError IO ()
-mafiaTestCI args = do
-  initMafia $ Just DisableProfiling
+mafiaTestCI :: [Flag] -> [Argument] -> EitherT MafiaError IO ()
+mafiaTestCI flags args = do
+  initMafia DisableProfiling flags
   Clean <- liftCabal . cabal "test" $ ["-j", "--show-details=streaming"] <> args
   return ()
 
-mafiaRepl :: [Argument] -> EitherT MafiaError IO ()
-mafiaRepl args = do
-  initMafia $ Just DisableProfiling
+mafiaRepl :: [Flag] -> [Argument] -> EitherT MafiaError IO ()
+mafiaRepl flags args = do
+  initMafia DisableProfiling flags
   liftCabal $ cabal_ "repl" args
 
-mafiaBench :: [Argument] -> EitherT MafiaError IO ()
-mafiaBench args = do
-  initMafia $ Just DisableProfiling
+mafiaBench :: [Flag] -> [Argument] -> EitherT MafiaError IO ()
+mafiaBench flags args = do
+  initMafia DisableProfiling flags
   liftCabal $ cabal_ "bench" args
 
-mafiaQuick :: [GhciInclude] -> [File] -> EitherT MafiaError IO ()
-mafiaQuick extraIncludes paths = do
+mafiaQuick :: [Flag] -> [GhciInclude] -> [File] -> EitherT MafiaError IO ()
+mafiaQuick flags extraIncludes paths = do
   args <- ghciArgs extraIncludes paths
-  initMafia $ Just DisableProfiling
+  initMafia DisableProfiling flags
   exec MafiaProcessError "ghci" args
 
-mafiaWatch :: [GhciInclude] -> File -> [Argument] -> EitherT MafiaError IO ()
-mafiaWatch extraIncludes path extraArgs = do
+mafiaWatch :: [Flag] -> [GhciInclude] -> File -> [Argument] -> EitherT MafiaError IO ()
+mafiaWatch flags extraIncludes path extraArgs = do
   ghcidExe <- bimapT MafiaProcessError (</> "ghcid") $ installBinary (packageId "ghcid" [0, 5]) []
   args <- ghciArgs extraIncludes [path]
-  initMafia $ Just DisableProfiling
+  initMafia DisableProfiling flags
   exec MafiaProcessError ghcidExe $ [ "-c", T.unwords ("ghci" : args) ] <> extraArgs
 
 mafiaHoogle :: [Argument] -> EitherT MafiaError IO ()
 mafiaHoogle args = do
   hkg <- fromMaybe "https://hackage.haskell.org/package" <$> lookupEnv "HACKAGE"
-  firstT MafiaInitError (initialize Nothing)
+  firstT MafiaInitError (initialize Nothing Nothing)
   hoogle hkg args
 
 ghciArgs :: [GhciInclude] -> [File] -> EitherT MafiaError IO [Argument]
@@ -310,8 +318,8 @@ getPackageDatabases = do
   where
     isPackage = ("-packages.conf.d" `T.isSuffixOf`)
 
-initMafia :: Maybe Profiling -> EitherT MafiaError IO ()
-initMafia mproj = do
+initMafia :: Profiling -> [Flag] -> EitherT MafiaError IO ()
+initMafia prof flags = do
   -- we just call this for the side-effect, if we can't find a .cabal file then
   -- mafia should fail fast and not polute the directory with a sandbox.
   (_ :: ProjectName) <- firstT MafiaProjectError getProjectName
@@ -320,4 +328,4 @@ initMafia mproj = do
         lookupEnv e >>= mapM_ (\b -> when (b == "true") $ ensureExeOnPath pkg)
   firstT MafiaProcessError $ ensureExeOnPath' "MAFIA_HAPPY" (packageId "happy" [1, 19, 5])
   firstT MafiaProcessError $ ensureExeOnPath' "MAFIA_ALEX" (packageId "alex" [3, 1, 6])
-  firstT MafiaInitError $ initialize mproj
+  firstT MafiaInitError $ initialize (Just prof) (Just flags)
