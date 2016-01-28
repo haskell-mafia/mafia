@@ -66,7 +66,7 @@ import qualified System.Process as Process
 import qualified System.Posix.Process as Posix
 
 import           X.Control.Monad.Trans.Either (EitherT, pattern EitherT)
-import           X.Control.Monad.Trans.Either (firstEitherT, hoistEither)
+import           X.Control.Monad.Trans.Either (hoistEither)
 
 ------------------------------------------------------------------------
 
@@ -220,7 +220,7 @@ call :: (ProcessResult a, Functor m, MonadIO m, MonadCatch m)
      -> [Argument]
      -> EitherT e m a
 
-call up cmd args = firstEitherT up (callProcess process)
+call up cmd args = firstT up (callProcess process)
   where
     process = Process { processCommand     = cmd
                       , processArguments   = args
@@ -248,7 +248,7 @@ callFrom :: (ProcessResult a, Functor m, MonadIO m, MonadCatch m)
          -> [Argument]
          -> EitherT e m a
 
-callFrom up dir cmd args = firstEitherT up (callProcess process)
+callFrom up dir cmd args = firstT up (callProcess process)
   where
     process = Process { processCommand     = cmd
                       , processArguments   = args
@@ -289,7 +289,7 @@ exec :: (Functor m, MonadIO m, MonadCatch m)
      -> [Argument]
      -> EitherT e m a
 
-exec up cmd args = firstEitherT up (execProcess process)
+exec up cmd args = firstT up (execProcess process)
   where
     process = Process { processCommand     = cmd
                       , processArguments   = args
@@ -305,7 +305,7 @@ execFrom :: (Functor m, MonadIO m, MonadCatch m)
          -> [Argument]
          -> EitherT e m a
 
-execFrom up dir cmd args = firstEitherT up (execProcess process)
+execFrom up dir cmd args = firstT up (execProcess process)
   where
     process = Process { processCommand     = cmd
                       , processArguments   = args
@@ -357,7 +357,7 @@ handleIO p =
   in handle (hoistEither . Left . ProcessException p . fromIO)
 
 waitCatchE :: (Functor m, MonadIO m) => Process -> Async a -> EitherT ProcessError m a
-waitCatchE p = firstEitherT (ProcessException p) . EitherT . liftIO . waitCatch
+waitCatchE p = firstT (ProcessException p) . EitherT . liftIO . waitCatch
 
 ------------------------------------------------------------------------
 

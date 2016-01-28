@@ -28,7 +28,7 @@ import           P
 
 import           System.IO (IO, stderr)
 
-import           X.Control.Monad.Trans.Either (EitherT, firstEitherT)
+import           X.Control.Monad.Trans.Either (EitherT)
 
 
 data SubmoduleError =
@@ -58,24 +58,24 @@ syncCabalSources = do
 
 repairSandbox :: EitherT SubmoduleError IO ()
 repairSandbox = do
-  dir <- firstEitherT SubmoduleCabalError initSandbox
-  firstEitherT SubmoduleCabalError (repairIndexFile dir)
+  dir <- firstT SubmoduleCabalError initSandbox
+  firstT SubmoduleCabalError (repairIndexFile dir)
 
 addSandboxSource :: Directory -> EitherT SubmoduleError IO ()
 addSandboxSource dir = do
   rel <- fromMaybe dir <$> makeRelativeToCurrentDirectory dir
   liftIO (T.hPutStrLn stderr ("Sandbox: Adding " <> rel))
-  firstEitherT SubmoduleCabalError $ sandbox_ "add-source" [dir]
+  firstT SubmoduleCabalError $ sandbox_ "add-source" [dir]
 
 removeSandboxSource :: Directory -> EitherT SubmoduleError IO ()
 removeSandboxSource dir = do
   rel <- fromMaybe dir <$> makeRelativeToCurrentDirectory dir
   liftIO (T.hPutStrLn stderr ("Sandbox: Removing " <> rel))
-  firstEitherT SubmoduleCabalError $ sandbox_ "delete-source" ["-v0", dir]
+  firstT SubmoduleCabalError $ sandbox_ "delete-source" ["-v0", dir]
 
 getSandboxSources :: EitherT SubmoduleError IO (Set Directory)
 getSandboxSources = do
-  Out sources <- firstEitherT SubmoduleCabalError $ sandbox "list-sources" []
+  Out sources <- firstT SubmoduleCabalError $ sandbox "list-sources" []
 
   let dropHeader = drop 3
       dropFooter = reverse . drop 2 . reverse
@@ -88,12 +88,12 @@ getSandboxSources = do
 
 getSubmoduleSources :: EitherT SubmoduleError IO (Set Directory)
 getSubmoduleSources = Set.union <$> getConfiguredSources
-                                <*> firstEitherT SubmoduleGitError getConventionSources
+                                <*> firstT SubmoduleGitError getConventionSources
 
 getConfiguredSources :: EitherT SubmoduleError IO (Set Directory)
 getConfiguredSources = do
-  root <- firstEitherT SubmoduleGitError getProjectRoot
-  name <- firstEitherT SubmoduleProjectError getProjectName
+  root <- firstT SubmoduleGitError getProjectRoot
+  name <- firstT SubmoduleProjectError getProjectName
   cfg  <- readUtf8 (name <> ".submodules")
   return . Set.fromList
          . fmap (root </>)

@@ -33,7 +33,7 @@ import           P
 
 import           System.IO (IO, stderr)
 
-import           X.Control.Monad.Trans.Either (EitherT, bimapEitherT, firstEitherT, hoistEither, runEitherT)
+import           X.Control.Monad.Trans.Either (EitherT, hoistEither, runEitherT)
 
 
 newtype HooglePackagesSandbox = HooglePackagesSandbox [PackageId]
@@ -48,7 +48,7 @@ hoogle hackageRoot args = do
 
 hooglePackages :: Text -> EitherT MafiaError IO HooglePackagesSandbox
 hooglePackages hackageRoot = do
-  firstEitherT MafiaInitError $ initialize Nothing
+  firstT MafiaInitError $ initialize Nothing
   db <- hoogleCacheDir
   hoogleExe <- installHoogle
   Out pkgStr <- liftCabal $ sandbox "hc-pkg" ["list"]
@@ -110,7 +110,7 @@ hoogleCacheDir =
 
 installHoogle :: EitherT MafiaError IO File
 installHoogle =
-  bimapEitherT MafiaProcessError (</> "hoogle") $
+  bimapT MafiaProcessError (</> "hoogle") $
     installBinary (packageId "hoogle" [4, 2, 43]) [packageId "happy" [1, 19, 5]]
 
 hoogleDbFile :: Directory -> PackageId -> File

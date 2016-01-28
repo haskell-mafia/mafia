@@ -79,8 +79,8 @@ renderInstallError = \case
 installDependencies :: Flavour -> [SourcePackage] -> EitherT InstallError IO ()
 installDependencies flavour spkgs = do
   globals   <- installGlobalDependencies flavour spkgs
-  _         <- firstEitherT InstallCabalError initSandbox
-  packageDB <- firstEitherT InstallCabalError getPackageDB
+  _         <- firstT InstallCabalError initSandbox
+  packageDB <- firstT InstallCabalError getPackageDB
 
   ignoreIO $ removeDirectoryRecursive packageDB
   createDirectoryIfMissing True packageDB
@@ -89,19 +89,19 @@ installDependencies flavour spkgs = do
   -- package-db, then call recache so that ghc is aware of them.
   env <- getPackageEnv
   mapM_ (link packageDB env) globals
-  Hush <- firstEitherT InstallCabalError $ cabal "sandbox" ["hc-pkg", "recache"]
+  Hush <- firstT InstallCabalError $ cabal "sandbox" ["hc-pkg", "recache"]
 
   return ()
 
 installGlobalDependencies :: Flavour -> [SourcePackage] -> EitherT InstallError IO [Package]
 installGlobalDependencies flavour spkgs = do
-  deps <- firstEitherT InstallCabalError (findDependencies spkgs)
+  deps <- firstT InstallCabalError (findDependencies spkgs)
   let producer q = mapM_ (writeQueue q) deps
 
   mw  <- getMafiaWorkers
   gw  <- getGhcWorkers
   env <- getPackageEnv
-  firstEitherT squashRunError $ consume_ producer mw (install gw env flavour)
+  firstT squashRunError $ consume_ producer mw (install gw env flavour)
 
   return deps
 
@@ -210,7 +210,7 @@ install w penv flavour p@(Package (PackageRef pid _ _) deps _) = do
               sbcfg = packageSandboxConfig penv p
 
           let sbcabal x xs =
-                firstEitherT InstallCabalError $ cabalFrom sbdir (Just sbcfg) x xs
+                firstT InstallCabalError $ cabalFrom sbdir (Just sbcfg) x xs
 
           liftIO . T.putStrLn $ "Building " <> renderHashId p <> renderFlavourSuffix flavour
 
@@ -252,7 +252,7 @@ createPackageSandbox penv p@(Package (PackageRef pid _ msrc) deps _) = do
       sbsrc = packageSourceDir penv p
 
   let sbcabal x xs =
-        firstEitherT InstallCabalError $ cabalFrom sbdir (Just sbcfg) x xs
+        firstT InstallCabalError $ cabalFrom sbdir (Just sbcfg) x xs
 
   ignoreIO (removeDirectoryRecursive sbdir)
   createDirectoryIfMissing True sbdir
@@ -277,7 +277,7 @@ createPackageSandbox penv p@(Package (PackageRef pid _ msrc) deps _) = do
       Hush <- sbcabal "sandbox" ["add-source", spDirectory src]
       return ()
 
-  db <- firstEitherT InstallCabalError (readPackageDB sbcfg)
+  db <- firstT InstallCabalError (readPackageDB sbcfg)
 
   -- create symlinks to the relevant package .conf files in the
   -- package-db, then call recache so that ghc is aware of them.
@@ -343,7 +343,7 @@ envPackageCache env =
 
 getPackageEnv :: EitherT InstallError IO PackageEnv
 getPackageEnv = do
-  ghc  <- firstEitherT InstallGhcError getGhcVersion
+  ghc  <- firstT InstallGhcError getGhcVersion
   home <- getMafiaHome
   return (PackageEnv ghc home)
 

@@ -29,7 +29,7 @@ import           P
 
 import           System.IO (IO)
 
-import           X.Control.Monad.Trans.Either (EitherT, runEitherT, firstEitherT, left)
+import           X.Control.Monad.Trans.Either (EitherT, runEitherT, left)
 
 
 sandbox :: ProcessResult a => Argument -> [Argument] -> EitherT CabalError IO a
@@ -92,7 +92,7 @@ sandboxRoot =
 -- | The location where the sandbox is inferred to be (based on the GHC version)
 getInferredSandboxDir :: EitherT CabalError IO SandboxDir
 getInferredSandboxDir = do
-  ghcVer <- firstEitherT CabalGhcError getGhcVersion
+  ghcVer <- firstT CabalGhcError getGhcVersion
   return $ sandboxRoot </> ghcVer
 
 -- | The location where the sandbox is configured to be (based on the cabal.sandbox.config)

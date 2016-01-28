@@ -34,8 +34,7 @@ import           System.Exit (exitSuccess)
 import           System.IO (BufferMode(..), hSetBuffering)
 import           System.IO (IO, stdout, stderr, putStrLn, print)
 
-import           X.Control.Monad.Trans.Either (EitherT)
-import           X.Control.Monad.Trans.Either (bimapEitherT, firstEitherT, hoistEither)
+import           X.Control.Monad.Trans.Either (EitherT, hoistEither)
 import           X.Control.Monad.Trans.Either.Exit (orDie)
 import           X.Options.Applicative (Parser, CommandFields, Mod)
 import           X.Options.Applicative (SafeCommand(..), RunType(..))
@@ -50,52 +49,59 @@ main = do
   setNumCapabilities nprocs
   hSetBuffering stdout LineBuffering
   hSetBuffering stderr LineBuffering
-  dispatch parser >>= \sc ->
-    case sc of
-      VersionCommand ->
-        putStrLn buildInfoVersion >> exitSuccess
-      RunCommand DryRun c ->
-        print c >> exitSuccess
-      RunCommand RealRun c ->
-        orDie renderMafiaError (run c)
+  dispatch parser >>= \case
+    VersionCommand ->
+      putStrLn buildInfoVersion >> exitSuccess
+    RunCommand DryRun c ->
+      print c >> exitSuccess
+    RunCommand RealRun c ->
+      orDie renderMafiaError (run c)
 
 ------------------------------------------------------------------------
 
-data MafiaCommand
-  = MafiaUpdate
+data MafiaCommand =
+    MafiaUpdate
   | MafiaHash
   | MafiaClean
-  | MafiaBuild  Profiling [Argument]
-  | MafiaTest   [Argument]
+  | MafiaBuild Profiling [Argument]
+  | MafiaTest [Argument]
   | MafiaTestCI [Argument]
-  | MafiaRepl   [Argument]
-  | MafiaBench  [Argument]
-  | MafiaQuick  [GhciInclude] [File]
-  | MafiaWatch  [GhciInclude] File [Argument]
+  | MafiaRepl [Argument]
+  | MafiaBench [Argument]
+  | MafiaQuick [GhciInclude] [File]
+  | MafiaWatch [GhciInclude] File [Argument]
   | MafiaHoogle [Argument]
-  deriving (Eq, Show)
+    deriving (Eq, Show)
 
-data GhciInclude
-  = Directory Directory
+data GhciInclude =
+    Directory Directory
   | AllLibraries
-  deriving (Eq, Show)
+    deriving (Eq, Show)
 
 run :: MafiaCommand -> EitherT MafiaError IO ()
 run = \case
-  MafiaUpdate                 -> update
-  MafiaHash                   -> hash
-  MafiaClean                  -> clean
-  MafiaBuild  p args          -> build  p args
-  MafiaTest   args            -> test   args
-  MafiaTestCI args            -> testci args
-  MafiaRepl   args            -> repl   args
-  MafiaBench  args            -> bench  args
-  MafiaQuick  incs entries    -> quick  incs entries
-  MafiaWatch  incs entry args -> watch  incs entry args
-  MafiaHoogle args            -> do
-    hkg <- fromMaybe "https://hackage.haskell.org/package" <$> lookupEnv "HACKAGE"
-    firstEitherT MafiaInitError (initialize Nothing)
-    hoogle hkg args
+  MafiaUpdate ->
+    mafiaUpdate
+  MafiaHash ->
+    mafiaHash
+  MafiaClean ->
+    mafiaClean
+  MafiaBuild p args ->
+    mafiaBuild p args
+  MafiaTest args ->
+    mafiaTest args
+  MafiaTestCI args ->
+    mafiaTestCI args
+  MafiaRepl args ->
+    mafiaRepl args
+  MafiaBench args ->
+    mafiaBench args
+  MafiaQuick incs entries ->
+    mafiaQuick incs entries
+  MafiaWatch incs entry args ->
+    mafiaWatch incs entry args
+  MafiaHoogle args -> do
+    mafiaHoogle args
 
 parser :: Parser (SafeCommand MafiaCommand)
 parser = safeCommand . subparser . mconcat $ commands
@@ -190,8 +196,8 @@ pGhcidArgs =
 
 ------------------------------------------------------------------------
 
-update :: EitherT MafiaError IO ()
-update = do
+mafiaUpdate :: EitherT MafiaError IO ()
+mafiaUpdate = do
   home <- getHomeDirectory
 
   let index = home </> ".cabal/packages/hackage.haskell.org/00-index.cache"
@@ -205,55 +211,61 @@ update = do
   when (age > oneDay) $
     liftCabal $ cabal_ "update" []
 
-hash :: EitherT MafiaError IO ()
-hash = do
+mafiaHash :: EitherT MafiaError IO ()
+mafiaHash = do
   sph <- liftCabal (hashSourcePackage ".")
   liftIO (T.putStr (renderSourcePackageHash sph))
 
-clean :: EitherT MafiaError IO ()
-clean = do
+mafiaClean :: EitherT MafiaError IO ()
+mafiaClean = do
   -- "Out _" ignores the spurious "cleaning..." message that cabal emits on success
   Out (_ :: ByteString) <- liftCabal $ cabal "clean" []
   liftCabal removeSandbox
 
-build :: Profiling -> [Argument] -> EitherT MafiaError IO ()
-build p args = do
+mafiaBuild :: Profiling -> [Argument] -> EitherT MafiaError IO ()
+mafiaBuild p args = do
   initMafia $ Just p
   liftCabal . cabal_ "build" $ ["-j", "--ghc-option=-Werror"] <> args
 
-test :: [Argument] -> EitherT MafiaError IO ()
-test args = do
+mafiaTest :: [Argument] -> EitherT MafiaError IO ()
+mafiaTest args = do
   initMafia $ Just DisableProfiling
   liftCabal . cabal_ "test" $ ["-j", "--show-details=streaming"] <> args
 
-testci :: [Argument] -> EitherT MafiaError IO ()
-testci args = do
+mafiaTestCI :: [Argument] -> EitherT MafiaError IO ()
+mafiaTestCI args = do
   initMafia $ Just DisableProfiling
   Clean <- liftCabal . cabal "test" $ ["-j", "--show-details=streaming"] <> args
   return ()
 
-repl :: [Argument] -> EitherT MafiaError IO ()
-repl args = do
+mafiaRepl :: [Argument] -> EitherT MafiaError IO ()
+mafiaRepl args = do
   initMafia $ Just DisableProfiling
   liftCabal $ cabal_ "repl" args
 
-bench :: [Argument] -> EitherT MafiaError IO ()
-bench args = do
+mafiaBench :: [Argument] -> EitherT MafiaError IO ()
+mafiaBench args = do
   initMafia $ Just DisableProfiling
   liftCabal $ cabal_ "bench" args
 
-quick :: [GhciInclude] -> [File] -> EitherT MafiaError IO ()
-quick extraIncludes paths = do
+mafiaQuick :: [GhciInclude] -> [File] -> EitherT MafiaError IO ()
+mafiaQuick extraIncludes paths = do
   args <- ghciArgs extraIncludes paths
   initMafia $ Just DisableProfiling
   exec MafiaProcessError "ghci" args
 
-watch :: [GhciInclude] -> File -> [Argument] -> EitherT MafiaError IO ()
-watch extraIncludes path extraArgs = do
-  ghcidExe <- bimapEitherT MafiaProcessError (</> "ghcid") $ installBinary (packageId "ghcid" [0, 5]) []
+mafiaWatch :: [GhciInclude] -> File -> [Argument] -> EitherT MafiaError IO ()
+mafiaWatch extraIncludes path extraArgs = do
+  ghcidExe <- bimapT MafiaProcessError (</> "ghcid") $ installBinary (packageId "ghcid" [0, 5]) []
   args <- ghciArgs extraIncludes [path]
   initMafia $ Just DisableProfiling
   exec MafiaProcessError ghcidExe $ [ "-c", T.unwords ("ghci" : args) ] <> extraArgs
+
+mafiaHoogle :: [Argument] -> EitherT MafiaError IO ()
+mafiaHoogle args = do
+  hkg <- fromMaybe "https://hackage.haskell.org/package" <$> lookupEnv "HACKAGE"
+  firstT MafiaInitError (initialize Nothing)
+  hoogle hkg args
 
 ghciArgs :: [GhciInclude] -> [File] -> EitherT MafiaError IO [Argument]
 ghciArgs extraIncludes paths = do
@@ -279,7 +291,7 @@ reifyInclude :: GhciInclude -> EitherT MafiaError IO [Directory]
 reifyInclude = \case
   Directory dir -> return [dir]
   AllLibraries  -> do
-    absDirs <- Set.toList <$> firstEitherT MafiaSubmoduleError getSubmoduleSources
+    absDirs <- Set.toList <$> firstT MafiaSubmoduleError getSubmoduleSources
     relDirs <- mapM tryMakeRelativeToCurrent absDirs
     return [ dir </> sub | dir <- relDirs
                          , sub <- ["src", "test", "gen", "dist/build/autogen"] ]
@@ -302,10 +314,10 @@ initMafia :: Maybe Profiling -> EitherT MafiaError IO ()
 initMafia mproj = do
   -- we just call this for the side-effect, if we can't find a .cabal file then
   -- mafia should fail fast and not polute the directory with a sandbox.
-  (_ :: ProjectName) <- firstEitherT MafiaProjectError getProjectName
+  (_ :: ProjectName) <- firstT MafiaProjectError getProjectName
 
   let ensureExeOnPath' e pkg =
         lookupEnv e >>= mapM_ (\b -> when (b == "true") $ ensureExeOnPath pkg)
-  firstEitherT MafiaProcessError $ ensureExeOnPath' "MAFIA_HAPPY" (packageId "happy" [1, 19, 5])
-  firstEitherT MafiaProcessError $ ensureExeOnPath' "MAFIA_ALEX" (packageId "alex" [3, 1, 6])
-  firstEitherT MafiaInitError $ initialize mproj
+  firstT MafiaProcessError $ ensureExeOnPath' "MAFIA_HAPPY" (packageId "happy" [1, 19, 5])
+  firstT MafiaProcessError $ ensureExeOnPath' "MAFIA_ALEX" (packageId "alex" [3, 1, 6])
+  firstT MafiaInitError $ initialize mproj
