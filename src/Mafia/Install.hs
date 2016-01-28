@@ -5,6 +5,7 @@
 module Mafia.Install
   ( Flavour(..)
   , installDependencies
+  , transitiveOfPackages
 
   , InstallError(..)
   , renderInstallError
@@ -76,9 +77,9 @@ renderInstallError = \case
 
 ------------------------------------------------------------------------
 
-installDependencies :: Flavour -> [SourcePackage] -> EitherT InstallError IO ()
-installDependencies flavour spkgs = do
-  globals   <- installGlobalDependencies flavour spkgs
+installDependencies :: Flavour -> [Flag] -> [SourcePackage] -> EitherT InstallError IO ()
+installDependencies flavour flags spkgs = do
+  globals   <- installGlobalDependencies flavour flags spkgs
   _         <- firstT InstallCabalError initSandbox
   packageDB <- firstT InstallCabalError getPackageDB
 
@@ -93,9 +94,9 @@ installDependencies flavour spkgs = do
 
   return ()
 
-installGlobalDependencies :: Flavour -> [SourcePackage] -> EitherT InstallError IO [Package]
-installGlobalDependencies flavour spkgs = do
-  deps <- firstT InstallCabalError (findDependencies spkgs)
+installGlobalDependencies :: Flavour -> [Flag] -> [SourcePackage] -> EitherT InstallError IO [Package]
+installGlobalDependencies flavour flags spkgs = do
+  deps <- firstT InstallCabalError (findDependencies flags spkgs)
   let producer q = mapM_ (writeQueue q) deps
 
   mw  <- getMafiaWorkers
@@ -103,7 +104,7 @@ installGlobalDependencies flavour spkgs = do
   env <- getPackageEnv
   firstT squashRunError $ consume_ producer mw (install gw env flavour)
 
-  return deps
+  return . Set.toList $ transitiveOfPackages deps
 
 ------------------------------------------------------------------------
 

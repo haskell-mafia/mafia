@@ -14,11 +14,12 @@ module Mafia.Package
   ) where
 
 import           Data.Aeson (Value(..), ToJSON(..), FromJSON(..))
+import qualified Data.CaseInsensitive as CI
 import qualified Data.Char as Char
-import           Data.Version (Version (..))
-import qualified Data.Version as Version
 import           Data.Text (Text)
 import qualified Data.Text as T
+import           Data.Version (Version (..))
+import qualified Data.Version as Version
 
 import           P
 
@@ -36,8 +37,13 @@ data PackageId =
   PackageId {
       pkgName :: PackageName
     , pkgVersion :: Version
-    } deriving (Eq, Ord, Show)
+    } deriving (Eq, Show)
 
+instance Ord PackageId where
+  compare (PackageId xn xv) (PackageId yn yv) =
+    compare
+      (CI.mk $ unPackageName xn, xv)
+      (CI.mk $ unPackageName yn, yv)
 
 packageId :: Text -> [Int] -> PackageId
 packageId n v =

@@ -22,6 +22,7 @@ library
                     , attoparsec                      == 0.12.*
                     , base16-bytestring               == 0.1.*
                     , bytestring                      == 0.10.*
+                    , case-insensitive                == 1.2.*
                     , containers                      == 0.5.*
                     , cryptohash                      == 0.11.*
                     , directory                       == 1.2.*
@@ -67,6 +68,7 @@ library
                     Mafia.Process
                     Mafia.Project
                     Mafia.Submodule
+                    Mafia.Tree
                     Paths_ambiata_mafia
 
 executable mafia

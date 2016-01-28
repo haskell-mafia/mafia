@@ -6,6 +6,7 @@
 module Mafia.Init
   ( Profiling(..)
   , initialize
+  , getSourceDependencies
 
   , InitError(..)
   , renderInitError
@@ -93,9 +94,10 @@ initialize mprofiling mflags = do
 
   when needInstall $ do
     liftIO (T.putStrLn "Installing dependencies...")
-    let sdeps    = Set.toList (msSourceDependencies current)
+    let sdeps = Set.toList (msSourceDependencies current)
         flavours = profilingFlavour (msProfiling current)
-    firstT InitInstallError $ installDependencies flavours sdeps
+        flags = msFlags current
+    firstT InitInstallError $ installDependencies flavours flags sdeps
 
   let needConfigure = needInstall || not hasDist
 
@@ -125,13 +127,6 @@ profilingArgs = \case
     , "--disable-executable-stripping"
     , "--ghc-options=-fprof-auto-top"
     ]
-
-flagArg :: Flag -> Argument
-flagArg = \case
-  FlagOff f ->
-    "--flags=-" <> f
-  FlagOn f ->
-    "--flags=" <> f
 
 -- If a user or an older version of mafia has used 'cabal sandbox add-source'
 -- then some source dependencies can get installed twice unecessarily. This

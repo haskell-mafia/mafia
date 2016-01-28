@@ -2,8 +2,10 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE NoMonomorphismRestriction #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 module Mafia.Cabal.Dependencies
   ( findDependencies
+  , flagArg
 
     -- exported for testing
   , parsePackagePlan
@@ -27,6 +29,7 @@ import           Mafia.Cabal.Package
 import           Mafia.Cabal.Process (cabalFrom)
 import           Mafia.Cabal.Types
 import           Mafia.Cabal.Version
+import           Mafia.Ghc
 import           Mafia.IO
 import           Mafia.Package
 import           Mafia.Path
@@ -41,14 +44,17 @@ import           X.Control.Monad.Trans.Either
 
 ------------------------------------------------------------------------
 
-findDependencies :: [SourcePackage] -> EitherT CabalError IO [Package]
-findDependencies spkgs = do
-  fromInstallPlan spkgs <$> calculateInstallPlan spkgs
+findDependencies :: [Flag] -> [SourcePackage] -> EitherT CabalError IO [Package]
+findDependencies flags spkgs = do
+  fromInstallPlan spkgs <$> calculateInstallPlan flags spkgs
 
 fromInstallPlan :: [SourcePackage] -> [PackagePlan] -> [Package]
 fromInstallPlan spkgs rdeps =
   let rdMap =
         mapFromList (refId . ppRef) rdeps
+
+      topLevels =
+        fmap ppRef $ filter (null . ppDeps) rdeps
 
       spCombine s r =
         r { ppRef = (ppRef r) { refSrcPkg = Just s } }
@@ -80,7 +86,10 @@ fromInstallPlan spkgs rdeps =
       lookupRef ref =
         fromMaybe (mkPackage ref []) (Map.lookup ref dependencies)
 
-  in fmap lookupRef packageRefs
+  in
+    concatMap pkgDeps .
+    fmap lookupRef $
+    List.intersectBy ((==) `on` refId) packageRefs topLevels
 
 reifyPackageRefs :: Map PackageRef [PackageRef] -> Map PackageRef Package
 reifyPackageRefs refs =
@@ -99,8 +108,9 @@ toGraphKey pp = (pp, refId (ppRef pp), ppDeps pp)
 fromGraphKey :: (PackagePlan, PackageId, [PackageId]) -> PackageRef
 fromGraphKey (pp, _, _) = ppRef pp
 
-calculateInstallPlan :: [SourcePackage] -> EitherT CabalError IO [PackagePlan]
-calculateInstallPlan spkgs = do
+calculateInstallPlan :: [Flag] -> [SourcePackage] -> EitherT CabalError IO [PackagePlan]
+calculateInstallPlan flags spkgs = do
+  (_ :: GhcVersion) <- firstT CabalGhcError getGhcVersion -- check ghc is on the path
   checkCabalVersion
 
   EitherT . withSystemTempDirectory "mafia-deps-" $ \tmp0 -> runEitherT $ do
@@ -119,16 +129,18 @@ calculateInstallPlan spkgs = do
     let constraints =
           concatMap spConstraintArgs spkgs
 
+        flagArgs =
+          fmap flagArg flags
+
         installDryRun args =
           cabal "install" $
-            [ "--only-dependencies"
-            , "--enable-tests"
+            [ "--enable-tests"
             , "--enable-benchmarks"
             , "--enable-profiling"
             , "--reorder-goals"
             , "--max-backjumps=-1"
             , "--avoid-reinstalls"
-            , "--dry-run" ] <> constraints <> args
+            , "--dry-run" ] <> flagArgs <> constraints <> args
 
     result <- liftIO . runEitherT $ installDryRun ["-v2"]
     case result of
@@ -149,6 +161,13 @@ spConstraintArgs sp =
       name = unPackageName (pkgName pid)
       ver  = renderVersion (pkgVersion pid)
   in [ "--constraint", name <> " == " <> ver ]
+
+flagArg :: Flag -> Argument
+flagArg = \case
+  FlagOff f ->
+    "--flags=-" <> f
+  FlagOn f ->
+    "--flags=" <> f
 
 takeReinstall :: PackagePlan -> Maybe PackagePlan
 takeReinstall p =
@@ -176,6 +195,7 @@ pPackagePlan = do
   pid    <- pPackageId (== ' ')
   latest <- optional pLatest
   flags  <- many pFlag
+  _      <- many pStanza
   deps   <- fromMaybe [] <$> optional pVia
   status <- pNewPackage <|> pNewVersion <|> pReinstall
   ()     <- A.endOfInput
@@ -186,6 +206,11 @@ pFlag =
   let flag p = A.char ' ' *> A.char p *> A.takeTill (== ' ')
   in FlagOff <$> flag '-' <|>
      FlagOn  <$> flag '+'
+
+pStanza :: Parser ()
+pStanza =
+  A.string " *test" *> pure () <|>
+  A.string " *bench" *> pure ()
 
 pLatest :: Parser Version
 pLatest =
