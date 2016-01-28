@@ -20,7 +20,7 @@ import           P
 import           System.Environment (getEnvironment)
 import           System.IO (IO)
 
-import           X.Control.Monad.Trans.Either (EitherT, firstEitherT)
+import           X.Control.Monad.Trans.Either (EitherT)
 
 
 cabal :: ProcessResult a => Argument -> [Argument] -> EitherT CabalError IO a
@@ -49,7 +49,7 @@ cabalFrom dir sbcfg cmd args = do
           , processEnvironment = menv
           }
 
-  firstEitherT CabalProcessError (callProcess process)
+  firstT CabalProcessError (callProcess process)
 
 mkEnv :: Maybe SandboxConfigFile -> IO (Maybe (Map EnvKey EnvValue))
 mkEnv sbcfg =

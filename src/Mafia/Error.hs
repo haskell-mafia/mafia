@@ -24,7 +24,7 @@ import           Mafia.Submodule
 
 import           P
 
-import           X.Control.Monad.Trans.Either (EitherT, firstEitherT)
+import           X.Control.Monad.Trans.Either (EitherT)
 
 
 -- FIX This should live in Cache
@@ -89,4 +89,4 @@ renderMafiaError = \case
 
 liftCabal :: Functor m => EitherT CabalError m a -> EitherT MafiaError m a
 liftCabal =
-  firstEitherT MafiaCabalError
+  firstT MafiaCabalError

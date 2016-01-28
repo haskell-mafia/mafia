@@ -41,8 +41,7 @@ import           Test.QuickCheck (forAllProperties)
 import qualified Test.QuickCheck as QC
 
 import           X.Control.Monad.Trans.Either (EitherT, runEitherT)
-import           X.Control.Monad.Trans.Either (firstEitherT, hoistEither)
-import           X.Control.Monad.Trans.Either (bracketEitherT')
+import           X.Control.Monad.Trans.Either (hoistEither, bracketEitherT')
 
 ------------------------------------------------------------------------
 
@@ -375,7 +374,7 @@ createGitHub dir =
 
 submoduleExists :: Directory -> EitherT ChaosError IO Bool
 submoduleExists sub = do
-  subs <- fmap subName <$> firstEitherT GitError getSubmodules
+  subs <- fmap subName <$> firstT GitError getSubmodules
   return (sub `elem` subs)
 
 gitAddSubmodule :: Directory -> Directory -> Path -> EitherT ChaosError IO ()

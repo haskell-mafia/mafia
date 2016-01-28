@@ -31,7 +31,7 @@ import           P
 
 import           System.IO (IO)
 
-import           X.Control.Monad.Trans.Either (EitherT, firstEitherT, left)
+import           X.Control.Monad.Trans.Either (EitherT, left)
 
 ------------------------------------------------------------------------
 
@@ -119,7 +119,7 @@ hashSourcePackage dir = do
   let sdistFiles = Set.fromList (fmap normalise (T.lines err))
       files      = Set.toList (sdistFiles `Set.difference` ignoredFiles)
 
-  hashes <- firstEitherT CabalHashError $ mapM (hashFile . (dir </>)) files
+  hashes <- firstT CabalHashError $ mapM (hashFile . (dir </>)) files
 
   let fileListHash = hashText (T.unlines files)
 

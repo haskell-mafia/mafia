@@ -34,8 +34,7 @@ import           System.Exit (exitSuccess)
 import           System.IO (BufferMode(..), hSetBuffering)
 import           System.IO (IO, stdout, stderr, putStrLn, print)
 
-import           X.Control.Monad.Trans.Either (EitherT)
-import           X.Control.Monad.Trans.Either (bimapEitherT, firstEitherT, hoistEither)
+import           X.Control.Monad.Trans.Either (EitherT, hoistEither)
 import           X.Control.Monad.Trans.Either.Exit (orDie)
 import           X.Options.Applicative (Parser, CommandFields, Mod)
 import           X.Options.Applicative (SafeCommand(..), RunType(..))
@@ -257,7 +256,7 @@ mafiaQuick extraIncludes paths = do
 
 mafiaWatch :: [GhciInclude] -> File -> [Argument] -> EitherT MafiaError IO ()
 mafiaWatch extraIncludes path extraArgs = do
-  ghcidExe <- bimapEitherT MafiaProcessError (</> "ghcid") $ installBinary (packageId "ghcid" [0, 5]) []
+  ghcidExe <- bimapT MafiaProcessError (</> "ghcid") $ installBinary (packageId "ghcid" [0, 5]) []
   args <- ghciArgs extraIncludes [path]
   initMafia $ Just DisableProfiling
   exec MafiaProcessError ghcidExe $ [ "-c", T.unwords ("ghci" : args) ] <> extraArgs
@@ -265,7 +264,7 @@ mafiaWatch extraIncludes path extraArgs = do
 mafiaHoogle :: [Argument] -> EitherT MafiaError IO ()
 mafiaHoogle args = do
   hkg <- fromMaybe "https://hackage.haskell.org/package" <$> lookupEnv "HACKAGE"
-  firstEitherT MafiaInitError (initialize Nothing)
+  firstT MafiaInitError (initialize Nothing)
   hoogle hkg args
 
 ghciArgs :: [GhciInclude] -> [File] -> EitherT MafiaError IO [Argument]
@@ -315,10 +314,10 @@ initMafia :: Maybe Profiling -> EitherT MafiaError IO ()
 initMafia mproj = do
   -- we just call this for the side-effect, if we can't find a .cabal file then
   -- mafia should fail fast and not polute the directory with a sandbox.
-  (_ :: ProjectName) <- firstEitherT MafiaProjectError getProjectName
+  (_ :: ProjectName) <- firstT MafiaProjectError getProjectName
 
   let ensureExeOnPath' e pkg =
         lookupEnv e >>= mapM_ (\b -> when (b == "true") $ ensureExeOnPath pkg)
-  firstEitherT MafiaProcessError $ ensureExeOnPath' "MAFIA_HAPPY" (packageId "happy" [1, 19, 5])
-  firstEitherT MafiaProcessError $ ensureExeOnPath' "MAFIA_ALEX" (packageId "alex" [3, 1, 6])
-  firstEitherT MafiaInitError $ initialize mproj
+  firstT MafiaProcessError $ ensureExeOnPath' "MAFIA_HAPPY" (packageId "happy" [1, 19, 5])
+  firstT MafiaProcessError $ ensureExeOnPath' "MAFIA_ALEX" (packageId "alex" [3, 1, 6])
+  firstT MafiaInitError $ initialize mproj
