@@ -13,6 +13,7 @@ module Mafia.Cabal.Types
   , PackageRef(..)
   , SourcePackage(..)
   , mkPackage
+  , renderPackageRef
   , renderHashId
 
   , PackagePlan(..)
@@ -99,6 +100,20 @@ data PackagePlan =
 mkPackage :: PackageRef -> [Package] -> Package
 mkPackage ref deps =
   Package ref deps (hashPackage ref deps)
+
+renderPackageRef :: PackageRef -> Text
+renderPackageRef = \case
+  PackageRef pid flags Nothing ->
+    renderPackageId pid <> renderFlagsSuffix flags
+  PackageRef pid flags (Just (SourcePackage _ _ hash)) ->
+    renderPackageId pid <> "-" <> renderHash hash <> renderFlagsSuffix flags
+
+renderFlagsSuffix :: [Flag] -> Text
+renderFlagsSuffix = \case
+  [] ->
+    T.empty
+  xs ->
+    " " <> T.intercalate " " (fmap renderFlag xs)
 
 renderHashId :: Package -> Text
 renderHashId (Package (PackageRef pid _ _) _ hash) =

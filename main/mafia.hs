@@ -9,9 +9,11 @@ import           Control.Concurrent (setNumCapabilities)
 import           Control.Monad.IO.Class (MonadIO(..))
 
 import           Data.ByteString (ByteString)
+import qualified Data.List as List
 import qualified Data.Set as Set
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
+import qualified Data.Text.Lazy.IO as TL
 import           Data.Time (getCurrentTime, diffUTCTime)
 
 import           GHC.Conc (getNumProcessors)
@@ -22,13 +24,15 @@ import           Mafia.Home
 import           Mafia.Hoogle
 import           Mafia.IO
 import           Mafia.Init
+import           Mafia.Install
 import           Mafia.Package
 import           Mafia.Path
 import           Mafia.Process
 import           Mafia.Project
 import           Mafia.Submodule
+import           Mafia.Tree
 
-import           P
+import           P hiding (Last)
 
 import           System.Exit (exitSuccess)
 import           System.IO (BufferMode(..), hSetBuffering)
@@ -62,6 +66,7 @@ main = do
 data MafiaCommand =
     MafiaUpdate
   | MafiaHash
+  | MafiaDepends DependsUI [Flag]
   | MafiaClean
   | MafiaBuild Profiling [Flag] [Argument]
   | MafiaTest [Flag] [Argument]
@@ -78,12 +83,19 @@ data GhciInclude =
   | AllLibraries
     deriving (Eq, Show)
 
+data DependsUI =
+    List
+  | Tree
+    deriving (Eq, Show)
+
 run :: MafiaCommand -> EitherT MafiaError IO ()
 run = \case
   MafiaUpdate ->
     mafiaUpdate
   MafiaHash ->
     mafiaHash
+  MafiaDepends tree flags ->
+    mafiaDepends tree flags
   MafiaClean ->
     mafiaClean
   MafiaBuild p flags args ->
@@ -116,6 +128,9 @@ commands =
                   <> "by (package) in this command's output is the one used by "
                   <> "mafia to track changes to source dependencies." )
             (pure MafiaHash)
+
+ , command' "depends" "Show the transitive dependencies of the this package."
+            (MafiaDepends <$> pDependsUI <*> many pFlag)
 
  , command' "clean" "Clean up after build. Removes the sandbox and the dist directory."
             (pure MafiaClean)
@@ -157,6 +172,13 @@ pProfiling =
        long "profiling"
     <> short 'p'
     <> help "Enable profiling for this build."
+
+pDependsUI :: Parser DependsUI
+pDependsUI =
+  flag List Tree $
+       long "tree"
+    <> short 't'
+    <> help "Display dependencies as a tree."
 
 pGhciEntryPoint :: Parser File
 pGhciEntryPoint =
@@ -223,6 +245,17 @@ mafiaHash :: EitherT MafiaError IO ()
 mafiaHash = do
   sph <- liftCabal (hashSourcePackage ".")
   liftIO (T.putStr (renderSourcePackageHash sph))
+
+mafiaDepends :: DependsUI -> [Flag] -> EitherT MafiaError IO ()
+mafiaDepends ui flags = do
+  sdeps <- Set.toList <$> firstT MafiaInitError getSourceDependencies
+  deps <- List.sort <$> firstT MafiaCabalError (findDependencies flags sdeps)
+  case ui of
+    List -> do
+      let trans = Set.toList $ transitiveOfPackages deps
+      traverse_ (liftIO . T.putStrLn . renderPackageRef . pkgRef) trans
+    Tree ->
+      liftIO . TL.putStr $ renderTree deps
 
 mafiaClean :: EitherT MafiaError IO ()
 mafiaClean = do
