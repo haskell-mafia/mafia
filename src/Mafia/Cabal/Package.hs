@@ -1,6 +1,8 @@
+{-# LANGUAGE DoAndIfThenElse #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 module Mafia.Cabal.Package
   ( getPackageId
   , getCabalFile
@@ -108,16 +110,33 @@ renderHashPart :: Text -> Hash -> Text
 renderHashPart title hash =
   renderHash hash <> "  " <> title
 
+fixupSDistDir :: MonadIO m => Directory -> m Directory
+fixupSDistDir dir = do
+  rdir <- tryMakeRelativeToCurrent dir
+  if T.null rdir then
+    return "."
+  else
+    return rdir
+
 hashSourcePackage :: Directory -> EitherT CabalError IO SourcePackageHash
 hashSourcePackage dir = do
   ignoredFiles <- Set.fromList <$> readIgnoredFiles dir
 
-  rdir <- tryMakeRelativeToCurrent dir
-  let sdistError _ = CabalSDistFailed rdir
-  OutErr _ err <- callFrom sdistError dir "cabal" ["sdist", "--list-sources=/dev/stderr"]
+  rdir <- fixupSDistDir dir
 
-  let sdistFiles = Set.fromList (fmap normalise (T.lines err))
-      files      = Set.toList (sdistFiles `Set.difference` ignoredFiles)
+  sdistFiles <- withSystemTempDirectory "mafia-sdist-" $ \tmp -> do
+    let
+      sdistError _ = CabalSDistFailed rdir
+      path = tmp </> "sources.txt"
+    OutErr (_ :: Text) _ <- callFrom sdistError dir "cabal" ["sdist", "--list-sources=" <> path]
+    mfile <- readUtf8 path
+    case mfile of
+      Nothing ->
+        left (CabalSDistFailedCouldNotReadFile rdir path)
+      Just utf8 ->
+        return . Set.fromList . fmap normalise $ T.lines utf8
+
+  let files = Set.toList (sdistFiles `Set.difference` ignoredFiles)
 
   hashes <- firstT CabalHashError $ mapM (hashFile . (dir </>)) files
 
