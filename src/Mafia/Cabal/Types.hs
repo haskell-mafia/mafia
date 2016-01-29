@@ -201,6 +201,7 @@ data CabalError =
   | CabalSandboxConfigFieldNotFound SandboxConfigFile Text
   | CabalInstallIsNotReferentiallyTransparent
   | CabalSDistFailed Directory
+  | CabalSDistFailedCouldNotReadFile Directory File
   | CabalReinstallsDetected [PackagePlan]
   | CabalCouldNotReadPackageId File
   | CabalCouldNotParseVersion Text
@@ -242,6 +243,10 @@ renderCabalError = \case
 
   CabalSDistFailed dir ->
     "Failed to run 'cabal sdist' for source package: " <> dir
+
+  CabalSDistFailedCouldNotReadFile dir path ->
+    "Failed to run 'cabal sdist' for source package: " <> dir <> "\n" <>
+    "Could not read file: " <> path
 
   CabalCouldNotReadPackageId cabalFile ->
     "Failed to read package-id from: " <> cabalFile

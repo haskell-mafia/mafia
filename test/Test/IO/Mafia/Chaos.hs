@@ -34,7 +34,6 @@ import           Mafia.Process (call_, callFrom)
 import           P
 
 import           System.IO (IO, print)
-import           System.IO.Temp (withSystemTempDirectory)
 
 import           Test.QuickCheck (Arbitrary(..), Gen, Property, Testable(..))
 import           Test.QuickCheck (forAllProperties)
@@ -282,7 +281,7 @@ bracketDirectory io = bracket getCurrentDirectory setCurrentDirectory (const io)
 
 withTempDirectory :: Testable a => (Directory -> EitherT ChaosError IO a) -> Property
 withTempDirectory io = testIO . bracketDirectory $ do
-  result  <- withSystemTempDirectory "mafia.chaos" (runEitherT . io . T.pack)
+  result  <- runEitherT $ withSystemTempDirectory "mafia.chaos" io
   case result of
     Left  err -> return (QC.counterexample (show err) False)
     Right x   -> return (property x)

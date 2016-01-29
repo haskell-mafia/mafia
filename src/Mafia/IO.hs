@@ -1,5 +1,6 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 module Mafia.IO
   ( -- * Directory Operations
@@ -44,11 +45,14 @@ module Mafia.IO
 
     -- * Exceptions
   , ignoreIO
+
+    -- * Temporary
+  , withSystemTempDirectory
   ) where
 
 import qualified Control.Concurrent.Async as Async
 import           Control.Exception (IOException)
-import           Control.Monad.Catch (MonadCatch(..), handle)
+import           Control.Monad.Catch (MonadMask(..), MonadCatch(..), handle)
 import           Control.Monad.IO.Class (MonadIO(..))
 import           Control.Monad.Trans.Maybe (MaybeT(..))
 
@@ -63,11 +67,13 @@ import           Mafia.Path
 
 import           P
 
-import           System.IO (IO)
 import qualified System.Directory as Directory
 import qualified System.Environment as Environment
+import           System.IO (IO)
+import qualified System.IO.Temp as Temp
 
-import           X.Control.Monad.Trans.Either (EitherT, runEitherT, hoistEither)
+import           X.Control.Monad.Trans.Either (EitherT, pattern EitherT)
+import           X.Control.Monad.Trans.Either (runEitherT, hoistEither)
 
 ------------------------------------------------------------------------
 -- Directory Operations
@@ -214,3 +220,10 @@ mapConcurrentlyE io xs = do
 ignoreIO :: MonadCatch m => m () -> m ()
 ignoreIO =
   handle (\(_ :: IOException) -> return ())
+
+------------------------------------------------------------------------
+-- Temporary
+
+withSystemTempDirectory :: (MonadIO m, MonadMask m) => Text -> (Directory -> EitherT x m a) -> EitherT x m a
+withSystemTempDirectory template io =
+  EitherT . Temp.withSystemTempDirectory (T.unpack template) $ \dir -> runEitherT (io (T.pack dir))

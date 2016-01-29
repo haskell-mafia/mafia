@@ -38,7 +38,6 @@ import           Mafia.Process
 import           P
 
 import           System.IO (IO)
-import           System.IO.Temp (withSystemTempDirectory)
 
 import           X.Control.Monad.Trans.Either
 
@@ -113,11 +112,10 @@ calculateInstallPlan flags spkgs = do
   (_ :: GhcVersion) <- firstT CabalGhcError getGhcVersion -- check ghc is on the path
   checkCabalVersion
 
-  EitherT . withSystemTempDirectory "mafia-deps-" $ \tmp0 -> runEitherT $ do
+  withSystemTempDirectory "mafia-deps-" $ \tmp -> do
     dir <- getCurrentDirectory
 
-    let tmp   = T.pack tmp0
-        cabal = cabalFrom dir (Just (tmp </> "sandbox.config"))
+    let cabal = cabalFrom dir (Just (tmp </> "sandbox.config"))
 
     Hush <- cabal "sandbox" ["init", "--sandbox", tmp]
 
