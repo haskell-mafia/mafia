@@ -20,6 +20,7 @@ import qualified Data.Set as Set
 import           Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
+import qualified Data.Text.Lazy as TL
 import qualified Data.Text.Read as T
 
 import           GHC.Conc (getNumProcessors)
@@ -35,6 +36,7 @@ import           Mafia.IO
 import           Mafia.Package
 import           Mafia.Path
 import           Mafia.Process
+import           Mafia.Tree
 
 import           P
 
@@ -53,6 +55,7 @@ import           X.Control.Monad.Trans.Either
 data InstallError =
     InstallGhcError GhcError
   | InstallCabalError CabalError
+  | InstallPackageError PackageId [Package] CabalError
   | InstallLinkError Package File
   | InstallEnvParseError EnvKey EnvValue Text
   | InstallDisaster SomeException
@@ -65,6 +68,11 @@ renderInstallError = \case
 
   InstallCabalError e ->
     renderCabalError e
+
+  InstallPackageError pid pkgs e ->
+    "Failed to install " <> renderPackageId pid <> "\n" <>
+    renderCabalError e <> "\n" <>
+    TL.toStrict (TL.strip . renderTree $ filterPackages (pkgName pid) pkgs)
 
   InstallLinkError p pcfg ->
     "Failed to create symlink for " <> renderHashId p <> ", package config did not exist: " <> pcfg
@@ -102,7 +110,7 @@ installGlobalDependencies flavour flags spkgs = do
   mw  <- getMafiaWorkers
   gw  <- getGhcWorkers
   env <- getPackageEnv
-  firstT squashRunError $ consume_ producer mw (install gw env flavour)
+  firstT (squashRunError deps) $ consume_ producer mw (install gw env flavour)
 
   return . Set.toList $ transitiveOfPackages deps
 
@@ -211,7 +219,7 @@ install w penv flavour p@(Package (PackageRef pid _ _) deps _) = do
               sbcfg = packageSandboxConfig penv p
 
           let sbcabal x xs =
-                firstT InstallCabalError $ cabalFrom sbdir (Just sbcfg) x xs
+                firstT (InstallPackageError pid []) $ cabalFrom sbdir (Just sbcfg) x xs
 
           liftIO . T.putStrLn $ "Building " <> renderHashId p <> renderFlavourSuffix flavour
 
@@ -296,10 +304,14 @@ link db env p@(Package (PackageRef pid _ _) _ _) = do
   let dest = db </> renderPackageId pid <> ".conf"
   liftIO $ createSymbolicLink (T.unpack pcfg) (T.unpack dest)
 
-squashRunError :: RunError InstallError -> InstallError
-squashRunError = \case
-  WorkerError e -> e
-  BlowUpError e -> InstallDisaster e
+squashRunError :: [Package] -> RunError InstallError -> InstallError
+squashRunError pkgs = \case
+  WorkerError (InstallPackageError pid [] e) ->
+    InstallPackageError pid pkgs e
+  WorkerError e ->
+    e
+  BlowUpError e ->
+    InstallDisaster e
 
 ------------------------------------------------------------------------
 
