@@ -66,7 +66,7 @@ main = do
 data MafiaCommand =
     MafiaUpdate
   | MafiaHash
-  | MafiaDepends DependsUI [Flag]
+  | MafiaDepends DependsUI (Maybe PackageName) [Flag]
   | MafiaClean
   | MafiaBuild Profiling [Flag] [Argument]
   | MafiaTest [Flag] [Argument]
@@ -94,8 +94,8 @@ run = \case
     mafiaUpdate
   MafiaHash ->
     mafiaHash
-  MafiaDepends tree flags ->
-    mafiaDepends tree flags
+  MafiaDepends tree pkg flags ->
+    mafiaDepends tree pkg flags
   MafiaClean ->
     mafiaClean
   MafiaBuild p flags args ->
@@ -130,7 +130,7 @@ commands =
             (pure MafiaHash)
 
  , command' "depends" "Show the transitive dependencies of the this package."
-            (MafiaDepends <$> pDependsUI <*> many pFlag)
+            (MafiaDepends <$> pDependsUI <*> optional pPackageName <*> many pFlag)
 
  , command' "clean" "Clean up after build. Removes the sandbox and the dist directory."
             (pure MafiaClean)
@@ -179,6 +179,12 @@ pDependsUI =
        long "tree"
     <> short 't'
     <> help "Display dependencies as a tree."
+
+pPackageName :: Parser PackageName
+pPackageName =
+  fmap PackageName . argument textRead $
+       metavar "PACKAGE"
+    <> help "Only include packages in the output which depend on this package."
 
 pGhciEntryPoint :: Parser File
 pGhciEntryPoint =
@@ -246,16 +252,18 @@ mafiaHash = do
   sph <- liftCabal (hashSourcePackage ".")
   liftIO (T.putStr (renderSourcePackageHash sph))
 
-mafiaDepends :: DependsUI -> [Flag] -> EitherT MafiaError IO ()
-mafiaDepends ui flags = do
+mafiaDepends :: DependsUI -> Maybe PackageName -> [Flag] -> EitherT MafiaError IO ()
+mafiaDepends ui mpkg flags = do
   sdeps <- Set.toList <$> firstT MafiaInitError getSourceDependencies
   deps <- List.sort <$> firstT MafiaCabalError (findDependencies flags sdeps)
+  let
+    deps' = maybe id filterPackages mpkg $ deps
   case ui of
     List -> do
-      let trans = Set.toList $ transitiveOfPackages deps
+      let trans = Set.toList $ transitiveOfPackages deps'
       traverse_ (liftIO . T.putStrLn . renderPackageRef . pkgRef) trans
     Tree ->
-      liftIO . TL.putStr $ renderTree deps
+      liftIO . TL.putStr $ renderTree deps'
 
 mafiaClean :: EitherT MafiaError IO ()
 mafiaClean = do
