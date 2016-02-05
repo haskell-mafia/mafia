@@ -2,9 +2,11 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE NoMonomorphismRestriction #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE PatternGuards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 module Mafia.Cabal.Dependencies
-  ( findDependencies
+  ( filterPackages
+  , findDependencies
   , flagArg
 
     -- exported for testing
@@ -40,6 +42,22 @@ import           P
 import           System.IO (IO)
 
 import           X.Control.Monad.Trans.Either
+
+------------------------------------------------------------------------
+
+filterPackages :: PackageName -> [Package] -> [Package]
+filterPackages name pkgs =
+  mapMaybe (filterPackage name) pkgs
+
+filterPackage :: PackageName -> Package -> Maybe Package
+filterPackage name = \case
+  Package ref deps hash
+    | name == pkgName (refId ref) ->
+      Just (Package ref [] hash)
+    | deps'@(_:_) <- filterPackages name deps ->
+      Just (Package ref deps' hash)
+    | otherwise ->
+      Nothing
 
 ------------------------------------------------------------------------
 
