@@ -20,6 +20,8 @@ import           Data.Attoparsec.Text (Parser)
 import qualified Data.Attoparsec.Text as A
 import qualified Data.Graph as Graph
 import qualified Data.List as List
+import           Data.Set (Set)
+import qualified Data.Set as Set
 import           Data.Map (Map)
 import qualified Data.Map as Map
 import           Data.String (String)
@@ -45,33 +47,36 @@ import           X.Control.Monad.Trans.Either
 
 ------------------------------------------------------------------------
 
-filterPackages :: PackageName -> [Package] -> [Package]
+filterPackages :: PackageName -> Set Package -> Set Package
 filterPackages name pkgs =
-  mapMaybe (filterPackage name) pkgs
+  Set.fromDistinctAscList . mapMaybe (filterPackage name) $ Set.toAscList pkgs
 
 filterPackage :: PackageName -> Package -> Maybe Package
 filterPackage name = \case
   Package ref deps hash
     | name == pkgName (refId ref) ->
-      Just (Package ref [] hash)
-    | deps'@(_:_) <- filterPackages name deps ->
+      Just (Package ref Set.empty hash)
+    | deps' <- filterPackages name deps
+    , not (Set.null deps') ->
       Just (Package ref deps' hash)
     | otherwise ->
       Nothing
 
 ------------------------------------------------------------------------
 
-findDependencies :: [Flag] -> [SourcePackage] -> EitherT CabalError IO [Package]
+findDependencies :: [Flag] -> [SourcePackage] -> EitherT CabalError IO (Set Package)
 findDependencies flags spkgs = do
   fromInstallPlan spkgs <$> calculateInstallPlan flags spkgs
 
-fromInstallPlan :: [SourcePackage] -> [PackagePlan] -> [Package]
+fromInstallPlan :: [SourcePackage] -> [PackagePlan] -> Set Package
 fromInstallPlan spkgs rdeps =
   let rdMap =
         mapFromList (refId . ppRef) rdeps
 
       topLevels =
-        fmap ppRef $ filter (null . ppDeps) rdeps
+        Map.fromList .
+        fmap (\pp -> (refId $ ppRef pp, ())) $
+        filter (null . ppDeps) rdeps
 
       spCombine s r =
         r { ppRef = (ppRef r) { refSrcPkg = Just s } }
@@ -89,31 +94,36 @@ fromInstallPlan spkgs rdeps =
         fromGraphKey . fromVertex0
 
       packageRefs =
-        fmap fromVertex (Graph.topSort graph)
+        Map.fromList .
+        fmap (\ref -> (refId ref, ref)) .
+        fmap fromVertex $
+        Graph.topSort graph
 
       dependencies =
         reifyPackageRefs $
-        Map.unionsWith (<>) $
-        fmap (\(k,v) -> Map.fromList [(k, [v]), (v, [])]) $
+        Map.unionsWith Set.union $
+        fmap (\(k,v) -> Map.fromList [(k, Set.singleton v), (v, Set.empty)]) $
         fmap (bimap fromVertex fromVertex) $
         Graph.edges $
         Graph.transposeG $
         graph
 
       lookupRef ref =
-        fromMaybe (mkPackage ref []) (Map.lookup ref dependencies)
+        fromMaybe (mkPackage ref Set.empty) (Map.lookup ref dependencies)
 
   in
-    concatMap pkgDeps .
+    Set.unions .
+    fmap pkgDeps .
+    Map.elems .
     fmap lookupRef $
-    List.intersectBy ((==) `on` refId) packageRefs topLevels
+    Map.intersection packageRefs topLevels
 
-reifyPackageRefs :: Map PackageRef [PackageRef] -> Map PackageRef Package
+reifyPackageRefs :: Map PackageRef (Set PackageRef) -> Map PackageRef Package
 reifyPackageRefs refs =
   let pkgs =
         Map.mapWithKey lookup refs
       lookup ref deps =
-        mkPackage ref (mapMaybe (\d -> Map.lookup d pkgs) deps)
+        mkPackage ref (Set.fromList . mapMaybe (\d -> Map.lookup d pkgs) $ Set.toList deps)
   in pkgs
 
 mapFromList :: Ord k => (v -> k) -> [v] -> Map k v

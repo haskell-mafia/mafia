@@ -1,6 +1,7 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# OPTIONS_GHC -funbox-strict-fields #-}
 module Mafia.Cabal.Types
   ( SandboxDir
   , SandboxConfigFile
@@ -31,6 +32,8 @@ import qualified Codec.Archive.Tar as Tar
 
 import           Data.Aeson (Value(..), ToJSON(..), FromJSON(..), (.:), (.=), object)
 import           Data.Char (isAlpha)
+import           Data.Set (Set)
+import qualified Data.Set as Set
 import           Data.Text (Text)
 import qualified Data.Text as T
 
@@ -50,54 +53,65 @@ type SandboxDir = Directory
 type SandboxConfigFile = File
 
 data Flag =
-    FlagOff Text
-  | FlagOn  Text
+    FlagOff !Text
+  | FlagOn !Text
     deriving (Eq, Ord, Show)
 
 data SourcePackage =
   SourcePackage {
-      spDirectory :: Directory
-    , spPackageId :: PackageId
-    , spHash      :: Hash
+      spDirectory :: !Directory
+    , spPackageId :: !PackageId
+    , spHash      :: !Hash
     } deriving (Eq, Ord, Show)
 
 data PackageRef =
   PackageRef {
-      refId     :: PackageId
-    , refFlags  :: [Flag]
-    , refSrcPkg :: Maybe SourcePackage
+      refId     :: !PackageId
+    , refFlags  :: ![Flag]
+    , refSrcPkg :: !(Maybe SourcePackage)
     } deriving (Eq, Ord, Show)
 
 data Package =
   Package {
-      pkgRef  :: PackageRef
-    , pkgDeps :: [Package]
-    , pkgHash :: Hash
-    } deriving (Eq, Ord, Show)
+      pkgRef  :: !PackageRef
+    , pkgDeps :: !(Set Package)
+    , pkgHash :: !Hash
+    } deriving (Show)
+
+instance Eq Package where
+  (==) (Package ref0 _ hash0) (Package ref1 _ hash1) =
+    ref0 == ref1 &&
+    hash0 == hash1
+
+instance Ord Package where
+  compare (Package ref0 _ hash0) (Package ref1 _ hash1) =
+    compare
+      (ref0, hash0)
+      (ref1, hash1)
 
 data PackageChange =
   PackageChange {
-      pcPackageId  :: PackageId
-    , pcNewVersion :: Version
+      pcPackageId  :: !PackageId
+    , pcNewVersion :: !Version
     } deriving (Eq, Ord, Show)
 
 data PackageStatus =
     NewPackage
   | NewVersion
-  | Reinstall [PackageChange]
+  | Reinstall ![PackageChange]
     deriving (Eq, Ord, Show)
 
 data PackagePlan =
   PackagePlan {
-      ppRef    :: PackageRef
-    , ppLatest :: Maybe Version
-    , ppDeps   :: [PackageId]
-    , ppStatus :: PackageStatus
+      ppRef    :: !PackageRef
+    , ppLatest :: !(Maybe Version)
+    , ppDeps   :: ![PackageId]
+    , ppStatus :: !PackageStatus
     } deriving (Eq, Ord, Show)
 
 ------------------------------------------------------------------------
 
-mkPackage :: PackageRef -> [Package] -> Package
+mkPackage :: PackageRef -> Set Package -> Package
 mkPackage ref deps =
   Package ref deps (hashPackage ref deps)
 
@@ -119,9 +133,9 @@ renderHashId :: Package -> Text
 renderHashId (Package (PackageRef pid _ _) _ hash) =
   renderPackageId pid <> "-" <> renderHash hash
 
-hashPackage :: PackageRef -> [Package] -> Hash
+hashPackage :: PackageRef -> Set Package -> Hash
 hashPackage ref deps =
-  hashHashes (hashPackageRef ref : fmap pkgHash deps)
+  hashHashes $ hashPackageRef ref : fmap pkgHash (Set.toList deps)
 
 hashPackageRef :: PackageRef -> Hash
 hashPackageRef (PackageRef pid flags msrc) =

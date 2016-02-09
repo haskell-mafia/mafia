@@ -21,7 +21,7 @@ import           Test.QuickCheck.Instances ()
 instance Arbitrary PackageName where
   arbitrary = do
     name <- T.intercalate "-" <$> listOf1 (elements muppets)
-    pure (PackageName name)
+    pure (mkPackageName name)
 
 instance Arbitrary Version where
   arbitrary =

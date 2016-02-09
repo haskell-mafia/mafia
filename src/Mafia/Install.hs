@@ -13,6 +13,7 @@ module Mafia.Install
 
 import           Control.Exception (SomeException)
 import           Control.Monad.IO.Class (MonadIO(..))
+import           Control.Parallel.Strategies (rpar, parMap)
 
 import qualified Data.ByteString as B
 import           Data.Set (Set)
@@ -55,7 +56,7 @@ import           X.Control.Monad.Trans.Either
 data InstallError =
     InstallGhcError GhcError
   | InstallCabalError CabalError
-  | InstallPackageError PackageId [Package] CabalError
+  | InstallPackageError PackageId (Set Package) CabalError
   | InstallLinkError Package File
   | InstallEnvParseError EnvKey EnvValue Text
   | InstallDisaster SomeException
@@ -219,7 +220,7 @@ install w penv flavour p@(Package (PackageRef pid _ _) deps _) = do
               sbcfg = packageSandboxConfig penv p
 
           let sbcabal x xs =
-                firstT (InstallPackageError pid []) $ cabalFrom sbdir (Just sbcfg) x xs
+                firstT (InstallPackageError pid Set.empty) $ cabalFrom sbdir (Just sbcfg) x xs
 
           liftIO . T.putStrLn $ "Building " <> renderHashId p <> renderFlavourSuffix flavour
 
@@ -304,9 +305,9 @@ link db env p@(Package (PackageRef pid _ _) _ _) = do
   let dest = db </> renderPackageId pid <> ".conf"
   liftIO $ createSymbolicLink (T.unpack pcfg) (T.unpack dest)
 
-squashRunError :: [Package] -> RunError InstallError -> InstallError
+squashRunError :: Set Package -> RunError InstallError -> InstallError
 squashRunError pkgs = \case
-  WorkerError (InstallPackageError pid [] e) ->
+  WorkerError (InstallPackageError pid old e) | Set.null old ->
     InstallPackageError pid pkgs e
   WorkerError e ->
     e
@@ -317,7 +318,7 @@ squashRunError pkgs = \case
 
 constraintsOfPackage :: Package -> [Text]
 constraintsOfPackage p =
-  let xs = Set.toList (transitiveOfPackages [p])
+  let xs = Set.toList (transitiveOfPackages (Set.singleton p))
   in concatMap (constraintsOfRef . pkgRef) xs
 
 constraintsOfRef :: PackageRef -> [Text]
@@ -325,9 +326,9 @@ constraintsOfRef (PackageRef pid fs _) =
   [ nameOfPackage pid <> " == " <> versionOfPackage pid ] <>
   fmap (\x -> nameOfPackage pid <> " " <> renderFlag x) fs
 
-transitiveOfPackages :: [Package] -> Set Package
+transitiveOfPackages :: Set Package -> Set Package
 transitiveOfPackages deps =
-  Set.unions (Set.fromList deps : fmap (transitiveOfPackages . pkgDeps) deps)
+  Set.unions (deps : parMap rpar (transitiveOfPackages . pkgDeps) (Set.toList deps))
 
 versionOfPackage :: PackageId -> Text
 versionOfPackage =

@@ -60,7 +60,7 @@ readPackageId :: MonadIO m => File -> m (Maybe PackageId)
 readPackageId cabalFile = do
   text <- fromMaybe T.empty `liftM` readUtf8 cabalFile
 
-  let findName    = fmap PackageName   . findField "name"
+  let findName    = fmap mkPackageName . findField "name"
       findVersion = (parseVersion =<<) . findField "version"
 
   let lines   = fmap T.words (T.lines text)
