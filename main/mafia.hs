@@ -9,7 +9,6 @@ import           Control.Concurrent (setNumCapabilities)
 import           Control.Monad.IO.Class (MonadIO(..))
 
 import           Data.ByteString (ByteString)
-import qualified Data.List as List
 import qualified Data.Set as Set
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
@@ -182,7 +181,7 @@ pDependsUI =
 
 pPackageName :: Parser PackageName
 pPackageName =
-  fmap PackageName . argument textRead $
+  fmap mkPackageName . argument textRead $
        metavar "PACKAGE"
     <> help "Only include packages in the output which depend on this package."
 
@@ -255,7 +254,7 @@ mafiaHash = do
 mafiaDepends :: DependsUI -> Maybe PackageName -> [Flag] -> EitherT MafiaError IO ()
 mafiaDepends ui mpkg flags = do
   sdeps <- Set.toList <$> firstT MafiaInitError getSourceDependencies
-  deps <- List.sort <$> firstT MafiaCabalError (findDependencies flags sdeps)
+  deps <- firstT MafiaCabalError (findDependencies flags sdeps)
   let
     deps' = maybe id filterPackages mpkg $ deps
   case ui of

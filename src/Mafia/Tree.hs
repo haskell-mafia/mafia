@@ -5,7 +5,8 @@ module Mafia.Tree (
     renderTree
   ) where
 
-import qualified Data.List as List
+import           Data.Set (Set)
+import qualified Data.Set as Set
 import qualified Data.Text.Lazy as Lazy
 
 import           Mafia.Cabal
@@ -31,7 +32,7 @@ renderTree' mindent loc = \case
   Package ref deps _ ->
     let
       sorted =
-        List.sort deps
+        Set.toList deps
 
       branch
         | mindent == Nothing =
@@ -57,6 +58,6 @@ renderTree' mindent loc = \case
       Lazy.fromStrict (renderPackageRef ref) <>
       Lazy.concat (mapLoc (\l d -> "\n" <> renderTree' tindent l d) sorted)
 
-renderTree :: [Package] -> Lazy.Text
+renderTree :: Set Package -> Lazy.Text
 renderTree =
-  Lazy.unlines . mapLoc (renderTree' Nothing)
+  Lazy.unlines . mapLoc (renderTree' Nothing) . Set.toList

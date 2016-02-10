@@ -1,10 +1,14 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# OPTIONS_GHC -funbox-strict-fields #-}
 module Mafia.Package
-  ( PackageName (..)
-  , PackageId (..)
-  , Version (..)
+  ( PackageName
+  , mkPackageName
+  , unPackageName
+
+  , PackageId(..)
+  , Version(..)
   , packageId
   , renderPackageId
   , renderVersion
@@ -14,6 +18,7 @@ module Mafia.Package
   ) where
 
 import           Data.Aeson (Value(..), ToJSON(..), FromJSON(..))
+import           Data.CaseInsensitive (CI)
 import qualified Data.CaseInsensitive as CI
 import qualified Data.Char as Char
 import           Data.Text (Text)
@@ -30,24 +35,32 @@ import qualified Text.ParserCombinators.ReadP as Parse
 
 newtype PackageName =
   PackageName {
-      unPackageName :: Text
+      ciPackageName :: CI Text
     } deriving (Eq, Ord, Show)
+
+mkPackageName :: Text -> PackageName
+mkPackageName =
+  PackageName . CI.mk
+
+unPackageName :: PackageName -> Text
+unPackageName =
+  CI.original . ciPackageName
 
 data PackageId =
   PackageId {
-      pkgName :: PackageName
-    , pkgVersion :: Version
+      pkgName :: !PackageName
+    , pkgVersion :: !Version
     } deriving (Eq, Show)
 
 instance Ord PackageId where
   compare (PackageId xn xv) (PackageId yn yv) =
     compare
-      (CI.mk $ unPackageName xn, xv)
-      (CI.mk $ unPackageName yn, yv)
+      (ciPackageName xn, xv)
+      (ciPackageName yn, yv)
 
 packageId :: Text -> [Int] -> PackageId
 packageId n v =
-  PackageId (PackageName n) (Version v [])
+  PackageId (mkPackageName n) (Version v [])
 
 renderPackageId :: PackageId -> Text
 renderPackageId (PackageId name version) =
@@ -66,7 +79,7 @@ parsePackageId :: Text -> Maybe PackageId
 parsePackageId =
   let parser =
         PackageId
-          <$> (PackageName . T.intercalate "-" . fmap T.pack <$> Parse.sepBy1 component (Parse.char '-'))
+          <$> (PackageName . CI.mk . T.intercalate "-" . fmap T.pack <$> Parse.sepBy1 component (Parse.char '-'))
           <* Parse.char '-'
           <*> Version.parseVersion
           <* Parse.eof
