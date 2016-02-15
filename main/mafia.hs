@@ -368,4 +368,5 @@ initMafia prof flags = do
         lookupEnv e >>= mapM_ (\b -> when (b == "true") $ ensureExeOnPath pkg)
   firstT MafiaProcessError $ ensureExeOnPath' "MAFIA_HAPPY" (packageId "happy" [1, 19, 5])
   firstT MafiaProcessError $ ensureExeOnPath' "MAFIA_ALEX" (packageId "alex" [3, 1, 6])
+  firstT MafiaProcessError $ ensureExeOnPath' "MAFIA_CPPHS" (packageId "cpphs" [1, 19, 3])
   firstT MafiaInitError $ initialize (Just prof) (Just flags)
