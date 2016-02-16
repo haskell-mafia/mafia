@@ -75,6 +75,7 @@ data MafiaCommand =
   | MafiaQuick [Flag] [GhciInclude] [File]
   | MafiaWatch [Flag] [GhciInclude] File [Argument]
   | MafiaHoogle [Argument]
+  | MafiaInstall InstallPackage
     deriving (Eq, Show)
 
 data GhciInclude =
@@ -113,6 +114,8 @@ run = \case
     mafiaWatch flags incs entry args
   MafiaHoogle args -> do
     mafiaHoogle args
+  MafiaInstall ipkg -> do
+    mafiaInstall ipkg
 
 parser :: Parser (SafeCommand MafiaCommand)
 parser = safeCommand . subparser . mconcat $ commands
@@ -129,7 +132,7 @@ commands =
             (pure MafiaHash)
 
  , command' "depends" "Show the transitive dependencies of the this package."
-            (MafiaDepends <$> pDependsUI <*> optional pPackageName <*> many pFlag)
+            (MafiaDepends <$> pDependsUI <*> optional pDependsPackageName <*> many pFlag)
 
  , command' "clean" "Clean up after build. Removes the sandbox and the dist directory."
             (pure MafiaClean)
@@ -163,6 +166,10 @@ commands =
 
  , command' "hoogle" ( "Run a hoogle query across the local dependencies" )
             (MafiaHoogle <$> many pCabalArgs)
+
+ , command' "install" ( "Install a hackage package and print the path to its bin directory. "
+                     <> "The general usage is as follows:  $(mafia install pretty-show)/ppsh" )
+            (MafiaInstall <$> pInstallPackage)
  ]
 
 pProfiling :: Parser Profiling
@@ -179,8 +186,20 @@ pDependsUI =
     <> short 't'
     <> help "Display dependencies as a tree."
 
-pPackageName :: Parser PackageName
-pPackageName =
+pInstallPackage :: Parser InstallPackage
+pInstallPackage =
+  let
+    parse txt =
+      fromMaybe
+        (InstallPackageName $ mkPackageName txt)
+        (fmap InstallPackageId $ parsePackageId txt)
+  in
+    fmap parse . argument textRead $
+         metavar "PACKAGE"
+      <> help "Install this <package> or (<package>-<version>) from Hackage."
+
+pDependsPackageName :: Parser PackageName
+pDependsPackageName =
   fmap mkPackageName . argument textRead $
        metavar "PACKAGE"
     <> help "Only include packages in the output which depend on this package."
@@ -304,7 +323,7 @@ mafiaQuick flags extraIncludes paths = do
 
 mafiaWatch :: [Flag] -> [GhciInclude] -> File -> [Argument] -> EitherT MafiaError IO ()
 mafiaWatch flags extraIncludes path extraArgs = do
-  ghcidExe <- bimapT MafiaInstallError (</> "ghcid") $ installBinary (packageId "ghcid" [0, 5])
+  ghcidExe <- bimapT MafiaInstallError (</> "ghcid") $ installBinary (ipackageId "ghcid" [0, 5])
   args <- ghciArgs extraIncludes [path]
   initMafia DisableProfiling flags
   exec MafiaProcessError ghcidExe $ [ "-c", T.unwords ("ghci" : args) ] <> extraArgs
@@ -314,6 +333,10 @@ mafiaHoogle args = do
   hkg <- fromMaybe "https://hackage.haskell.org/package" <$> lookupEnv "HACKAGE"
   firstT MafiaInitError (initialize Nothing Nothing)
   hoogle hkg args
+
+mafiaInstall :: InstallPackage -> EitherT MafiaError IO ()
+mafiaInstall ipkg =
+  liftIO . T.putStrLn =<< firstT MafiaInstallError (installBinary ipkg)
 
 ghciArgs :: [GhciInclude] -> [File] -> EitherT MafiaError IO [Argument]
 ghciArgs extraIncludes paths = do
@@ -366,7 +389,7 @@ initMafia prof flags = do
 
   let ensureExeOnPath' e pkg =
         lookupEnv e >>= mapM_ (\b -> when (b == "true") $ ensureExeOnPath pkg)
-  firstT MafiaInstallError $ ensureExeOnPath' "MAFIA_HAPPY" (packageId "happy" [1, 19, 5])
-  firstT MafiaInstallError $ ensureExeOnPath' "MAFIA_ALEX" (packageId "alex" [3, 1, 6])
-  firstT MafiaInstallError $ ensureExeOnPath' "MAFIA_CPPHS" (packageId "cpphs" [1, 19, 3])
+  firstT MafiaInstallError $ ensureExeOnPath' "MAFIA_HAPPY" (ipackageId "happy" [1, 19, 5])
+  firstT MafiaInstallError $ ensureExeOnPath' "MAFIA_ALEX" (ipackageId "alex" [3, 1, 6])
+  firstT MafiaInstallError $ ensureExeOnPath' "MAFIA_CPPHS" (ipackageId "cpphs" [1, 19, 3])
   firstT MafiaInitError $ initialize (Just prof) (Just flags)

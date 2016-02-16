@@ -3,12 +3,19 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PatternSynonyms #-}
 module Mafia.Bin
-  ( installBinary
+  ( InstallPackage(..)
+  , ipackageId
+  , renderInstallPackage
+  , ipkgName
+  , ipkgVersion
+
+  , installBinary
   , ensureExeOnPath
   ) where
 
 import           Control.Monad.IO.Class (MonadIO(..))
 
+import           Data.Text (Text)
 import qualified Data.Text as T
 
 import           Mafia.Home
@@ -24,13 +31,43 @@ import           System.Posix.Files (createSymbolicLink)
 import           X.Control.Monad.Trans.Either (EitherT)
 
 
+data InstallPackage =
+    InstallPackageName PackageName
+  | InstallPackageId PackageId
+    deriving (Eq, Ord, Show)
+
+ipackageId :: Text -> [Int] -> InstallPackage
+ipackageId name ver =
+  InstallPackageId (packageId name ver)
+
+renderInstallPackage :: InstallPackage -> Text
+renderInstallPackage = \case
+  InstallPackageName name ->
+    unPackageName name
+  InstallPackageId pid ->
+    renderPackageId pid
+
+ipkgName :: InstallPackage -> PackageName
+ipkgName = \case
+  InstallPackageName name ->
+    name
+  InstallPackageId pid ->
+    pkgName pid
+
+ipkgVersion :: InstallPackage -> Maybe Version
+ipkgVersion = \case
+  InstallPackageName _ ->
+    Nothing
+  InstallPackageId pid ->
+    Just (pkgVersion pid)
+
 -- | Installs a given cabal package at a specific version and return a directory containing all executables
-installBinary :: PackageId -> EitherT InstallError IO Directory
-installBinary pid = do
+installBinary :: InstallPackage -> EitherT InstallError IO Directory
+installBinary ipkg = do
   bin <- ensureMafiaDir "bin"
 
   let
-    plink = bin </> renderPackageId pid
+    plink = bin </> renderInstallPackage ipkg
     pdir = plink <> "/"
     pbin = plink <> "/bin"
 
@@ -39,14 +76,14 @@ installBinary pid = do
     -- must have a dead symlink, so lets remove it and install it again.
     ignoreIO $ removeFile plink
 
-    pkg <- installPackage pid
+    pkg <- installPackage (ipkgName ipkg) (ipkgVersion ipkg)
     env <- getPackageEnv
     let gdir = packageSandboxDir env pkg
     liftIO $ createSymbolicLink (T.unpack gdir) (T.unpack plink)
 
   return pbin
 
-ensureExeOnPath :: PackageId -> EitherT InstallError IO ()
+ensureExeOnPath :: InstallPackage -> EitherT InstallError IO ()
 ensureExeOnPath pkg = do
   dir <- installBinary pkg
   setEnv "PATH" . maybe dir (\path -> dir <> ":" <> path) =<< lookupEnv "PATH"

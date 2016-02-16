@@ -73,6 +73,10 @@ readPackageType cabalFile = do
   text <- liftM (fmap T.toLower . T.lines . fromMaybe T.empty) $ readUtf8 cabalFile
   if any (T.isPrefixOf "library") text then
     return (Just Library)
+  -- Really, really old school .cabal files didn't have a library stanza,
+  -- everything was at the top level, use 'exposed-modules' to detect this.
+  else if any (T.isPrefixOf "exposed-modules") text then
+    return (Just Library)
   else if any (T.isPrefixOf "executable") text then
     return (Just ExecutablesOnly)
   else

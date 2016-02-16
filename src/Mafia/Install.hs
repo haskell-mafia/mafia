@@ -126,12 +126,8 @@ installDependencies flavour flags spkgs = do
 
   return ()
 
-installPackage :: PackageId -> EitherT InstallError IO Package
-installPackage (PackageId name ver) =
-  installPackage' name (Just ver)
-
-installPackage' :: PackageName -> Maybe Version -> EitherT InstallError IO Package
-installPackage' name mver = do
+installPackage :: PackageName -> Maybe Version -> EitherT InstallError IO Package
+installPackage name mver = do
   pkg <- firstT InstallCabalError $ findDependenciesForPackage name mver
   installGlobalPackages Vanilla (transitiveOfPackages (Set.singleton pkg))
   return pkg
