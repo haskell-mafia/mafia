@@ -19,7 +19,7 @@ import           GHC.Conc (getNumProcessors)
 
 import           Mafia.Cabal
 import           Mafia.Error
-import           Mafia.Home
+import           Mafia.Bin
 import           Mafia.Hoogle
 import           Mafia.IO
 import           Mafia.Init
@@ -254,15 +254,15 @@ mafiaHash = do
 mafiaDepends :: DependsUI -> Maybe PackageName -> [Flag] -> EitherT MafiaError IO ()
 mafiaDepends ui mpkg flags = do
   sdeps <- Set.toList <$> firstT MafiaInitError getSourceDependencies
-  deps <- firstT MafiaCabalError (findDependencies flags sdeps)
+  local <- firstT MafiaCabalError (findDependenciesForCurrentDirectory flags sdeps)
   let
-    deps' = maybe id filterPackages mpkg $ deps
+    deps = maybe id filterPackages mpkg $ pkgDeps local
   case ui of
     List -> do
-      let trans = Set.toList $ transitiveOfPackages deps'
+      let trans = Set.toList $ transitiveOfPackages deps
       traverse_ (liftIO . T.putStrLn . renderPackageRef . pkgRef) trans
     Tree ->
-      liftIO . TL.putStr $ renderTree deps'
+      liftIO . TL.putStr $ renderTree deps
 
 mafiaClean :: EitherT MafiaError IO ()
 mafiaClean = do
@@ -304,7 +304,7 @@ mafiaQuick flags extraIncludes paths = do
 
 mafiaWatch :: [Flag] -> [GhciInclude] -> File -> [Argument] -> EitherT MafiaError IO ()
 mafiaWatch flags extraIncludes path extraArgs = do
-  ghcidExe <- bimapT MafiaProcessError (</> "ghcid") $ installBinary (packageId "ghcid" [0, 5]) []
+  ghcidExe <- bimapT MafiaInstallError (</> "ghcid") $ installBinary (packageId "ghcid" [0, 5])
   args <- ghciArgs extraIncludes [path]
   initMafia DisableProfiling flags
   exec MafiaProcessError ghcidExe $ [ "-c", T.unwords ("ghci" : args) ] <> extraArgs
@@ -366,7 +366,7 @@ initMafia prof flags = do
 
   let ensureExeOnPath' e pkg =
         lookupEnv e >>= mapM_ (\b -> when (b == "true") $ ensureExeOnPath pkg)
-  firstT MafiaProcessError $ ensureExeOnPath' "MAFIA_HAPPY" (packageId "happy" [1, 19, 5])
-  firstT MafiaProcessError $ ensureExeOnPath' "MAFIA_ALEX" (packageId "alex" [3, 1, 6])
-  firstT MafiaProcessError $ ensureExeOnPath' "MAFIA_CPPHS" (packageId "cpphs" [1, 19, 3])
+  firstT MafiaInstallError $ ensureExeOnPath' "MAFIA_HAPPY" (packageId "happy" [1, 19, 5])
+  firstT MafiaInstallError $ ensureExeOnPath' "MAFIA_ALEX" (packageId "alex" [3, 1, 6])
+  firstT MafiaInstallError $ ensureExeOnPath' "MAFIA_CPPHS" (packageId "cpphs" [1, 19, 3])
   firstT MafiaInitError $ initialize (Just prof) (Just flags)

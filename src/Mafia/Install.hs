@@ -5,7 +5,12 @@
 module Mafia.Install
   ( Flavour(..)
   , installDependencies
+  , installPackage
   , transitiveOfPackages
+
+  , PackageEnv(..)
+  , getPackageEnv
+  , packageSandboxDir
 
   , InstallError(..)
   , renderInstallError
@@ -59,6 +64,9 @@ data InstallError =
   | InstallPackageError PackageId (Set Package) CabalError
   | InstallLinkError Package File
   | InstallEnvParseError EnvKey EnvValue Text
+  | InstallPlanPackageMissing PackageName
+  | InstallPlanPackageDuplicate PackageName [Package]
+  | InstallUnknownPackageType PackageId
   | InstallDisaster SomeException
     deriving (Show)
 
@@ -81,6 +89,15 @@ renderInstallError = \case
   InstallEnvParseError key val err ->
     "Failed parsing environment variable " <> key <> "=" <> val <> " (" <> err <> ")"
 
+  InstallPlanPackageMissing name ->
+    "Package not found in install plan: " <> unPackageName name
+
+  InstallPlanPackageDuplicate name _ ->
+    "Package duplicated in install plan: " <> unPackageName name
+
+  InstallUnknownPackageType pid ->
+    "Unknown package type for: " <> renderPackageId pid
+
   InstallDisaster ex ->
     "Disaster: " <> T.pack (show ex)
 
@@ -88,8 +105,14 @@ renderInstallError = \case
 
 installDependencies :: Flavour -> [Flag] -> [SourcePackage] -> EitherT InstallError IO ()
 installDependencies flavour flags spkgs = do
-  globals   <- installGlobalDependencies flavour flags spkgs
-  _         <- firstT InstallCabalError initSandbox
+  pkg <- firstT InstallCabalError $ findDependenciesForCurrentDirectory flags spkgs
+
+  let
+    tdeps = transitiveOfPackages (pkgDeps pkg)
+
+  installGlobalPackages flavour tdeps
+
+  _ <- firstT InstallCabalError initSandbox
   packageDB <- firstT InstallCabalError getPackageDB
 
   ignoreIO $ removeDirectoryRecursive packageDB
@@ -98,22 +121,29 @@ installDependencies flavour flags spkgs = do
   -- create symlinks to the relevant package .conf files in the
   -- package-db, then call recache so that ghc is aware of them.
   env <- getPackageEnv
-  mapM_ (link packageDB env) globals
+  mapM_ (link packageDB env) tdeps
   Hush <- firstT InstallCabalError $ cabal "sandbox" ["hc-pkg", "recache"]
 
   return ()
 
-installGlobalDependencies :: Flavour -> [Flag] -> [SourcePackage] -> EitherT InstallError IO [Package]
-installGlobalDependencies flavour flags spkgs = do
-  deps <- firstT InstallCabalError (findDependencies flags spkgs)
+installPackage :: PackageId -> EitherT InstallError IO Package
+installPackage (PackageId name ver) =
+  installPackage' name (Just ver)
+
+installPackage' :: PackageName -> Maybe Version -> EitherT InstallError IO Package
+installPackage' name mver = do
+  pkg <- firstT InstallCabalError $ findDependenciesForPackage name mver
+  installGlobalPackages Vanilla (transitiveOfPackages (Set.singleton pkg))
+  return pkg
+
+installGlobalPackages :: Flavour -> Set Package -> EitherT InstallError IO ()
+installGlobalPackages flavour deps = do
   let producer q = mapM_ (writeQueue q) deps
 
   mw  <- getMafiaWorkers
   gw  <- getGhcWorkers
   env <- getPackageEnv
   firstT (squashRunError deps) $ consume_ producer mw (install gw env flavour)
-
-  return . Set.toList $ transitiveOfPackages deps
 
 ------------------------------------------------------------------------
 
@@ -199,7 +229,7 @@ install w penv flavour p@(Package (PackageRef pid _ _) deps _) = do
   unlessM (doesFileExist fmark) $ do
 
     -- install package dependencies
-    mapM_ (install w penv flavour) (Set.toList (transitiveOfPackages deps))
+    mapM_ (install w penv flavour) (transitiveOfPackages deps)
 
     -- the vanilla flavour must always be installed first:
     --  + it creates and sets up the package's sandbox
@@ -213,8 +243,14 @@ install w penv flavour p@(Package (PackageRef pid _ _) deps _) = do
     unlessM (doesFileExist fmark) $
       withPackageLock penv p flavour $
         unlessM (doesFileExist fmark) $ do
-          when (flavour == Vanilla) $
-            createPackageSandbox penv p
+          -- when we create the package sandbox it determines whether the
+          -- package contains only executables, or is also available as a
+          -- library, this is the package type.
+          ptype <-
+            if (flavour == Vanilla) then
+              Just <$> createPackageSandbox penv p
+            else
+              pure Nothing
 
           let sbdir = packageSandboxDir penv p
               sbcfg = packageSandboxConfig penv p
@@ -231,9 +267,19 @@ install w penv flavour p@(Package (PackageRef pid _ _) deps _) = do
             flavourArgs flavour <>
             concatMap (\c -> ["--constraint", c]) (constraintsOfPackage p)
 
-          when (flavour == Vanilla) $ do
-            Out out <- sbcabal "sandbox" ["hc-pkg", "--", "describe", renderPackageId pid]
-            writeUtf8 (packageConfig penv p) out
+          when (flavour == Vanilla) $
+            case ptype of
+              -- only library packages can be described
+              Just Library -> do
+                Out out <- sbcabal "sandbox" ["hc-pkg", "--", "describe", renderPackageId pid]
+                writeUtf8 (packageConfig penv p) out
+              -- for executable only packages we just leave an empty marker
+              Just ExecutablesOnly ->
+                writeUtf8 (packageConfig penv p) T.empty
+              -- this can't really happen, we're only supposed to assign
+              -- 'ptype' to Nothing if we're not installing the vanilla flavour
+              Nothing ->
+                left (InstallUnknownPackageType pid)
 
           writeBytes fmark B.empty
 
@@ -253,7 +299,7 @@ flavourArgs = \case
 
 -- | Creates and installs/links the dependencies for a package in to its well
 --   known global sandbox.
-createPackageSandbox :: PackageEnv -> Package -> EitherT InstallError IO ()
+createPackageSandbox :: PackageEnv -> Package -> EitherT InstallError IO PackageType
 createPackageSandbox penv p@(Package (PackageRef pid _ msrc) deps _) = do
   liftIO . T.putStrLn $ "Creating sandbox for " <> renderHashId p
 
@@ -269,7 +315,7 @@ createPackageSandbox penv p@(Package (PackageRef pid _ msrc) deps _) = do
 
   Hush <- sbcabal "sandbox" ["init", "--sandbox", sbdir]
 
-  case msrc of
+  srcdir <- case msrc of
     -- hackage package
     Nothing -> do
       -- We install hackage packages by unpacking them in to a src/ directory
@@ -278,23 +324,26 @@ createPackageSandbox penv p@(Package (PackageRef pid _ msrc) deps _) = do
       -- files are kept around in the dist/ directory. It also has the benefit
       -- of not polluting the $TMPDIR on the build bot.
       createDirectoryIfMissing True sbsrc
+      let
+        srcdir = sbsrc </> renderPackageId pid
       Hush <- sbcabal "unpack" ["--destdir=" <> sbsrc, renderPackageId pid]
-      Hush <- sbcabal "sandbox" ["add-source", sbsrc </> renderPackageId pid]
-      return ()
+      Hush <- sbcabal "sandbox" ["add-source", srcdir]
+      return srcdir
 
     -- source package
     Just src -> do
       Hush <- sbcabal "sandbox" ["add-source", spDirectory src]
-      return ()
+      return (spDirectory src)
 
-  db <- firstT InstallCabalError (readPackageDB sbcfg)
+  ty <- firstT InstallCabalError $ getPackageType srcdir
+  db <- firstT InstallCabalError $ readPackageDB sbcfg
 
   -- create symlinks to the relevant package .conf files in the
   -- package-db, then call recache so that ghc is aware of them.
-  mapM_ (link db penv) (Set.toList (transitiveOfPackages deps))
+  mapM_ (link db penv) (transitiveOfPackages deps)
   Hush <- sbcabal "sandbox" ["hc-pkg", "recache"]
 
-  return ()
+  return ty
 
 link :: Directory -> PackageEnv -> Package -> EitherT InstallError IO ()
 link db env p@(Package (PackageRef pid _ _) _ _) = do

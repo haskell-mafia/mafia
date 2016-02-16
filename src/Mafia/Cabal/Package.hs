@@ -4,7 +4,9 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 module Mafia.Cabal.Package
-  ( getPackageId
+  ( PackageType(..)
+  , getPackageId
+  , getPackageType
   , getCabalFile
 
   , SourcePackage(..)
@@ -44,6 +46,39 @@ getCabalFile dir = do
     []     -> return Nothing
     (x:[]) -> return (Just (dir </> x))
     (_:_)  -> return Nothing
+
+------------------------------------------------------------------------
+
+data PackageType =
+    Library
+  | ExecutablesOnly
+    deriving (Eq, Ord, Show)
+
+getPackageType :: Directory -> EitherT CabalError IO PackageType
+getPackageType dir = do
+  mf <- getCabalFile dir
+  case mf of
+    Nothing ->
+      left (CabalFileNotFound dir)
+    Just f -> do
+      mt <- readPackageType f
+      case mt of
+        Nothing  ->
+          left (CabalCouldNotReadPackageType f)
+        Just t ->
+          return t
+
+readPackageType :: MonadIO m => File -> m (Maybe PackageType)
+readPackageType cabalFile = do
+  text <- liftM (fmap T.toLower . T.lines . fromMaybe T.empty) $ readUtf8 cabalFile
+  if any (T.isPrefixOf "library") text then
+    return (Just Library)
+  else if any (T.isPrefixOf "executable") text then
+    return (Just ExecutablesOnly)
+  else
+    return Nothing
+
+------------------------------------------------------------------------
 
 getPackageId :: Directory -> EitherT CabalError IO (Maybe PackageId)
 getPackageId dir = do
