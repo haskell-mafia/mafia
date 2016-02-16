@@ -20,6 +20,7 @@ import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import qualified Data.Text.IO as T
 
+import           Mafia.Bin
 import           Mafia.Cabal
 import           Mafia.Error
 import           Mafia.Home
@@ -110,8 +111,9 @@ hoogleCacheDir =
 
 installHoogle :: EitherT MafiaError IO File
 installHoogle =
-  bimapT MafiaProcessError (</> "hoogle") $
-    installBinary (packageId "hoogle" [4, 2, 43]) [packageId "happy" [1, 19, 5]]
+  bimapT MafiaBinError (</> "hoogle") $ do
+    ensureExeOnPath (ipackageId "happy" [1, 19, 5])
+    installBinary (ipackageId "hoogle" [4, 2, 43])
 
 hoogleDbFile :: Directory -> PackageId -> File
 hoogleDbFile db pkg =

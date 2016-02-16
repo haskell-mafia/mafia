@@ -5,8 +5,10 @@
 {-# LANGUAGE PatternGuards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 module Mafia.Cabal.Dependencies
-  ( filterPackages
-  , findDependencies
+  ( findDependenciesForCurrentDirectory
+  , findDependenciesForPackage
+
+  , filterPackages
   , flagArg
 
     -- exported for testing
@@ -64,19 +66,18 @@ filterPackage name = \case
 
 ------------------------------------------------------------------------
 
-findDependencies :: [Flag] -> [SourcePackage] -> EitherT CabalError IO (Set Package)
-findDependencies flags spkgs = do
-  fromInstallPlan spkgs <$> calculateInstallPlan flags spkgs
+findDependenciesForCurrentDirectory :: [Flag] -> [SourcePackage] -> EitherT CabalError IO Package
+findDependenciesForCurrentDirectory flags spkgs = do
+  hoistEither . fromInstallPlan spkgs =<< installPlanForCurrentDirectory flags spkgs
 
-fromInstallPlan :: [SourcePackage] -> [PackagePlan] -> Set Package
+findDependenciesForPackage :: PackageName -> Maybe Version -> EitherT CabalError IO Package
+findDependenciesForPackage name mver = do
+  hoistEither . fromInstallPlan [] =<< installPlanForPackage name mver
+
+fromInstallPlan :: [SourcePackage] -> [PackagePlan] -> Either CabalError Package
 fromInstallPlan spkgs rdeps =
   let rdMap =
         mapFromList (refId . ppRef) rdeps
-
-      topLevels =
-        Map.fromList .
-        fmap (\pp -> (refId $ ppRef pp, ())) $
-        filter (null . ppDeps) rdeps
 
       spCombine s r =
         r { ppRef = (ppRef r) { refSrcPkg = Just s } }
@@ -111,12 +112,22 @@ fromInstallPlan spkgs rdeps =
       lookupRef ref =
         fromMaybe (mkPackage ref Set.empty) (Map.lookup ref dependencies)
 
+      topLevels =
+        fmap (refId . ppRef) $
+        filter (null . ppDeps) rdeps
+
   in
-    Set.unions .
-    fmap pkgDeps .
-    Map.elems .
-    fmap lookupRef $
-    Map.intersection packageRefs topLevels
+    case topLevels of
+      [] ->
+        Left CabalNoTopLevelPackage
+      [topLevel] ->
+        case fmap lookupRef (Map.lookup topLevel packageRefs) of
+          Nothing ->
+            Left (CabalTopLevelPackageNotFoundInPlan topLevel)
+          Just pkg ->
+            Right pkg
+      xs ->
+        Left (CabalMultipleTopLevelPackages xs)
 
 reifyPackageRefs :: Map PackageRef (Set PackageRef) -> Map PackageRef Package
 reifyPackageRefs refs =
@@ -135,38 +146,55 @@ toGraphKey pp = (pp, refId (ppRef pp), ppDeps pp)
 fromGraphKey :: (PackagePlan, PackageId, [PackageId]) -> PackageRef
 fromGraphKey (pp, _, _) = ppRef pp
 
-calculateInstallPlan :: [Flag] -> [SourcePackage] -> EitherT CabalError IO [PackagePlan]
-calculateInstallPlan flags spkgs = do
+installPlanForCurrentDirectory :: [Flag] -> [SourcePackage] -> EitherT CabalError IO [PackagePlan]
+installPlanForCurrentDirectory flags spkgs = do
+  let
+    -- Make sure we can only install the source package by pinning its version
+    -- explicitly. This makes cabal fail if the .cabal file would have caused
+    -- the hackage version to be installed instead.
+    constraints =
+      concatMap spConstraintArgs spkgs
+
+    flagArgs =
+      fmap flagArg flags
+
+    args =
+      [ "--enable-tests"
+      , "--enable-benchmarks"
+      , "--enable-profiling" ]
+
+  dir <- getCurrentDirectory
+  makeInstallPlan (Just dir) (fmap spDirectory spkgs) (args <> constraints <> flagArgs)
+
+installPlanForPackage :: PackageName -> Maybe Version -> EitherT CabalError IO [PackagePlan]
+installPlanForPackage name = \case
+  Nothing ->
+    makeInstallPlan Nothing [] [unPackageName name]
+  Just ver ->
+    makeInstallPlan Nothing [] [renderPackageId (PackageId name ver)]
+
+makeInstallPlan :: Maybe Directory -> [Directory] -> [Argument] -> EitherT CabalError IO [PackagePlan]
+makeInstallPlan mdir sourcePkgs installArgs = do
   (_ :: GhcVersion) <- firstT CabalGhcError getGhcVersion -- check ghc is on the path
   checkCabalVersion
 
   withSystemTempDirectory "mafia-deps-" $ \tmp -> do
-    dir <- getCurrentDirectory
-
-    let cabal = cabalFrom dir (Just (tmp </> "sandbox.config"))
+    let
+      dir = fromMaybe tmp mdir
+      cabal = cabalFrom dir (Just (tmp </> "sandbox.config"))
 
     Hush <- cabal "sandbox" ["init", "--sandbox", tmp]
 
     -- this is a fast 'cabal sandbox add-source'
-    createIndexFile (fmap spDirectory spkgs) tmp
+    createIndexFile sourcePkgs tmp
 
-    -- make sure we're installing the source package by
-    -- pinning its version explicitly
-    let constraints =
-          concatMap spConstraintArgs spkgs
-
-        flagArgs =
-          fmap flagArg flags
-
-        installDryRun args =
-          cabal "install" $
-            [ "--enable-tests"
-            , "--enable-benchmarks"
-            , "--enable-profiling"
-            , "--reorder-goals"
-            , "--max-backjumps=-1"
-            , "--avoid-reinstalls"
-            , "--dry-run" ] <> flagArgs <> constraints <> args
+    let
+      installDryRun args =
+        cabal "install" $
+          [ "--reorder-goals"
+          , "--max-backjumps=-1"
+          , "--avoid-reinstalls"
+          , "--dry-run" ] <> installArgs <> args
 
     result <- liftIO . runEitherT $ installDryRun ["-v2"]
     case result of

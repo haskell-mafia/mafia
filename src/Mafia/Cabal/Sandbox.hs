@@ -39,7 +39,7 @@ sandbox cmd args = do
 
 sandbox_ :: Argument -> [Argument] -> EitherT CabalError IO ()
 sandbox_ cmd args = do
-  Pass <- sandbox cmd args
+  PassErr <- sandbox cmd args
   return ()
 
 -- Sandbox initialized if required, this should support sandboxes in parent
@@ -52,8 +52,9 @@ initSandbox = do
 
   dirOk <- doesDirectoryExist sandboxDir
 
-  unless (cfgOk && dirOk) $
-    call_ CabalProcessError "cabal" ["sandbox", "--sandbox", sandboxDir, "init"]
+  unless (cfgOk && dirOk) $ do
+    PassErr <- call CabalProcessError "cabal" ["sandbox", "--sandbox", sandboxDir, "init"]
+    return ()
 
   return sandboxDir
 

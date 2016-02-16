@@ -24,7 +24,7 @@ import           Mafia.Process
 
 import           P
 
-import           System.IO (IO)
+import           System.IO (IO, stderr)
 
 import           X.Control.Monad.Trans.Either (EitherT, left)
 
@@ -81,11 +81,12 @@ initSubmodules = do
   nss  <- fmap subName . filter subNeedsInit <$> getSubmodules
   oss  <- fmap subName . filter subOutOfSync <$> getSubmodules
 
-  forM_ nss $ \s ->
-    callFrom_ GitProcessError root "git" ["submodule", "update", "--init", s]
+  forM_ nss $ \s -> do
+    PassErr <- callFrom GitProcessError root "git" ["submodule", "update", "--init", s]
+    return ()
 
   forM_ oss $ \s ->
-    liftIO . T.putStrLn $ "Warning: " <> s <> " is out of sync with the git index"
+    liftIO . T.hPutStrLn stderr $ "Warning: " <> s <> " is out of sync with the git index"
 
 getSubmodules :: EitherT GitError IO [Submodule]
 getSubmodules = do

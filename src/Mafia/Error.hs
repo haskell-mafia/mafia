@@ -9,6 +9,7 @@ module Mafia.Error
 
 import           Data.Text (Text)
 
+import           Mafia.Bin
 import           Mafia.Cabal.Types
 import           Mafia.Git
 import           Mafia.Hash
@@ -32,6 +33,7 @@ data MafiaError
   | MafiaCabalError CabalError
   | MafiaSubmoduleError SubmoduleError
   | MafiaInstallError InstallError
+  | MafiaBinError BinError
   | MafiaHashError HashError
   | MafiaInitError InitError
   | MafiaParseError Text
@@ -58,6 +60,9 @@ renderMafiaError = \case
 
   MafiaInstallError e ->
     renderInstallError e
+
+  MafiaBinError e ->
+    renderBinError e
 
   MafiaHashError e ->
     renderHashError e

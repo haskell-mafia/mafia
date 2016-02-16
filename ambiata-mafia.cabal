@@ -47,6 +47,7 @@ library
 
   exposed-modules:
                     BuildInfo_ambiata_mafia
+                    Mafia.Bin
                     Mafia.Cabal
                     Mafia.Cabal.Dependencies
                     Mafia.Cabal.Index

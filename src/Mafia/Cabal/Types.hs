@@ -217,8 +217,13 @@ data CabalError =
   | CabalSDistFailed Directory
   | CabalSDistFailedCouldNotReadFile Directory File
   | CabalReinstallsDetected [PackagePlan]
+  | CabalFileNotFound Directory
   | CabalCouldNotReadPackageId File
+  | CabalCouldNotReadPackageType File
   | CabalCouldNotParseVersion Text
+  | CabalNoTopLevelPackage
+  | CabalTopLevelPackageNotFoundInPlan PackageId
+  | CabalMultipleTopLevelPackages [PackageId]
   | CabalInvalidVersion Version MinVersion MaxVersion
   | CabalNotInstalled
     deriving (Show)
@@ -262,11 +267,27 @@ renderCabalError = \case
     "Failed to run 'cabal sdist' for source package: " <> dir <> "\n" <>
     "Could not read file: " <> path
 
+  CabalFileNotFound dir ->
+    "Could not find .cabal file in: " <> dir
+
   CabalCouldNotReadPackageId cabalFile ->
     "Failed to read package-id from: " <> cabalFile
 
+  CabalCouldNotReadPackageType cabalFile ->
+    "Failed to find 'library' or 'executable' stanzas in: " <> cabalFile
+
   CabalCouldNotParseVersion out ->
     "Could not parse or read the cabal-install version number from the following output:\n" <> out
+
+  CabalNoTopLevelPackage ->
+    "No top level package found after parsing install plan"
+
+  CabalTopLevelPackageNotFoundInPlan pid ->
+    "The top level package (" <> renderPackageId pid <> ") was not found in the install plan"
+
+  CabalMultipleTopLevelPackages refs ->
+    "Unexpectedly found multiple top level packages after parsing install plan: " <>
+    T.intercalate ", " (fmap renderPackageId refs)
 
   CabalReinstallsDetected pps ->
     "Cabal's install plan suggested the following reinstalls:" <>

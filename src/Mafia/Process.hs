@@ -16,6 +16,7 @@ module Mafia.Process
 
     -- * Outputs
   , Pass(..)
+  , PassErr(..)
   , Clean(..)
   , Hush(..)
   , Out(..)
@@ -87,6 +88,10 @@ data Process = Process
 data Pass = Pass
   deriving (Eq, Ord, Show)
 
+-- | Pass @stdout@ and @stderr@ through to the console, but redirect @stdout@ > @stderr.
+data PassErr = PassErr
+  deriving (Eq, Ord, Show)
+
 -- | Pass @stdout@ and @stderr@ through to the console, but process control
 --   characters (such as \b, \r) prior to emitting each line of output.
 data Clean = Clean
@@ -141,6 +146,15 @@ instance ProcessResult Pass where
 
     code <- liftIO (Process.waitForProcess pid)
     return (code, Pass)
+
+instance ProcessResult PassErr where
+  callProcess p = withProcess p $ do
+    let cp = (fromProcess p) { Process.std_out = Process.UseHandle IO.stderr }
+
+    (Nothing, Nothing, Nothing, pid) <- liftIO (Process.createProcess cp)
+
+    code <- liftIO (Process.waitForProcess pid)
+    return (code, PassErr)
 
 instance ProcessResult (Out ByteString) where
   callProcess p = withProcess p $ do

@@ -28,7 +28,7 @@ cabal cmd args = call CabalProcessError "cabal" (cmd : args)
 
 cabal_ :: Argument -> [Argument] -> EitherT CabalError IO ()
 cabal_ cmd args = do
-  Pass <- cabal cmd args
+  PassErr <- cabal cmd args
   return ()
 
 cabalFrom

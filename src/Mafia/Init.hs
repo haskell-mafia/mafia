@@ -34,7 +34,7 @@ import           Mafia.Submodule
 
 import           P
 
-import           System.IO (IO)
+import           System.IO (IO, stderr)
 
 import           X.Control.Monad.Trans.Either (EitherT, left, hoistEither)
 
@@ -83,7 +83,7 @@ initialize mprofiling mflags = do
 
   clearAddSourceDependencies sandboxDir
 
-  liftIO (T.putStrLn "Checking for changes to dependencies...")
+  liftIO (T.hPutStrLn stderr "Checking for changes to dependencies...")
   previous <- readMafiaState statePath
   current <- getMafiaState (mprofiling <|> fmap msProfiling previous) (mflags <|> fmap msFlags previous)
   hasDist <- liftIO $ doesDirectoryExist "dist"
@@ -93,7 +93,7 @@ initialize mprofiling mflags = do
   let needInstall = previous /= Just current || packages == PackagesBroken
 
   when needInstall $ do
-    liftIO (T.putStrLn "Installing dependencies...")
+    liftIO (T.hPutStrLn stderr "Installing dependencies...")
     let sdeps = Set.toList (msSourceDependencies current)
         flavours = profilingFlavour (msProfiling current)
         flags = msFlags current
@@ -137,7 +137,7 @@ clearAddSourceDependencies sandboxDir = do
 
   for_ deps $ \dep -> do
     dep' <- fromMaybe dep <$> makeRelativeToCurrentDirectory dep
-    liftIO . T.putStrLn $ "Removing add-source dependency: " <> dep'
+    liftIO . T.hPutStrLn stderr $ "Removing add-source dependency: " <> dep'
 
   firstT InitCabalError $ createIndexFile [] sandboxDir
 
