@@ -48,7 +48,7 @@ import           P
 
 import           System.FileLock (SharedExclusive(..), FileLock)
 import           System.FileLock (lockFile, tryLockFile, unlockFile)
-import           System.IO (IO)
+import           System.IO (IO, stderr)
 import           System.Posix.Files (createSymbolicLink)
 
 import           Twine.Parallel (RunError(..), consume_)
@@ -254,9 +254,9 @@ install w penv flavour p@(Package (PackageRef pid _ _) deps _) = do
           let sbcabal x xs =
                 firstT (InstallPackageError pid Set.empty) $ cabalFrom sbdir (Just sbcfg) x xs
 
-          liftIO . T.putStrLn $ "Building " <> renderHashId p <> renderFlavourSuffix flavour
+          liftIO . T.hPutStrLn stderr $ "Building " <> renderHashId p <> renderFlavourSuffix flavour
 
-          Pass <- sbcabal "install" $
+          PassErr <- sbcabal "install" $
             [ "--ghc-options=-j" <> T.pack (show w)
             , "--max-backjumps=0"
             , renderPackageId pid ] <>
@@ -297,7 +297,7 @@ flavourArgs = \case
 --   known global sandbox.
 createPackageSandbox :: PackageEnv -> Package -> EitherT InstallError IO PackageType
 createPackageSandbox penv p@(Package (PackageRef pid _ msrc) deps _) = do
-  liftIO . T.putStrLn $ "Creating sandbox for " <> renderHashId p
+  liftIO . T.hPutStrLn stderr $ "Creating sandbox for " <> renderHashId p
 
   let sbdir = packageSandboxDir penv p
       sbcfg = packageSandboxConfig penv p
@@ -418,7 +418,7 @@ lockPackage env p f = do
   case mlock of
     Just lock -> return lock
     Nothing   -> liftIO $ do
-      T.putStrLn ("Waiting for " <> renderHashId p <> renderFlavourSuffix f)
+      T.hPutStrLn stderr ("Waiting for " <> renderHashId p <> renderFlavourSuffix f)
       lockFile (T.unpack path) Exclusive
 
 packageConfig :: PackageEnv -> Package -> File
