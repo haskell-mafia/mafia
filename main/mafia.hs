@@ -323,7 +323,7 @@ mafiaQuick flags extraIncludes paths = do
 
 mafiaWatch :: [Flag] -> [GhciInclude] -> File -> [Argument] -> EitherT MafiaError IO ()
 mafiaWatch flags extraIncludes path extraArgs = do
-  ghcidExe <- bimapT MafiaInstallError (</> "ghcid") $ installBinary (ipackageId "ghcid" [0, 5])
+  ghcidExe <- bimapT MafiaBinError (</> "ghcid") $ installBinary (ipackageId "ghcid" [0, 5])
   args <- ghciArgs extraIncludes [path]
   initMafia DisableProfiling flags
   exec MafiaProcessError ghcidExe $ [ "-c", T.unwords ("ghci" : args) ] <> extraArgs
@@ -336,7 +336,7 @@ mafiaHoogle args = do
 
 mafiaInstall :: InstallPackage -> EitherT MafiaError IO ()
 mafiaInstall ipkg =
-  liftIO . T.putStrLn =<< firstT MafiaInstallError (installBinary ipkg)
+  liftIO . T.putStrLn =<< firstT MafiaBinError (installBinary ipkg)
 
 ghciArgs :: [GhciInclude] -> [File] -> EitherT MafiaError IO [Argument]
 ghciArgs extraIncludes paths = do
@@ -389,7 +389,7 @@ initMafia prof flags = do
 
   let ensureExeOnPath' e pkg =
         lookupEnv e >>= mapM_ (\b -> when (b == "true") $ ensureExeOnPath pkg)
-  firstT MafiaInstallError $ ensureExeOnPath' "MAFIA_HAPPY" (ipackageId "happy" [1, 19, 5])
-  firstT MafiaInstallError $ ensureExeOnPath' "MAFIA_ALEX" (ipackageId "alex" [3, 1, 6])
-  firstT MafiaInstallError $ ensureExeOnPath' "MAFIA_CPPHS" (ipackageId "cpphs" [1, 19, 3])
+  firstT MafiaBinError $ ensureExeOnPath' "MAFIA_HAPPY" (ipackageId "happy" [1, 19, 5])
+  firstT MafiaBinError $ ensureExeOnPath' "MAFIA_ALEX" (ipackageId "alex" [3, 1, 6])
+  firstT MafiaBinError $ ensureExeOnPath' "MAFIA_CPPHS" (ipackageId "cpphs" [1, 19, 3])
   firstT MafiaInitError $ initialize (Just prof) (Just flags)

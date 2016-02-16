@@ -3,7 +3,10 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PatternSynonyms #-}
 module Mafia.Bin
-  ( InstallPackage(..)
+  ( BinError(..)
+  , renderBinError
+
+  , InstallPackage(..)
   , ipackageId
   , renderInstallPackage
   , ipkgName
@@ -23,13 +26,26 @@ import           Mafia.IO
 import           Mafia.Install
 import           Mafia.Package
 import           Mafia.Path
+import           Mafia.Cabal.Types
 import           P
 
 import           System.IO (IO)
 import           System.Posix.Files (createSymbolicLink)
 
-import           X.Control.Monad.Trans.Either (EitherT)
+import           X.Control.Monad.Trans.Either (EitherT, left)
 
+
+data BinError =
+    BinInstallError InstallError
+  | BinNotExecutable PackageId
+    deriving (Show)
+
+renderBinError :: BinError -> Text
+renderBinError = \case
+  BinInstallError err ->
+    renderInstallError err
+  BinNotExecutable pid ->
+    "Cannot link bin/ directory for " <> renderPackageId pid <> " as no executables were installed."
 
 data InstallPackage =
     InstallPackageName PackageName
@@ -62,7 +78,7 @@ ipkgVersion = \case
     Just (pkgVersion pid)
 
 -- | Installs a given cabal package at a specific version and return a directory containing all executables
-installBinary :: InstallPackage -> EitherT InstallError IO Directory
+installBinary :: InstallPackage -> EitherT BinError IO Directory
 installBinary ipkg = do
   bin <- ensureMafiaDir "bin"
 
@@ -76,14 +92,18 @@ installBinary ipkg = do
     -- must have a dead symlink, so lets remove it and install it again.
     ignoreIO $ removeFile plink
 
-    pkg <- installPackage (ipkgName ipkg) (ipkgVersion ipkg)
-    env <- getPackageEnv
+    pkg <- firstT BinInstallError $ installPackage (ipkgName ipkg) (ipkgVersion ipkg)
+    env <- firstT BinInstallError $ getPackageEnv
     let gdir = packageSandboxDir env pkg
+
+    unlessM (doesDirectoryExist $ gdir </> "bin") $
+      left (BinNotExecutable . refId $ pkgRef pkg)
+
     liftIO $ createSymbolicLink (T.unpack gdir) (T.unpack plink)
 
   return pbin
 
-ensureExeOnPath :: InstallPackage -> EitherT InstallError IO ()
+ensureExeOnPath :: InstallPackage -> EitherT BinError IO ()
 ensureExeOnPath pkg = do
   dir <- installBinary pkg
   setEnv "PATH" . maybe dir (\path -> dir <> ":" <> path) =<< lookupEnv "PATH"

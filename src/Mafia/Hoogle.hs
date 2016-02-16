@@ -111,7 +111,7 @@ hoogleCacheDir =
 
 installHoogle :: EitherT MafiaError IO File
 installHoogle =
-  bimapT MafiaInstallError (</> "hoogle") $ do
+  bimapT MafiaBinError (</> "hoogle") $ do
     ensureExeOnPath (ipackageId "happy" [1, 19, 5])
     installBinary (ipackageId "hoogle" [4, 2, 43])
 
