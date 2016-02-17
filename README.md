@@ -20,12 +20,12 @@ run `mafia build` to get up and running for development. This will pull
 down any git submodules, create a cabal sandbox, install dependencies
 and then build everything, tests and benchmarks included.
 
-Cabal packages in git submodules are discovered automatically and made
-available as source dependencies. This is particularly useful if you
-have many internal dependencies that are not published to Hackage. It
-allows for development of a package and its dependencies all at once,
-without having to publish intermediate builds of libraries and without
-having to resort to a monorepo.
+Cabal packages in the same git repository, or in git submodules, are
+discovered automatically and made available as source dependencies. This
+is particularly useful if you have many internal dependencies that are
+not published to Hackage. It allows for development of a package and its
+dependencies all at once, without having to publish intermediate builds
+of libraries and without having to resort to a monorepo.
 
 All dependencies are cached globally in `$HOME/.ambiata/mafia/packages`
 using a nix-like hashing system so that for a given set of transitive
@@ -45,7 +45,7 @@ Mafia is designed to be run via a shell script which will bootstrap the
 `PATH` and use it like that as well.
 
 Place the
-[script](https://raw.githubusercontent.com/ambiata/mafia/topic/docs/script/mafia)
+[script](https://raw.githubusercontent.com/ambiata/mafia/master/script/mafia)
 in the same directory as your `.cabal` project file and then run
 `./mafia upgrade`. This will ensure that you have the latest script and
 also bake the git hash of the Mafia version in to the script.

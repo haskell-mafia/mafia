@@ -103,9 +103,16 @@ getConfiguredSources = do
 
 getConventionSources :: EitherT GitError IO (Set Directory)
 getConventionSources = do
+  -- make sure we never include the current directory (i.e. the project we're
+  -- trying to build) as a source dependency
+  dir <- getCurrentDirectory
   root <- getProjectRoot
+  repoPaths <- Set.filter (/= dir) <$> getSourcesFrom root
+
   subs <- fmap ((root </>) . subName) <$> getSubmodules
-  Set.unions <$> traverse getSourcesFrom subs
+  subPaths <- Set.unions <$> traverse getSourcesFrom subs
+
+  return $ Set.union repoPaths subPaths
 
 getSourcesFrom :: MonadIO m => Directory -> m (Set Path)
 getSourcesFrom dir = do
