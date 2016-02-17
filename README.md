@@ -45,7 +45,7 @@ Mafia is designed to be run via a shell script which will bootstrap the
 `PATH` and use it like that as well.
 
 Place the
-[script](https://raw.githubusercontent.com/ambiata/mafia/topic/docs/script/mafia)
+[script](https://raw.githubusercontent.com/ambiata/mafia/master/script/mafia)
 in the same directory as your `.cabal` project file and then run
 `./mafia upgrade`. This will ensure that you have the latest script and
 also bake the git hash of the Mafia version in to the script.
