@@ -13,8 +13,6 @@ Overview
 Mafia is an opinionated wrapper for Cabal that makes working on Haskell
 projects fun and easy.
 
-![godfather](img/godfather.jpg)
-
 The central idea is that upon cloning a project, you should only have to
 run `mafia build` to get up and running for development. This will pull
 down any git submodules, create a cabal sandbox, install dependencies
