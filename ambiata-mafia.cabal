@@ -43,10 +43,9 @@ library
                     -Wall
 
   hs-source-dirs:
-                    src gen
+                    src
 
   exposed-modules:
-                    BuildInfo_ambiata_mafia
                     Mafia.Bin
                     Mafia.Cabal
                     Mafia.Cabal.Dependencies
@@ -77,8 +76,11 @@ executable mafia
   ghc-options:
                     -Wall -threaded -O2
 
+  hs-source-dirs:
+                    gen
+
   main-is:
-                    main/mafia.hs
+                    ../main/mafia.hs
 
   build-depends:
                       base
