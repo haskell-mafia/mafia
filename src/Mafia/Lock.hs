@@ -15,6 +15,7 @@ import           Data.Text (Text)
 import qualified Data.Text as T
 
 import           Mafia.Cabal
+import           Mafia.Ghc
 import           Mafia.IO
 import           Mafia.Path
 import           Mafia.Project
@@ -29,6 +30,7 @@ import           X.Control.Monad.Trans.Either (EitherT, hoistEither)
 data LockError =
     LockProjectError ProjectError
   | LockCabalError CabalError
+  | LockGhcError GhcError
     deriving (Show)
 
 renderLockError :: LockError -> Text
@@ -37,11 +39,14 @@ renderLockError = \case
     renderProjectError e
   LockCabalError e ->
     renderCabalError e
+  LockGhcError e ->
+    renderGhcError e
 
 getLockFile :: Directory -> EitherT LockError IO File
 getLockFile dir = do
+  ghcver <- firstT LockGhcError getGhcVersion
   project <- firstT LockProjectError $ getProjectName dir
-  return $ dir </> project <> ".lock"
+  return $ dir </> project <> ".lock-" <> ghcver
 
 readConstraints :: File -> EitherT LockError IO (Maybe [Constraint])
 readConstraints file = do
