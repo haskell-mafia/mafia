@@ -28,7 +28,6 @@ instance Eq EqCabalError where
   (==) x y =
     show x == show y
 
-
 instance Arbitrary PackageName where
   arbitrary = do
     name <- T.intercalate "-" <$> listOf1 (elements muppets)
