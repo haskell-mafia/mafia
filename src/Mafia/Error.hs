@@ -15,6 +15,7 @@ import           Mafia.Git
 import           Mafia.Hash
 import           Mafia.Init
 import           Mafia.Install
+import           Mafia.Lock
 import           Mafia.Process
 import           Mafia.Project
 import           Mafia.Submodule
@@ -36,6 +37,8 @@ data MafiaError
   | MafiaBinError BinError
   | MafiaHashError HashError
   | MafiaInitError InitError
+  | MafiaLockError LockError
+  | MafiaNoInstallConstraints
   | MafiaParseError Text
   | MafiaEntryPointNotFound File
   deriving (Show)
@@ -69,6 +72,12 @@ renderMafiaError = \case
 
   MafiaInitError e ->
     renderInitError e
+
+  MafiaLockError e ->
+    renderLockError e
+
+  MafiaNoInstallConstraints ->
+    "Could not find the dependency constraints calculated during the last install."
 
   MafiaParseError msg ->
     "Parse failed: " <> msg

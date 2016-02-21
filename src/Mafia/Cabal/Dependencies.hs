@@ -30,6 +30,7 @@ import           Data.String (String)
 import           Data.Text (Text)
 import qualified Data.Text as T
 
+import           Mafia.Cabal.Constraint
 import           Mafia.Cabal.Index
 import           Mafia.Cabal.Package
 import           Mafia.Cabal.Process (cabalFrom)
@@ -46,6 +47,7 @@ import           P
 import           System.IO (IO)
 
 import           X.Control.Monad.Trans.Either
+
 
 ------------------------------------------------------------------------
 
@@ -66,9 +68,9 @@ filterPackage name = \case
 
 ------------------------------------------------------------------------
 
-findDependenciesForCurrentDirectory :: [Flag] -> [SourcePackage] -> EitherT CabalError IO Package
-findDependenciesForCurrentDirectory flags spkgs = do
-  hoistEither . fromInstallPlan spkgs =<< installPlanForCurrentDirectory flags spkgs
+findDependenciesForCurrentDirectory :: [Flag] -> [SourcePackage] -> [Constraint] -> EitherT CabalError IO Package
+findDependenciesForCurrentDirectory flags spkgs constraints = do
+  hoistEither . fromInstallPlan spkgs =<< installPlanForCurrentDirectory flags spkgs constraints
 
 findDependenciesForPackage :: PackageName -> Maybe Version -> EitherT CabalError IO Package
 findDependenciesForPackage name mver = do
@@ -146,14 +148,14 @@ toGraphKey pp = (pp, refId (ppRef pp), ppDeps pp)
 fromGraphKey :: (PackagePlan, PackageId, [PackageId]) -> PackageRef
 fromGraphKey (pp, _, _) = ppRef pp
 
-installPlanForCurrentDirectory :: [Flag] -> [SourcePackage] -> EitherT CabalError IO [PackagePlan]
-installPlanForCurrentDirectory flags spkgs = do
+installPlanForCurrentDirectory :: [Flag] -> [SourcePackage] -> [Constraint] -> EitherT CabalError IO [PackagePlan]
+installPlanForCurrentDirectory flags spkgs constraints0 = do
   let
     -- Make sure we can only install the source package by pinning its version
     -- explicitly. This makes cabal fail if the .cabal file would have caused
     -- the hackage version to be installed instead.
     constraints =
-      concatMap spConstraintArgs spkgs
+      constraintArgs $ constraints0 <> fmap sourcePackageConstraint spkgs
 
     flagArgs =
       fmap flagArg flags
@@ -208,13 +210,6 @@ makeInstallPlan mdir sourcePkgs installArgs = do
         Pass <- installDryRun []
         -- this should never happen
         left CabalInstallIsNotReferentiallyTransparent
-
-spConstraintArgs :: SourcePackage -> [Text]
-spConstraintArgs sp =
-  let pid  = spPackageId sp
-      name = unPackageName (pkgName pid)
-      ver  = renderVersion (pkgVersion pid)
-  in [ "--constraint", name <> " == " <> ver ]
 
 flagArg :: Flag -> Argument
 flagArg = \case

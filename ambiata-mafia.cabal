@@ -49,6 +49,7 @@ library
                     BuildInfo_ambiata_mafia
                     Mafia.Bin
                     Mafia.Cabal
+                    Mafia.Cabal.Constraint
                     Mafia.Cabal.Dependencies
                     Mafia.Cabal.Index
                     Mafia.Cabal.Package
@@ -65,6 +66,7 @@ library
                     Mafia.IO
                     Mafia.Init
                     Mafia.Install
+                    Mafia.Lock
                     Mafia.Package
                     Mafia.Path
                     Mafia.Process

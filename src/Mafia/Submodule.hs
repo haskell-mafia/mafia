@@ -92,9 +92,10 @@ getSubmoduleSources = Set.union <$> getConfiguredSources
 
 getConfiguredSources :: EitherT SubmoduleError IO (Set Directory)
 getConfiguredSources = do
+  dir <- getCurrentDirectory
   root <- firstT SubmoduleGitError getProjectRoot
-  name <- firstT SubmoduleProjectError getProjectName
-  cfg  <- readUtf8 (name <> ".submodules")
+  name <- firstT SubmoduleProjectError $ getProjectName dir
+  cfg <- readUtf8 (name <> ".submodules")
   return . Set.fromList
          . fmap (root </>)
          . T.lines

@@ -31,6 +31,7 @@ import qualified Data.Text.Read as T
 
 import           GHC.Conc (getNumProcessors)
 
+import           Mafia.Cabal.Constraint
 import           Mafia.Cabal.Dependencies
 import           Mafia.Cabal.Package
 import           Mafia.Cabal.Process
@@ -103,9 +104,9 @@ renderInstallError = \case
 
 ------------------------------------------------------------------------
 
-installDependencies :: Flavour -> [Flag] -> [SourcePackage] -> EitherT InstallError IO ()
-installDependencies flavour flags spkgs = do
-  pkg <- firstT InstallCabalError $ findDependenciesForCurrentDirectory flags spkgs
+installDependencies :: Flavour -> [Flag] -> [SourcePackage] -> [Constraint] -> EitherT InstallError IO (Set Package)
+installDependencies flavour flags spkgs constraints = do
+  pkg <- firstT InstallCabalError $ findDependenciesForCurrentDirectory flags spkgs constraints
 
   let
     tdeps = transitiveOfPackages (pkgDeps pkg)
@@ -124,7 +125,7 @@ installDependencies flavour flags spkgs = do
   mapM_ (link packageDB env) tdeps
   Hush <- firstT InstallCabalError $ cabal "sandbox" ["hc-pkg", "recache"]
 
-  return ()
+  return tdeps
 
 installPackage :: PackageName -> Maybe Version -> EitherT InstallError IO Package
 installPackage name mver = do
@@ -261,7 +262,7 @@ install w penv flavour p@(Package (PackageRef pid _ _) deps _) = do
             , "--max-backjumps=0"
             , renderPackageId pid ] <>
             flavourArgs flavour <>
-            concatMap (\c -> ["--constraint", c]) (constraintsOfPackage p)
+            constraintArgs (constraintsOfPackage p)
 
           when (flavour == Vanilla) $
             case ptype of
@@ -361,27 +362,14 @@ squashRunError pkgs = \case
 
 ------------------------------------------------------------------------
 
-constraintsOfPackage :: Package -> [Text]
+constraintsOfPackage :: Package -> [Constraint]
 constraintsOfPackage p =
   let xs = Set.toList (transitiveOfPackages (Set.singleton p))
-  in concatMap (constraintsOfRef . pkgRef) xs
-
-constraintsOfRef :: PackageRef -> [Text]
-constraintsOfRef (PackageRef pid fs _) =
-  [ nameOfPackage pid <> " == " <> versionOfPackage pid ] <>
-  fmap (\x -> nameOfPackage pid <> " " <> renderFlag x) fs
+  in concatMap (packageRefConstraints . pkgRef) xs
 
 transitiveOfPackages :: Set Package -> Set Package
 transitiveOfPackages deps =
   Set.unions (deps : parMap rpar (transitiveOfPackages . pkgDeps) (Set.toList deps))
-
-versionOfPackage :: PackageId -> Text
-versionOfPackage =
-  renderVersion . pkgVersion
-
-nameOfPackage :: PackageId -> Text
-nameOfPackage =
-  unPackageName . pkgName
 
 ------------------------------------------------------------------------
 

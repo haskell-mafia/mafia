@@ -17,13 +17,14 @@ import           Data.Time (getCurrentTime, diffUTCTime)
 
 import           GHC.Conc (getNumProcessors)
 
+import           Mafia.Bin
 import           Mafia.Cabal
 import           Mafia.Error
-import           Mafia.Bin
 import           Mafia.Hoogle
 import           Mafia.IO
 import           Mafia.Init
 import           Mafia.Install
+import           Mafia.Lock
 import           Mafia.Package
 import           Mafia.Path
 import           Mafia.Process
@@ -37,7 +38,7 @@ import           System.Exit (exitSuccess)
 import           System.IO (BufferMode(..), hSetBuffering)
 import           System.IO (IO, stdout, stderr, putStrLn, print)
 
-import           X.Control.Monad.Trans.Either (EitherT, hoistEither)
+import           X.Control.Monad.Trans.Either (EitherT, hoistEither, left)
 import           X.Control.Monad.Trans.Either.Exit (orDie)
 import           X.Options.Applicative (Parser, CommandFields, Mod)
 import           X.Options.Applicative (SafeCommand(..), RunType(..))
@@ -72,6 +73,8 @@ data MafiaCommand =
   | MafiaTestCI [Flag] [Argument]
   | MafiaRepl [Flag] [Argument]
   | MafiaBench [Flag] [Argument]
+  | MafiaLock [Flag]
+  | MafiaUnlock
   | MafiaQuick [Flag] [GhciInclude] [File]
   | MafiaWatch [Flag] [GhciInclude] File [Argument]
   | MafiaHoogle [Argument]
@@ -108,6 +111,10 @@ run = \case
     mafiaRepl flags args
   MafiaBench flags args ->
     mafiaBench flags args
+  MafiaLock flags ->
+    mafiaLock flags
+  MafiaUnlock ->
+    mafiaUnlock
   MafiaQuick flags incs entries ->
     mafiaQuick flags incs entries
   MafiaWatch flags incs entry args ->
@@ -152,6 +159,12 @@ commands =
 
  , command' "bench" "Run project benchmarks"
             (MafiaBench <$> many pFlag <*> many pCabalArgs)
+
+ , command' "lock" "Lock down the versions of all this packages transitive dependencies."
+            (MafiaLock <$> many pFlag)
+
+ , command' "unlock" "Allow the cabal solver to choose new versions of packages again."
+            (pure MafiaUnlock)
 
  , command' "quick" ( "Start the repl directly skipping cabal, this is useful "
                    <> "developing across multiple source trees at once." )
@@ -272,8 +285,10 @@ mafiaHash = do
 
 mafiaDepends :: DependsUI -> Maybe PackageName -> [Flag] -> EitherT MafiaError IO ()
 mafiaDepends ui mpkg flags = do
+  lockFile <- firstT MafiaLockError $ getLockFile =<< getCurrentDirectory
+  constraints <- fmap (fromMaybe []) . firstT MafiaLockError $ readConstraints lockFile
   sdeps <- Set.toList <$> firstT MafiaInitError getSourceDependencies
-  local <- firstT MafiaCabalError (findDependenciesForCurrentDirectory flags sdeps)
+  local <- firstT MafiaCabalError (findDependenciesForCurrentDirectory flags sdeps constraints)
   let
     deps = maybe id filterPackages mpkg $ pkgDeps local
   case ui of
@@ -314,6 +329,22 @@ mafiaBench :: [Flag] -> [Argument] -> EitherT MafiaError IO ()
 mafiaBench flags args = do
   initMafia DisableProfiling flags
   liftCabal $ cabal_ "bench" args
+
+mafiaLock :: [Flag] -> EitherT MafiaError IO ()
+mafiaLock flags = do
+  initMafia DisableProfiling flags
+  mconstraints <- firstT MafiaInitError readInstallConstraints
+  case mconstraints of
+    Nothing ->
+      left MafiaNoInstallConstraints
+    Just constraints -> do
+      lockFile <- firstT MafiaLockError $ getLockFile =<< getCurrentDirectory
+      firstT MafiaLockError $ writeConstraints lockFile constraints
+
+mafiaUnlock :: EitherT MafiaError IO ()
+mafiaUnlock = do
+  lockFile <- firstT MafiaLockError $ getLockFile =<< getCurrentDirectory
+  ignoreIO $ removeFile lockFile
 
 mafiaQuick :: [Flag] -> [GhciInclude] -> [File] -> EitherT MafiaError IO ()
 mafiaQuick flags extraIncludes paths = do
@@ -385,7 +416,7 @@ initMafia :: Profiling -> [Flag] -> EitherT MafiaError IO ()
 initMafia prof flags = do
   -- we just call this for the side-effect, if we can't find a .cabal file then
   -- mafia should fail fast and not polute the directory with a sandbox.
-  (_ :: ProjectName) <- firstT MafiaProjectError getProjectName
+  (_ :: ProjectName) <- firstT MafiaProjectError $ getProjectName =<< getCurrentDirectory
 
   let ensureExeOnPath' e pkg =
         lookupEnv e >>= mapM_ (\b -> when (b == "true") $ ensureExeOnPath pkg)

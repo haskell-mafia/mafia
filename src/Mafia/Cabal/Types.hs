@@ -220,7 +220,10 @@ data CabalError =
   | CabalFileNotFound Directory
   | CabalCouldNotReadPackageId File
   | CabalCouldNotReadPackageType File
+  | CabalCouldNotParseCabalVersion Text
+  | CabalCouldNotParseConstraint Text
   | CabalCouldNotParseVersion Text
+  | CabalCouldNotParseFlag Text
   | CabalNoTopLevelPackage
   | CabalTopLevelPackageNotFoundInPlan PackageId
   | CabalMultipleTopLevelPackages [PackageId]
@@ -276,8 +279,17 @@ renderCabalError = \case
   CabalCouldNotReadPackageType cabalFile ->
     "Failed to find 'library' or 'executable' stanzas in: " <> cabalFile
 
-  CabalCouldNotParseVersion out ->
+  CabalCouldNotParseCabalVersion out ->
     "Could not parse or read the cabal-install version number from the following output:\n" <> out
+
+  CabalCouldNotParseConstraint constraint ->
+    "Could not parse constraint: " <> constraint
+
+  CabalCouldNotParseVersion ver ->
+    "Could not parse package version: " <> ver
+
+  CabalCouldNotParseFlag flag ->
+    "Could not parse flag: " <> flag
 
   CabalNoTopLevelPackage ->
     "No top level package found after parsing install plan"
