@@ -20,7 +20,9 @@ import           Control.Exception (SomeException)
 import           Control.Monad.IO.Class (MonadIO(..))
 import           Control.Parallel.Strategies (rpar, parMap)
 
+import           Data.Bits (Bits(..))
 import qualified Data.ByteString as B
+import           Data.Char (ord)
 import qualified Data.List as List
 import           Data.Set (Set)
 import qualified Data.Set as Set
@@ -29,6 +31,7 @@ import qualified Data.Text as T
 import qualified Data.Text.IO as T
 import qualified Data.Text.Lazy as TL
 import qualified Data.Text.Read as T
+import           Data.Word (Word32)
 
 import           GHC.Conc (getNumProcessors)
 
@@ -45,6 +48,8 @@ import           Mafia.Package
 import           Mafia.Path
 import           Mafia.Process
 import           Mafia.Tree
+
+import           Numeric (showHex)
 
 import           P
 
@@ -341,10 +346,31 @@ createPackageSandbox penv p@(Package (PackageRef pid _ msrc) deps _) = do
       -- files are kept around in the dist/ directory. It also has the benefit
       -- of not polluting the $TMPDIR on the build bot.
       createDirectoryIfMissing True sbsrc
+
       let
         srcdir = sbsrc </> renderPackageId pid
+
       Hush <- sbcabal "unpack" ["--destdir=" <> sbsrc, renderPackageId pid]
       Hush <- sbcabal "sandbox" ["add-source", srcdir]
+
+      -- We need to shuffle anything which was unpacked to 'dist' in to
+      -- 'dist-sandbox-XXX' in order to be able to install packages like
+      -- 'happy' and 'alex' which have pre-baked files from their dist
+      -- directory in the release tarball.
+      --
+      --     https://github.com/haskell/cabal/issues/2462
+      --     https://github.com/commercialhaskell/stack/issues/157
+      --
+      let
+        dist = srcdir </> "dist"
+        distTmp = srcdir </> "dist-tmp"
+        distSandbox = dist </> "dist-sandbox-" <> jenkins sbdir
+
+      whenM (doesDirectoryExist dist) $ do
+        renameDirectory dist distTmp
+        createDirectoryIfMissing False dist
+        renameDirectory distTmp distSandbox
+
       return srcdir
 
     -- source package
@@ -452,3 +478,39 @@ packageSandboxConfig env p = do
 packageSourceDir :: PackageEnv -> Package -> Directory
 packageSourceDir env p = do
   packageSandboxDir env p </> "src"
+
+------------------------------------------------------------------------
+--
+-- This hash function is originally from Cabal:
+--
+--   https://github.com/haskell/cabal/blob/bb2e99e23b67930e081edb3d8aa7179b1fb26d29/cabal-install/Distribution/Client/Sandbox.hs#L157
+--
+-- See http://en.wikipedia.org/wiki/Jenkins_hash_function
+--
+jenkins :: Directory -> Text
+jenkins =
+  let
+    loop :: Word32 -> Char -> Word32
+    loop hash0 key_i' =
+      let
+        key_i = fromIntegral . ord $ key_i'
+        hash1 = hash0 + key_i
+        hash2 = hash1 + (shiftL hash1 10)
+        hash3 = hash2 `xor` (shiftR hash2 6)
+      in
+        hash3
+
+    loop_finish :: Word32 -> Word32
+    loop_finish hash0 =
+      let
+        hash1 = hash0 + (shiftL hash0 3)
+        hash2 = hash1 `xor` (shiftR hash1 11)
+        hash3 = hash2 + (shiftL hash2 15)
+      in
+        hash3
+  in
+    T.pack .
+    flip showHex "" .
+    loop_finish .
+    foldl' loop 0 .
+    T.unpack

@@ -9,6 +9,7 @@ module Mafia.IO
   , getDirectoryContents
   , createDirectoryIfMissing
   , removeDirectoryRecursive
+  , renameDirectory
   , setCurrentDirectory
   , getCurrentDirectory
   , makeRelativeToCurrentDirectory
@@ -113,6 +114,10 @@ createDirectoryIfMissing parents dir =
 removeDirectoryRecursive :: MonadIO m => Directory -> m ()
 removeDirectoryRecursive dir =
   liftIO (Directory.removeDirectoryRecursive (T.unpack dir))
+
+renameDirectory :: MonadIO m => Directory -> Directory -> m ()
+renameDirectory from to =
+  liftIO (Directory.renameDirectory (T.unpack from) (T.unpack to))
 
 setCurrentDirectory :: MonadIO m => Directory -> m ()
 setCurrentDirectory dir = liftIO (Directory.setCurrentDirectory (T.unpack dir))
