@@ -91,8 +91,11 @@ initialize mprofiling mflags = do
 
   clearAddSourceDependencies sandboxDir
 
+  defaultLockFile <- firstT InitLockError $ getLockFile =<< getCurrentDirectory
+  lockFile <- fromMaybe defaultLockFile <$> lookupEnv "MAFIA_LOCK"
+
   previous <- readMafiaState statePath
-  current <- getMafiaState (mprofiling <|> fmap msProfiling previous) (mflags <|> fmap msFlags previous)
+  current <- getMafiaState (mprofiling <|> fmap msProfiling previous) (mflags <|> fmap msFlags previous) lockFile
   hasDist <- liftIO $ doesDirectoryExist "dist"
 
   packages <- checkPackages
@@ -107,8 +110,11 @@ initialize mprofiling mflags = do
       flavours = profilingFlavour (msProfiling current)
       flags = msFlags current
 
-    lockFile <- firstT InitLockError $ getLockFile =<< getCurrentDirectory
-    constraints <- fmap (fromMaybe []) . firstT InitLockError $ readLockFile lockFile
+    constraints <-
+      if T.null lockFile then
+        pure []
+      else
+        fmap (fromMaybe []) . firstT InitLockError $ readLockFile lockFile
 
     installed <- firstT InitInstallError $ installDependencies flavours flags sdeps constraints
 
@@ -264,12 +270,12 @@ parseFlags :: Alternative f => [Text] -> f [Flag]
 parseFlags =
   traverse (maybe empty pure . parseFlag)
 
-getMafiaState :: Maybe Profiling -> Maybe [Flag] -> EitherT InitError IO MafiaState
-getMafiaState mprofiling mflags = do
+getMafiaState :: Maybe Profiling -> Maybe [Flag] -> File -> EitherT InitError IO MafiaState
+getMafiaState mprofiling mflags lockFile = do
   sdeps <- getSourceDependencies
   dir <- getCurrentDirectory
   chash <- getCabalFileHash dir
-  lhash <- getLockFileHash dir
+  lhash <- firstT InitHashError $ tryHashFile lockFile
 
   let
     profiling = fromMaybe DisableProfiling mprofiling
@@ -285,12 +291,6 @@ getCabalFileHash dir = do
       left (InitCabalFileNotFound dir)
     Just file ->
       firstT InitHashError (hashFile file)
-
-getLockFileHash :: Directory -> EitherT InitError IO (Maybe Hash)
-getLockFileHash dir = do
-  file <- firstT InitLockError $ getLockFile dir
-  mbytes <- readBytes file
-  pure $ fmap hashBytes mbytes
 
 getSourceDependencies :: EitherT InitError IO (Set SourcePackage)
 getSourceDependencies = do

@@ -12,9 +12,10 @@ module Mafia.Hash
   , parseHash
 
   , hashHashes
-  , hashFile
   , hashBytes
   , hashText
+  , hashFile
+  , tryHashFile
   ) where
 
 import qualified Crypto.Hash.SHA1 as SHA1
@@ -78,6 +79,11 @@ hashFile file = do
   case mbytes of
     Nothing    -> left (HashFileNotFound file)
     Just bytes -> pure (hashBytes bytes)
+
+tryHashFile :: File -> EitherT HashError IO (Maybe Hash)
+tryHashFile file = do
+  mbytes <- readBytes file
+  pure $ fmap hashBytes mbytes
 
 hashText :: Text -> Hash
 hashText text = do
