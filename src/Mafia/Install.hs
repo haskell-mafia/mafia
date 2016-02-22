@@ -21,6 +21,7 @@ import           Control.Monad.IO.Class (MonadIO(..))
 import           Control.Parallel.Strategies (rpar, parMap)
 
 import qualified Data.ByteString as B
+import qualified Data.List as List
 import           Data.Set (Set)
 import qualified Data.Set as Set
 import           Data.Text (Text)
@@ -79,10 +80,29 @@ renderInstallError = \case
   InstallCabalError e ->
     renderCabalError e
 
-  InstallPackageError pid pkgs e ->
+  InstallPackageError pid@(PackageId name _) pkgs e ->
     "Failed to install " <> renderPackageId pid <> "\n" <>
     renderCabalError e <> "\n" <>
-    TL.toStrict (TL.strip . renderTree $ filterPackages (pkgName pid) pkgs)
+    let
+      take n txt =
+        let
+          reasonable =
+            List.take (n+1) $ TL.lines txt
+
+          pname =
+            TL.fromStrict (unPackageName name)
+
+          presentable =
+            if length reasonable > n then
+              List.take n reasonable <>
+              [ "── snip ──"
+              , "Run 'mafia depends " <> pname <> " --tree' to see the full tree." ]
+            else
+              reasonable
+        in
+          TL.toStrict . TL.strip $ TL.unlines presentable
+    in
+      take 50 . renderTree $ filterPackages (pkgName pid) pkgs
 
   InstallLinkError p pcfg ->
     "Failed to create symlink for " <> renderHashId p <> ", package config did not exist: " <> pcfg
