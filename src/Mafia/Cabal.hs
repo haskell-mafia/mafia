@@ -3,6 +3,7 @@ module Mafia.Cabal
   ( module X
   ) where
 
+import           Mafia.Cabal.Constraint as X
 import           Mafia.Cabal.Dependencies as X
 import           Mafia.Cabal.Index as X
 import           Mafia.Cabal.Package as X

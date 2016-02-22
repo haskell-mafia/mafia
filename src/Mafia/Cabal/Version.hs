@@ -30,7 +30,7 @@ getCabalVersion = do
     Left  _         -> left CabalNotInstalled
     Right (Out out) ->
       case parseCabalVersion out of
-        Nothing  -> left (CabalCouldNotParseVersion out)
+        Nothing  -> left (CabalCouldNotParseCabalVersion out)
         Just ver -> return ver
 
 parseCabalVersion :: Text -> Maybe Version

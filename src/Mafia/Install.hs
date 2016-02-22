@@ -21,6 +21,7 @@ import           Control.Monad.IO.Class (MonadIO(..))
 import           Control.Parallel.Strategies (rpar, parMap)
 
 import qualified Data.ByteString as B
+import qualified Data.List as List
 import           Data.Set (Set)
 import qualified Data.Set as Set
 import           Data.Text (Text)
@@ -31,6 +32,7 @@ import qualified Data.Text.Read as T
 
 import           GHC.Conc (getNumProcessors)
 
+import           Mafia.Cabal.Constraint
 import           Mafia.Cabal.Dependencies
 import           Mafia.Cabal.Package
 import           Mafia.Cabal.Process
@@ -78,10 +80,29 @@ renderInstallError = \case
   InstallCabalError e ->
     renderCabalError e
 
-  InstallPackageError pid pkgs e ->
+  InstallPackageError pid@(PackageId name _) pkgs e ->
     "Failed to install " <> renderPackageId pid <> "\n" <>
     renderCabalError e <> "\n" <>
-    TL.toStrict (TL.strip . renderTree $ filterPackages (pkgName pid) pkgs)
+    let
+      take n txt =
+        let
+          reasonable =
+            List.take (n+1) $ TL.lines txt
+
+          pname =
+            TL.fromStrict (unPackageName name)
+
+          presentable =
+            if length reasonable > n then
+              List.take n reasonable <>
+              [ "── snip ──"
+              , "Run 'mafia depends " <> pname <> " --tree' to see the full tree." ]
+            else
+              reasonable
+        in
+          TL.toStrict . TL.strip $ TL.unlines presentable
+    in
+      take 50 . renderTree $ filterPackages (pkgName pid) pkgs
 
   InstallLinkError p pcfg ->
     "Failed to create symlink for " <> renderHashId p <> ", package config did not exist: " <> pcfg
@@ -103,9 +124,9 @@ renderInstallError = \case
 
 ------------------------------------------------------------------------
 
-installDependencies :: Flavour -> [Flag] -> [SourcePackage] -> EitherT InstallError IO ()
-installDependencies flavour flags spkgs = do
-  pkg <- firstT InstallCabalError $ findDependenciesForCurrentDirectory flags spkgs
+installDependencies :: Flavour -> [Flag] -> [SourcePackage] -> [Constraint] -> EitherT InstallError IO (Set Package)
+installDependencies flavour flags spkgs constraints = do
+  pkg <- firstT InstallCabalError $ findDependenciesForCurrentDirectory flags spkgs constraints
 
   let
     tdeps = transitiveOfPackages (pkgDeps pkg)
@@ -124,7 +145,7 @@ installDependencies flavour flags spkgs = do
   mapM_ (link packageDB env) tdeps
   Hush <- firstT InstallCabalError $ cabal "sandbox" ["hc-pkg", "recache"]
 
-  return ()
+  return tdeps
 
 installPackage :: PackageName -> Maybe Version -> EitherT InstallError IO Package
 installPackage name mver = do
@@ -261,7 +282,7 @@ install w penv flavour p@(Package (PackageRef pid _ _) deps _) = do
             , "--max-backjumps=0"
             , renderPackageId pid ] <>
             flavourArgs flavour <>
-            concatMap (\c -> ["--constraint", c]) (constraintsOfPackage p)
+            constraintArgs (constraintsOfPackage p)
 
           when (flavour == Vanilla) $
             case ptype of
@@ -361,27 +382,14 @@ squashRunError pkgs = \case
 
 ------------------------------------------------------------------------
 
-constraintsOfPackage :: Package -> [Text]
+constraintsOfPackage :: Package -> [Constraint]
 constraintsOfPackage p =
   let xs = Set.toList (transitiveOfPackages (Set.singleton p))
-  in concatMap (constraintsOfRef . pkgRef) xs
-
-constraintsOfRef :: PackageRef -> [Text]
-constraintsOfRef (PackageRef pid fs _) =
-  [ nameOfPackage pid <> " == " <> versionOfPackage pid ] <>
-  fmap (\x -> nameOfPackage pid <> " " <> renderFlag x) fs
+  in concatMap (packageRefConstraints . pkgRef) xs
 
 transitiveOfPackages :: Set Package -> Set Package
 transitiveOfPackages deps =
   Set.unions (deps : parMap rpar (transitiveOfPackages . pkgDeps) (Set.toList deps))
-
-versionOfPackage :: PackageId -> Text
-versionOfPackage =
-  renderVersion . pkgVersion
-
-nameOfPackage :: PackageId -> Text
-nameOfPackage =
-  unPackageName . pkgName
 
 ------------------------------------------------------------------------
 

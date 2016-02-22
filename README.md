@@ -129,6 +129,18 @@ Test this project, by default this runs all test suites.
 Benchmark this project, by default this runs all the benchmarks.
 
 
+### mafia lock
+
+Creates a lock file, which pins the versions of the project's transitive
+dependencies to specific version numbers.
+
+
+### mafia unlock
+
+Deletes the lock file, allowing the Cabal solver to choose new versions
+of packages again.
+
+
 ### mafia repl
 
 Start GHCi via `cabal repl`, by default on the library of the project.

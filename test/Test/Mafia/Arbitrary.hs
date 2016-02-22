@@ -9,6 +9,7 @@ import qualified Data.Text as T
 
 import           Disorder.Corpus (muppets, cooking)
 
+import           Mafia.Cabal.Constraint
 import           Mafia.Cabal.Types
 import           Mafia.Package
 
@@ -17,6 +18,15 @@ import           P
 import           Test.QuickCheck
 import           Test.QuickCheck.Instances ()
 
+
+newtype EqCabalError =
+  EqCabalError {
+      unCabalError :: CabalError
+    } deriving (Show)
+
+instance Eq EqCabalError where
+  (==) x y =
+    show x == show y
 
 instance Arbitrary PackageName where
   arbitrary = do
@@ -68,3 +78,10 @@ instance Arbitrary PackagePlan where
       arbitrary <*>
       arbitrary <*>
       arbitrary
+
+instance Arbitrary Constraint where
+  arbitrary =
+    oneof [
+        ConstraintPackage <$> arbitrary
+      , ConstraintFlag <$> arbitrary <*> arbitrary
+      ]

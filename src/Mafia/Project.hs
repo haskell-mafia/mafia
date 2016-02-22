@@ -40,9 +40,9 @@ renderProjectError = \case
     "Found multiple possible .cabal projects: " <> T.intercalate ", " ps
 
 
-getProjectName :: EitherT ProjectError IO ProjectName
-getProjectName = EitherT $ do
-  entries <- filterM doesFileExist =<< getDirectoryContents "."
+getProjectName :: Directory -> EitherT ProjectError IO ProjectName
+getProjectName dir = EitherT $ do
+  entries <- filterM doesFileExist =<< getDirectoryContents dir
 
   let projects = fmap dropExtension
                . filter ((== ".cabal") . takeExtension)

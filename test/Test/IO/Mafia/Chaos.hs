@@ -73,6 +73,8 @@ data Profiling =
 
 data Action =
     Clean
+  | Lock
+  | Unlock
   | Build Profiling
   | AddLocal PackageName PackageName
   | AddSubmodule SubmoduleName PackageName
@@ -139,6 +141,8 @@ shrinkAction = \case
    | pkg /= focusPackageName -> [AddSubmodule dep focusPackageName]
    | otherwise               -> []
   Clean                      -> []
+  Lock                       -> []
+  Unlock                     -> []
   Build NoProfiling          -> []
   Build Profiling            -> [Build NoProfiling]
   RemoveLocal     _          -> []
@@ -177,6 +181,8 @@ genAction repo@(Repo _ others) = do
 
   QC.elements $ catMaybes [
       pure Clean
+    , pure Lock
+    , pure Unlock
     , pure (Build profiling)
     , AddLocal          <$> mbLocalPackageNames <*> mbAvailableLocals
     , AddSubmodule      <$> mbSubmoduleNames    <*> mbAvailableLocals
@@ -207,6 +213,8 @@ applyAction action =
                             else Just (f (repo, g repo))
   in case action of
     Clean                     -> Just . id
+    Lock                      -> Just . id
+    Unlock                    -> Just . id
     Build             _       -> Just . id
     AddLocal          dep pkg -> mustModify snd (addLocal        dep pkg)
     AddSubmodule      dep pkg -> mustModify snd (addSubmodule    dep pkg)
@@ -344,6 +352,7 @@ cabalText name deps = T.unlines [
   , "  hs-source-dirs: src"
   , "  build-depends:"
   , "      base >= 3 && < 5"
+  , "    , transformers >= 0.4 && < 6"
   ] <> T.unlines (fmap ("    , acme-" <>) deps)
 
 ------------------------------------------------------------------------
@@ -449,6 +458,14 @@ runAction mafia github repoDir repo@(Repo focus _) = \case
   Clean -> do
     liftIO . T.putStrLn $ "$ mafia clean"
     call_ ProcessError mafia ["clean"]
+
+  Lock -> do
+    liftIO . T.putStrLn $ "$ mafia lock"
+    call_ ProcessError mafia ["lock"]
+
+  Unlock -> do
+    liftIO . T.putStrLn $ "$ mafia unlock"
+    call_ ProcessError mafia ["unlock"]
 
   Build prof -> do
     liftIO . T.putStrLn $ "$ mafia " <> T.intercalate " " (["build"] <> profilingArgs prof)

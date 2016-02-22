@@ -8,6 +8,8 @@ module Mafia.Init
   , initialize
   , getSourceDependencies
 
+  , readInstallConstraints
+
   , InitError(..)
   , renderInitError
   ) where
@@ -28,6 +30,7 @@ import           Mafia.Git
 import           Mafia.Hash
 import           Mafia.IO
 import           Mafia.Install
+import           Mafia.Lock
 import           Mafia.Path
 import           Mafia.Process
 import           Mafia.Submodule
@@ -45,6 +48,7 @@ data InitError =
   | InitCabalError CabalError
   | InitSubmoduleError SubmoduleError
   | InitInstallError InstallError
+  | InitLockError LockError
   | InitParseError File Text
   | InitCabalFileNotFound Directory
     deriving (Show)
@@ -66,6 +70,9 @@ renderInitError = \case
   InitInstallError e ->
     renderInstallError e
 
+  InitLockError e ->
+    renderLockError e
+
   InitParseError file err ->
     file <> ": parse error: " <> err
 
@@ -79,13 +86,16 @@ initialize mprofiling mflags = do
   firstT InitGitError initSubmodules
 
   sandboxDir <- firstT InitCabalError initSandbox
+
   let statePath = sandboxDir </> "mafia/state." <> T.pack (show mafiaStateVersion) <> ".json"
 
   clearAddSourceDependencies sandboxDir
 
-  liftIO (T.hPutStrLn stderr "Checking for changes to dependencies...")
+  defaultLockFile <- firstT InitLockError $ getLockFile =<< getCurrentDirectory
+  lockFile <- fromMaybe defaultLockFile <$> lookupEnv "MAFIA_LOCK"
+
   previous <- readMafiaState statePath
-  current <- getMafiaState (mprofiling <|> fmap msProfiling previous) (mflags <|> fmap msFlags previous)
+  current <- getMafiaState (mprofiling <|> fmap msProfiling previous) (mflags <|> fmap msFlags previous) lockFile
   hasDist <- liftIO $ doesDirectoryExist "dist"
 
   packages <- checkPackages
@@ -94,10 +104,28 @@ initialize mprofiling mflags = do
 
   when needInstall $ do
     liftIO (T.hPutStrLn stderr "Installing dependencies...")
-    let sdeps = Set.toList (msSourceDependencies current)
-        flavours = profilingFlavour (msProfiling current)
-        flags = msFlags current
-    firstT InitInstallError $ installDependencies flavours flags sdeps
+
+    let
+      sdeps = Set.toList (msSourceDependencies current)
+      flavours = profilingFlavour (msProfiling current)
+      flags = msFlags current
+
+    constraints <-
+      if T.null lockFile then
+        pure []
+      else
+        fmap (fromMaybe []) . firstT InitLockError $ readLockFile lockFile
+
+    installed <- firstT InitInstallError $ installDependencies flavours flags sdeps constraints
+
+    -- Note that we filter out source packages. Storing their version in the
+    -- constraints file is redundant, as the accessible source code is the only
+    -- version of that package which is ever available for installation.
+    writeInstallConstraints .
+      concatMap packageRefConstraints .
+      filter (isNothing . refSrcPkg) .
+      fmap pkgRef $
+      Set.toList installed
 
   let needConfigure = needInstall || not hasDist
 
@@ -143,6 +171,31 @@ clearAddSourceDependencies sandboxDir = do
 
 ------------------------------------------------------------------------
 
+getInstallConstraintsFile :: EitherT InitError IO File
+getInstallConstraintsFile = do
+  sandboxDir <- firstT InitCabalError initSandbox
+  pure $ sandboxDir </> "mafia/install.constraints"
+
+readInstallConstraints :: EitherT InitError IO (Maybe [Constraint])
+readInstallConstraints = do
+  file <- getInstallConstraintsFile
+  mtxt <- readUtf8 file
+  case mtxt of
+    Nothing ->
+      pure Nothing
+    Just txt ->
+      fmap Just .
+      traverse (hoistEither . first InitCabalError . parseConstraint) $
+      T.lines txt
+
+writeInstallConstraints :: [Constraint] -> EitherT InitError IO ()
+writeInstallConstraints xs = do
+  file <- getInstallConstraintsFile
+  createDirectoryIfMissing True (takeDirectory file)
+  writeUtf8 file . T.unlines $ fmap renderConstraint xs
+
+------------------------------------------------------------------------
+
 data PackageState =
     PackagesOk
   | PackagesBroken
@@ -168,12 +221,13 @@ data MafiaState =
   MafiaState {
       msSourceDependencies :: Set SourcePackage
     , _msCabalFile :: Hash
+    , _msLockFile :: Maybe Hash
     , msProfiling :: Profiling
     , msFlags :: [Flag]
     } deriving (Eq, Ord, Show)
 
 mafiaStateVersion :: Int
-mafiaStateVersion = 1
+mafiaStateVersion = 2
 
 instance ToJSON Profiling where
   toJSON = \case
@@ -192,10 +246,11 @@ instance FromJSON Profiling where
       mzero
 
 instance ToJSON MafiaState where
-  toJSON (MafiaState sds cfh p fs) =
+  toJSON (MafiaState sds cfh lfh p fs) =
     A.object
       [ "source-dependencies" .= sds
       , "cabal-file" .= cfh
+      , "lock-file" .= lfh
       , "profiling" .= p
       , "flags" .= fmap renderFlag fs ]
 
@@ -205,6 +260,7 @@ instance FromJSON MafiaState where
       MafiaState <$>
         o .: "source-dependencies" <*>
         o .: "cabal-file" <*>
+        o .: "lock-file" <*>
         o .: "profiling" <*>
         (o .: "flags" >>= parseFlags)
     _ ->
@@ -214,19 +270,27 @@ parseFlags :: Alternative f => [Text] -> f [Flag]
 parseFlags =
   traverse (maybe empty pure . parseFlag)
 
-getMafiaState :: Maybe Profiling -> Maybe [Flag] -> EitherT InitError IO MafiaState
-getMafiaState mprofiling mflags = do
+getMafiaState :: Maybe Profiling -> Maybe [Flag] -> File -> EitherT InitError IO MafiaState
+getMafiaState mprofiling mflags lockFile = do
   sdeps <- getSourceDependencies
-  dir   <- getCurrentDirectory
+  dir <- getCurrentDirectory
+  chash <- getCabalFileHash dir
+  lhash <- firstT InitHashError $ tryHashFile lockFile
+
+  let
+    profiling = fromMaybe DisableProfiling mprofiling
+    flags = fromMaybe [] mflags
+
+  return (MafiaState sdeps chash lhash profiling flags)
+
+getCabalFileHash :: Directory -> EitherT InitError IO Hash
+getCabalFileHash dir = do
   mfile <- getCabalFile dir
   case mfile of
-    Nothing   -> left (InitCabalFileNotFound dir)
-    Just file -> do
-      hash  <- firstT InitHashError (hashFile file)
-      let
-        profiling = fromMaybe DisableProfiling mprofiling
-        flags = fromMaybe [] mflags
-      return (MafiaState sdeps hash profiling flags)
+    Nothing ->
+      left (InitCabalFileNotFound dir)
+    Just file ->
+      firstT InitHashError (hashFile file)
 
 getSourceDependencies :: EitherT InitError IO (Set SourcePackage)
 getSourceDependencies = do
