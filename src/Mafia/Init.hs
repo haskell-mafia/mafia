@@ -108,7 +108,7 @@ initialize mprofiling mflags = do
       flags = msFlags current
 
     lockFile <- firstT InitLockError $ getLockFile =<< getCurrentDirectory
-    constraints <- fmap (fromMaybe []) . firstT InitLockError $ readConstraints lockFile
+    constraints <- fmap (fromMaybe []) . firstT InitLockError $ readLockFile lockFile
 
     installed <- firstT InitInstallError $ installDependencies flavours flags sdeps constraints
 
@@ -170,15 +170,23 @@ getInstallConstraintsFile = do
   sandboxDir <- firstT InitCabalError initSandbox
   pure $ sandboxDir </> "mafia/install.constraints"
 
-writeInstallConstraints :: [Constraint] -> EitherT InitError IO ()
-writeInstallConstraints xs = do
-  file <- getInstallConstraintsFile
-  firstT InitLockError $ writeConstraints file xs
-
 readInstallConstraints :: EitherT InitError IO (Maybe [Constraint])
 readInstallConstraints = do
   file <- getInstallConstraintsFile
-  firstT InitLockError $ readConstraints file
+  mtxt <- readUtf8 file
+  case mtxt of
+    Nothing ->
+      pure Nothing
+    Just txt ->
+      fmap Just .
+      traverse (hoistEither . first InitCabalError . parseConstraint) $
+      T.lines txt
+
+writeInstallConstraints :: [Constraint] -> EitherT InitError IO ()
+writeInstallConstraints xs = do
+  file <- getInstallConstraintsFile
+  createDirectoryIfMissing True (takeDirectory file)
+  writeUtf8 file . T.unlines $ fmap renderConstraint xs
 
 ------------------------------------------------------------------------
 

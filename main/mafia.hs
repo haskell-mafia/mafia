@@ -286,7 +286,7 @@ mafiaHash = do
 mafiaDepends :: DependsUI -> Maybe PackageName -> [Flag] -> EitherT MafiaError IO ()
 mafiaDepends ui mpkg flags = do
   lockFile <- firstT MafiaLockError $ getLockFile =<< getCurrentDirectory
-  constraints <- fmap (fromMaybe []) . firstT MafiaLockError $ readConstraints lockFile
+  constraints <- fmap (fromMaybe []) . firstT MafiaLockError $ readLockFile lockFile
   sdeps <- Set.toList <$> firstT MafiaInitError getSourceDependencies
   local <- firstT MafiaCabalError (findDependenciesForCurrentDirectory flags sdeps constraints)
   let
@@ -339,7 +339,7 @@ mafiaLock flags = do
       left MafiaNoInstallConstraints
     Just constraints -> do
       lockFile <- firstT MafiaLockError $ getLockFile =<< getCurrentDirectory
-      firstT MafiaLockError $ writeConstraints lockFile constraints
+      firstT MafiaLockError $ writeLockFile lockFile constraints
 
 mafiaUnlock :: EitherT MafiaError IO ()
 mafiaUnlock = do

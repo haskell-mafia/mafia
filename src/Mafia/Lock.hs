@@ -1,14 +1,15 @@
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE LambdaCase #-}
 module Mafia.Lock (
     LockError(..)
   , renderLockError
 
   , getLockFile
-  , readConstraints
-  , writeConstraints
+  , readLockFile
+  , writeLockFile
   ) where
 
 import           Data.Text (Text)
@@ -24,13 +25,14 @@ import           P
 
 import           System.IO (IO)
 
-import           X.Control.Monad.Trans.Either (EitherT, hoistEither)
+import           X.Control.Monad.Trans.Either (EitherT, hoistEither, left)
 
 
 data LockError =
     LockProjectError ProjectError
   | LockCabalError CabalError
   | LockGhcError GhcError
+  | LockFileVersionUnknown File Text
     deriving (Show)
 
 renderLockError :: LockError -> Text
@@ -41,6 +43,10 @@ renderLockError = \case
     renderCabalError e
   LockGhcError e ->
     renderGhcError e
+  LockFileVersionUnknown file header ->
+    "Cannot read lock file: " <> file <>
+    "\nExpected Header> " <> LockFileHeader <>
+    "\n  Actual Header> " <> header
 
 getLockFile :: Directory -> EitherT LockError IO File
 getLockFile dir = do
@@ -48,18 +54,27 @@ getLockFile dir = do
   project <- firstT LockProjectError $ getProjectName dir
   return $ dir </> project <> ".lock-" <> ghcver
 
-readConstraints :: File -> EitherT LockError IO (Maybe [Constraint])
-readConstraints file = do
+pattern LockFileHeader =
+  "# mafia-lock-file-version: 0"
+
+readLockFile :: File -> EitherT LockError IO (Maybe [Constraint])
+readLockFile file = do
   mtxt <- readUtf8 file
   case mtxt of
     Nothing ->
       pure Nothing
     Just txt ->
-      fmap Just .
-      traverse (hoistEither . first LockCabalError . parseConstraint) $
-      T.lines txt
+      case T.lines txt of
+        (LockFileHeader : xs) ->
+          fmap Just $
+          traverse (hoistEither . first LockCabalError . parseConstraint) xs
+        (x : _) ->
+          left $ LockFileVersionUnknown file x
+        [] ->
+          left $ LockFileVersionUnknown file ""
 
-writeConstraints :: File -> [Constraint] -> EitherT LockError IO ()
-writeConstraints file xs = do
-  createDirectoryIfMissing True (takeDirectory file)
-  writeUtf8 file . T.unlines $ fmap renderConstraint xs
+writeLockFile :: File -> [Constraint] -> EitherT LockError IO ()
+writeLockFile file xs = do
+  writeUtf8 file . T.unlines $
+    LockFileHeader :
+    fmap renderConstraint xs
