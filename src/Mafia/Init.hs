@@ -77,7 +77,7 @@ renderInitError = \case
     file <> ": parse error: " <> err
 
   InitCabalFileNotFound dir ->
-    "Could not find cabal file in: " <> dir
+    "Could not find a unique cabal file in: " <> dir
 
 ------------------------------------------------------------------------
 
