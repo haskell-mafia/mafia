@@ -41,11 +41,14 @@ import           X.Control.Monad.Trans.Either (EitherT, left)
 
 getCabalFile :: MonadIO m => Directory -> m (Maybe File)
 getCabalFile dir = do
-  xs <- filter ((== ".cabal") . takeExtension) `liftM` getDirectoryContents dir
+  xs <- filter isCabalFile `liftM` getDirectoryContents dir
   case xs of
     []     -> return Nothing
     (x:[]) -> return (Just (dir </> x))
     (_:_)  -> return Nothing
+  where
+    isCabalFile fp =
+      (takeExtension fp) == ".cabal" && not (T.isPrefixOf "." fp)
 
 ------------------------------------------------------------------------
 
