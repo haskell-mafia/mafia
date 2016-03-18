@@ -134,7 +134,9 @@ initialize mprofiling mflags = do
       profilingArgs (msProfiling current) <>
       fmap flagArg (msFlags current) <>
       [ "--enable-tests"
-      , "--enable-benchmarks" ]
+      , "--enable-benchmarks"
+      , "--ghc-options=-rtsopts"
+      ]
 
   when (needInstall || needConfigure) $ do
     writeMafiaState statePath current
@@ -154,7 +156,6 @@ profilingArgs = \case
       "--enable-profiling"
     , "--disable-executable-stripping"
     , "--ghc-options=-fprof-auto-top"
-    , "--ghc-options=-rtsopts"
     ]
 
 -- If a user or an older version of mafia has used 'cabal sandbox add-source'
