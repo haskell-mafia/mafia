@@ -1,13 +1,53 @@
 #!/bin/sh -eu
 
-git submodule update --init
+#
+# List the version and path to all the installed versions of mafia.
+#
+installed_mafia_versions () {
+  for MAFIA in $(find $HOME/.ambiata/mafia/bin -maxdepth 1 -type f -name 'mafia-*' -exec test -x {} \; -print); do
+    MAFIA_VERSION=$($MAFIA --version)
+    echo "$MAFIA_VERSION $MAFIA"
+  done
+}
 
-cabal sandbox init
+#
+# Find the latest version of mafia which is currently installed.
+#
+latest_mafia () {
+  LATEST=$(installed_mafia_versions | sort --reverse | head -1 | cut -d ' ' -f 2)
+  if [ -z "$LATEST" ]; then
+    return 1
+  else
+    echo "$LATEST"
+  fi
+}
 
-CABAL_SOURCES=$(find lib -maxdepth 4 ! -path lib/\*/bin/\* ! -path lib/\*/lib/\* -name \*.cabal | xargs -L 1 dirname)
-for CABAL_SOURCE in $CABAL_SOURCES; do
-  cabal sandbox add-source -- $CABAL_SOURCE
-done
+#
+# Build using the latest installed version of mafia.
+#
+mafia_build () {
+  MAFIA=$(latest_mafia) || return 1
+  $MAFIA update
+  $MAFIA build
+}
 
-cabal update
-cabal install
+#
+# Build using cabal.
+#
+cabal_build () {
+  git clean -xdf
+  git submodule update --init
+
+  cabal sandbox init
+
+  CABAL_SOURCES=$(find lib -maxdepth 4 ! -path lib/\*/bin/\* ! -path lib/\*/lib/\* -name \*.cabal | xargs -L 1 dirname)
+  for CABAL_SOURCE in $CABAL_SOURCES; do
+    cabal sandbox add-source -- $CABAL_SOURCE
+  done
+
+  cabal update
+  cabal install --only-dependencies
+  cabal build
+}
+
+mafia_build || cabal_build

@@ -87,7 +87,7 @@ exec_mafia () {
 
         bin/bootstrap ) || exit $?
 
-      cp "$MAFIA_TEMP/mafia/.cabal-sandbox/bin/mafia" "$MAFIA_PATH_TEMP"
+      cp "$MAFIA_TEMP/mafia/dist/build/mafia/mafia" "$MAFIA_PATH_TEMP"
       chmod +x "$MAFIA_PATH_TEMP"
       mv "$MAFIA_PATH_TEMP" "$MAFIA_PATH"
     }
