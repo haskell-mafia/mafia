@@ -269,14 +269,21 @@ mafiaUpdate = do
 
   let index = home </> ".cabal/packages/hackage.haskell.org/00-index.cache"
 
-  indexTime   <- getModificationTime index
-  currentTime <- liftIO getCurrentTime
+  mindexTime <- getModificationTime index
 
-  let age    = currentTime `diffUTCTime` indexTime
-      oneDay = 24 * 60 * 60
+  case mindexTime of
+    Nothing ->
+      liftCabal $ cabal_ "update" []
 
-  when (age > oneDay) $
-    liftCabal $ cabal_ "update" []
+    Just indexTime -> do
+      currentTime <- liftIO getCurrentTime
+
+      let
+        age = currentTime `diffUTCTime` indexTime
+        oneDay = 24 * 60 * 60
+
+      when (age > oneDay) $
+        liftCabal $ cabal_ "update" []
 
 mafiaHash :: EitherT MafiaError IO ()
 mafiaHash = do

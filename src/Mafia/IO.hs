@@ -1,3 +1,4 @@
+{-# LANGUAGE DoAndIfThenElse #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PatternSynonyms #-}
@@ -53,7 +54,7 @@ module Mafia.IO
 
 import qualified Control.Concurrent.Async as Async
 import           Control.Exception (IOException)
-import           Control.Monad.Catch (MonadMask(..), MonadCatch(..), handle)
+import           Control.Monad.Catch (MonadMask(..), MonadCatch(..), handle, throwM)
 import           Control.Monad.IO.Class (MonadIO(..))
 import           Control.Monad.Trans.Maybe (MaybeT(..))
 
@@ -71,6 +72,7 @@ import           P
 import qualified System.Directory as Directory
 import qualified System.Environment as Environment
 import           System.IO (IO)
+import           System.IO.Error (isDoesNotExistError)
 import qualified System.IO.Temp as Temp
 
 import           X.Control.Monad.Trans.Either (EitherT, pattern EitherT)
@@ -151,8 +153,17 @@ doesDirectoryExist path = liftIO (Directory.doesDirectoryExist (T.unpack path))
 ------------------------------------------------------------------------
 -- Timestamps
 
-getModificationTime :: MonadIO m => File -> m UTCTime
-getModificationTime path = liftIO (Directory.getModificationTime (T.unpack path))
+getModificationTime :: MonadIO m => File -> m (Maybe UTCTime)
+getModificationTime path =
+  let
+    onError e =
+      if isDoesNotExistError e then
+        return Nothing
+      else
+        throwM e
+  in
+    liftIO . handle onError . liftM Just $
+      Directory.getModificationTime (T.unpack path)
 
 ------------------------------------------------------------------------
 -- File I/O
