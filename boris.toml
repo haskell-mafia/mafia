@@ -1,0 +1,8 @@
+[boris]
+  version = 1
+
+[build.dist]
+  command = [["bin/ci"]]
+
+[build.branches]
+  command = [["bin/ci.branches"]]
