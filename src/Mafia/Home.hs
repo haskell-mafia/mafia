@@ -21,9 +21,12 @@ import           P
 getMafiaHome :: MonadIO m => m Directory
 getMafiaHome = do
   mhome <- lookupEnv "MAFIA_HOME"
-  case mhome of
-    Just home -> return home
-    Nothing   -> (</> T.pack ".ambiata/mafia") `liftM` getHomeDirectory
+  bind canonicalizePath $
+    case mhome of
+      Just home ->
+        return home
+      Nothing ->
+        (</> T.pack ".ambiata/mafia") `liftM` getHomeDirectory
 
 getMafiaDir :: MonadIO m => Directory -> m Directory
 getMafiaDir path = do
