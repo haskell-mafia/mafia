@@ -26,7 +26,6 @@ import           Data.Char (ord)
 import qualified Data.List as List
 import           Data.Set (Set)
 import qualified Data.Set as Set
-import           Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
 import qualified Data.Text.Lazy as TL

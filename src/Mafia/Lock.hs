@@ -12,7 +12,6 @@ module Mafia.Lock (
   , writeLockFile
   ) where
 
-import           Data.Text (Text)
 import qualified Data.Text as T
 
 import           Mafia.Cabal

@@ -34,7 +34,6 @@ import           Data.Aeson (Value(..), ToJSON(..), FromJSON(..), (.:), (.=), ob
 import           Data.Char (isAlpha)
 import           Data.Set (Set)
 import qualified Data.Set as Set
-import           Data.Text (Text)
 import qualified Data.Text as T
 
 import           Mafia.Ghc

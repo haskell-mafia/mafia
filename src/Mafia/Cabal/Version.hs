@@ -8,7 +8,6 @@ module Mafia.Cabal.Version
 
 import           Control.Monad.IO.Class (liftIO)
 
-import           Data.Text (Text)
 import qualified Data.Text as T
 
 import           Mafia.Cabal.Process

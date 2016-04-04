@@ -15,7 +15,6 @@ import qualified Crypto.Hash as Hash
 import qualified Data.List as L
 import           Data.Map (Map)
 import qualified Data.Map as M
-import           Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import qualified Data.Text.IO as T

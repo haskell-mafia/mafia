@@ -4,8 +4,6 @@
 {-# OPTIONS_GHC -fno-warn-missing-signatures #-}
 module Test.Mafia.Cabal.Types where
 
-import           Data.Text (Text)
-
 import           Disorder.Core.Tripping (tripping)
 
 import           Mafia.Cabal.Types

@@ -11,7 +11,6 @@ module Mafia.Cabal.Constraint (
   , sourcePackageConstraint
   ) where
 
-import           Data.Text (Text)
 import qualified Data.Text as T
 
 import           Mafia.Cabal.Package

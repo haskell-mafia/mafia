@@ -15,7 +15,6 @@ module Mafia.Cabal.Sandbox
 import           Control.Monad.IO.Class (MonadIO(..))
 
 import qualified Data.List as List
-import           Data.Text (Text)
 import qualified Data.Text as T
 
 import           Mafia.Cabal.Process

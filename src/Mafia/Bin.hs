@@ -18,7 +18,6 @@ module Mafia.Bin
 
 import           Control.Monad.IO.Class (MonadIO(..))
 
-import           Data.Text (Text)
 import qualified Data.Text as T
 
 import           Mafia.Home
