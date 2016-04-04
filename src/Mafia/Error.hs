@@ -7,8 +7,6 @@ module Mafia.Error
   , liftCabal
   ) where
 
-import           Data.Text (Text)
-
 import           Mafia.Bin
 import           Mafia.Cabal.Types
 import           Mafia.Git

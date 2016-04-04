@@ -9,7 +9,6 @@ module Mafia.Ghc
   , renderGhcError
   ) where
 
-import           Data.Text (Text)
 import qualified Data.Text as T
 
 import           Mafia.Process

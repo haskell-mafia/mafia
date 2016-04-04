@@ -21,7 +21,6 @@ import           Data.Aeson (Value(..), ToJSON(..), FromJSON(..))
 import           Data.CaseInsensitive (CI)
 import qualified Data.CaseInsensitive as CI
 import qualified Data.Char as Char
-import           Data.Text (Text)
 import qualified Data.Text as T
 import           Data.Version (Version (..))
 import qualified Data.Version as Version
