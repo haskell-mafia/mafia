@@ -10,18 +10,16 @@ module Mafia.Hoogle
 
 import           Control.Monad.IO.Class (MonadIO(..))
 
-import qualified Crypto.Hash as Hash
-
 import qualified Data.List as L
 import           Data.Map (Map)
 import qualified Data.Map as M
 import qualified Data.Text as T
-import qualified Data.Text.Encoding as T
 import qualified Data.Text.IO as T
 
 import           Mafia.Bin
 import           Mafia.Cabal
 import           Mafia.Error
+import           Mafia.Hash
 import           Mafia.Home
 import           Mafia.IO
 import           Mafia.Init
@@ -80,8 +78,7 @@ hoogleIndex args pkgs = do
   -- 1. Create a unique directory based on all the current packages and ensure the default.hoo
   -- 2. Specify/append all the packages from the global database by using "+$name-$version"
   --    Unfortunately hoogle doesn't like the "-$version" part :(
-  let hash = T.decodeUtf8 . (\(d :: Hash.Digest Hash.SHA1) -> Hash.digestToHexByteString d) . Hash.hash . T.encodeUtf8 .
-        mconcat . fmap renderPackageId $ pkgs
+  let hash = renderHash .  hashText .  mconcat .  fmap renderPackageId $ pkgs
   db <- hoogleCacheDir
   hoogleExe <- installHoogle
   db' <- (\d -> d </> "hoogle" </> hash) <$> liftCabal initSandbox
