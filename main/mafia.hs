@@ -68,7 +68,7 @@ data MafiaCommand =
   | MafiaHash
   | MafiaDepends DependsUI (Maybe PackageName) [Flag]
   | MafiaClean
-  | MafiaBuild Profiling [Flag] [Argument]
+  | MafiaBuild Profiling Warnings [Flag] [Argument]
   | MafiaTest [Flag] [Argument]
   | MafiaTestCI [Flag] [Argument]
   | MafiaRepl [Flag] [Argument]
@@ -79,6 +79,11 @@ data MafiaCommand =
   | MafiaWatch [Flag] [GhciInclude] File [Argument]
   | MafiaHoogle [Argument]
   | MafiaInstall InstallPackage
+    deriving (Eq, Show)
+
+data Warnings =
+    DisableWarnings
+  | EnableWarnings
     deriving (Eq, Show)
 
 data GhciInclude =
@@ -101,8 +106,8 @@ run = \case
     mafiaDepends tree pkg flags
   MafiaClean ->
     mafiaClean
-  MafiaBuild p flags args ->
-    mafiaBuild p flags args
+  MafiaBuild p w flags args ->
+    mafiaBuild p w flags args
   MafiaTest flags args ->
     mafiaTest flags args
   MafiaTestCI flags args ->
@@ -145,7 +150,7 @@ commands =
             (pure MafiaClean)
 
  , command' "build" "Build this project, including all executables and test suites."
-            (MafiaBuild <$> pProfiling <*> many pFlag <*> many pCabalArgs)
+            (MafiaBuild <$> pProfiling <*> pWarnings <*> many pFlag <*> many pCabalArgs)
 
  , command' "test" "Test this project, by default this runs all test suites."
             (MafiaTest <$> many pFlag <*> many pCabalArgs)
@@ -191,6 +196,13 @@ pProfiling =
        long "profiling"
     <> short 'p'
     <> help "Enable profiling for this build."
+
+pWarnings :: Parser Warnings
+pWarnings =
+  flag EnableWarnings DisableWarnings $
+       long "disable-warnings"
+    <> short 'w'
+    <> help "Disable warnings for this build."
 
 pDependsUI :: Parser DependsUI
 pDependsUI =
@@ -311,10 +323,19 @@ mafiaClean = do
   Out (_ :: ByteString) <- liftCabal $ cabal "clean" []
   liftCabal removeSandbox
 
-mafiaBuild :: Profiling -> [Flag] -> [Argument] -> EitherT MafiaError IO ()
-mafiaBuild p flags args = do
+mafiaBuild :: Profiling -> Warnings -> [Flag] -> [Argument] -> EitherT MafiaError IO ()
+mafiaBuild p w flags args = do
   initMafia p flags
-  liftCabal . cabal_ "build" $ ["-j", "--ghc-option=-Werror"] <> args
+
+  let
+    wargs =
+      case w of
+        DisableWarnings ->
+          ["--ghc-options=-w"]
+        EnableWarnings ->
+          ["--ghc-options=-Werror"]
+
+  liftCabal . cabal_ "build" $ ["-j"] <> wargs <> args
 
 mafiaTest :: [Flag] -> [Argument] -> EitherT MafiaError IO ()
 mafiaTest flags args = do
