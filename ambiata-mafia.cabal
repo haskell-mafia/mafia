@@ -24,11 +24,12 @@ library
                     , bytestring                      == 0.10.*
                     , case-insensitive                == 1.2.*
                     , containers                      == 0.5.*
-                    , cryptohash                      == 0.11.*
+                    , cryptonite                      == 0.15.*
                     , directory                       == 1.2.*
                     , exceptions                      == 0.8.*
                     , filelock                        == 0.1.*
                     , filepath                        == 1.4.*
+                    , memory                          == 0.12.*
                     , parallel                        == 3.2.*
                     , process                         == 1.2.*
                     , tar                             == 0.4.*

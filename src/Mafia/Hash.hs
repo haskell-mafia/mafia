@@ -18,11 +18,13 @@ module Mafia.Hash
   , tryHashFile
   ) where
 
-import qualified Crypto.Hash.SHA1 as SHA1
+import           Crypto.Hash (Digest, SHA1)
+import qualified Crypto.Hash as Hash
 
 import           Data.Aeson (Value(..), ToJSON(..), FromJSON(..))
+import           Data.ByteArray (ByteArrayAccess, convert)
+import           Data.ByteArray.Encoding (Base(..), convertToBase)
 import           Data.ByteString (ByteString)
-import qualified Data.ByteString as B
 import qualified Data.ByteString.Base16 as Base16
 import qualified Data.ByteString.Lazy as L
 import qualified Data.Text as T
@@ -52,25 +54,26 @@ renderHashError = \case
 
 newtype Hash =
   Hash {
-      unHash :: ByteString
+      unHash :: Digest SHA1
     } deriving (Eq, Ord, Show)
 
 renderHash :: Hash -> Text
 renderHash =
-  T.decodeUtf8 . Base16.encode . unHash
+  T.decodeUtf8 . takeBase16 . unHash
 
 parseHash :: Text -> Maybe Hash
 parseHash hex =
-  let (bs, _) = Base16.decode (T.encodeUtf8 hex)
-  in if B.length bs == 20
-     then Just (Hash bs)
-     else Nothing
+  case Base16.decode $ T.encodeUtf8 hex of
+    (bs, "") ->
+      Hash <$> Hash.digestFromByteString bs
+    _ ->
+      Nothing
 
 ------------------------------------------------------------------------
 
 hashHashes :: [Hash] -> Hash
 hashHashes =
-  Hash . SHA1.hashlazy . L.fromChunks . fmap unHash
+  Hash . Hash.hashlazy . L.fromChunks . fmap (takeBytes . unHash)
 
 hashFile :: File -> EitherT HashError IO Hash
 hashFile file = do
@@ -90,7 +93,17 @@ hashText text = do
 
 hashBytes :: ByteString -> Hash
 hashBytes bytes = do
-  Hash (SHA1.hash bytes)
+  Hash (Hash.hash bytes)
+
+------------------------------------------------------------------------
+
+takeBytes :: ByteArrayAccess a => a -> ByteString
+takeBytes =
+  convert
+
+takeBase16 :: ByteArrayAccess a => a -> ByteString
+takeBase16 =
+  convertToBase Base16
 
 ------------------------------------------------------------------------
 
