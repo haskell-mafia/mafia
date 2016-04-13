@@ -25,7 +25,7 @@ not published to Hackage. It allows for development of a package and its
 dependencies all at once, without having to publish intermediate builds
 of libraries and without having to resort to a monorepo.
 
-All dependencies are cached globally in `$HOME/.ambiata/mafia/packages`
+All dependencies are cached globally in `$HOME/.mafia/packages`
 using a nix-like hashing system so that for a given set of transitive
 dependencies, a package is only ever built once. Source dependencies are
 also cached, using their dependencies and source code as the hash. This
@@ -56,7 +56,7 @@ version of Mafia.
 
 To upgrade to the latest Mafia, you can `./mafia upgrade` again at any time.
 
-Mafia executables are stored in `$HOME/.ambiata/mafia/bin`.
+Mafia executables are stored in `$HOME/.mafia/bin`.
 
 
 Commands
@@ -201,7 +201,7 @@ $ mafia watch test/test.hs -- -T Test.Pure.tests
 ```
 
 This command is powered by [ghcid](https://github.com/ndmitchell/ghcid),
-and will automatically install it to `$HOME/.ambiata/mafia/bin` on first
+and will automatically install it to `$HOME/.mafia/bin` on first
 use.
 
 
@@ -251,7 +251,7 @@ Data.List genericReplicate :: Integral i => i -> a -> [a]
 
 This command is powered by
 [hoogle](https://github.com/ndmitchell/hoogle) and will install it to
-`$HOME/.ambiata/mafia/bin` on first use.
+`$HOME/.mafia/bin` on first use.
 
 
 ### mafia depends

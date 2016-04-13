@@ -26,7 +26,7 @@ getMafiaHome = do
       Just home ->
         return home
       Nothing ->
-        (</> T.pack ".ambiata/mafia") `liftM` getHomeDirectory
+        (</> T.pack ".mafia") `liftM` getHomeDirectory
 
 getMafiaDir :: MonadIO m => Directory -> m Directory
 getMafiaDir path = do
