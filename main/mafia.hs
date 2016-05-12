@@ -394,7 +394,8 @@ mafiaHoogle args = do
   hoogle hkg args
 
 mafiaInstall :: InstallPackage -> EitherT MafiaError IO ()
-mafiaInstall ipkg =
+mafiaInstall ipkg = do
+  ensureAuxillaryExes
   liftIO . T.putStrLn =<< firstT MafiaBinError (installBinary ipkg)
 
 ghciArgs :: [GhciInclude] -> [File] -> EitherT MafiaError IO [Argument]
@@ -446,9 +447,13 @@ initMafia prof flags = do
   -- mafia should fail fast and not polute the directory with a sandbox.
   (_ :: ProjectName) <- firstT MafiaProjectError $ getProjectName =<< getCurrentDirectory
 
+  ensureAuxillaryExes
+  firstT MafiaInitError $ initialize (Just prof) (Just flags)
+
+ensureAuxillaryExes :: EitherT MafiaError IO ()
+ensureAuxillaryExes = do
   let ensureExeOnPath' e pkg =
         lookupEnv e >>= mapM_ (\b -> when (b == "true") $ ensureExeOnPath pkg)
   firstT MafiaBinError $ ensureExeOnPath' "MAFIA_HAPPY" (ipackageId "happy" [1, 19, 5])
   firstT MafiaBinError $ ensureExeOnPath' "MAFIA_ALEX" (ipackageId "alex" [3, 1, 6])
   firstT MafiaBinError $ ensureExeOnPath' "MAFIA_CPPHS" (ipackageId "cpphs" [1, 19, 3])
-  firstT MafiaInitError $ initialize (Just prof) (Just flags)
