@@ -49,7 +49,7 @@ checkCabalVersion = do
   --   https://github.com/haskell/cabal/commit/c0b3c7f1b6ae7bb7663a2c18578ede95d6a40919
 
   let vmin = Version [1,22,4] []
-      vmax = Version [1,24]   []
+      vmax = Version [1,26]   []
 
   version <- getCabalVersion
 
