@@ -69,8 +69,8 @@ removeSandbox = do
   whenM (doesDirectoryExist dir) $
     removeDirectoryRecursive dir
 
-  -- remvoe sandbox config file
-  whenM (doesFileExist dir) $
+  -- remove sandbox config file
+  whenM (doesFileExist defaultConfig) $
     removeFile defaultConfig
 
   -- remove root sandbox directory if it is now empty
