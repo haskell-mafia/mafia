@@ -340,15 +340,21 @@ withProcess p io = handleIO p $ do
 
 fromProcess :: Process -> Process.CreateProcess
 fromProcess p = Process.CreateProcess
-    { Process.cmdspec       = Process.RawCommand cmd args
-    , Process.cwd           = cwd
-    , Process.env           = env
-    , Process.std_in        = Process.Inherit
-    , Process.std_out       = Process.Inherit
-    , Process.std_err       = Process.Inherit
-    , Process.close_fds     = False
-    , Process.create_group  = False
-    , Process.delegate_ctlc = False }
+    { Process.cmdspec            = Process.RawCommand cmd args
+    , Process.cwd                = cwd
+    , Process.env                = env
+    , Process.std_in             = Process.Inherit
+    , Process.std_out            = Process.Inherit
+    , Process.std_err            = Process.Inherit
+    , Process.close_fds          = False
+    , Process.create_group       = False
+    , Process.delegate_ctlc      = False
+    , Process.detach_console     = False
+    , Process.create_new_console = False
+    , Process.new_session        = False
+    , Process.child_group        = Nothing
+    , Process.child_user         = Nothing
+    }
   where
     (cmd, args, cwd, env) = fromProcess' p
 
