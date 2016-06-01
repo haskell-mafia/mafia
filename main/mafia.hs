@@ -4,6 +4,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 
 import           BuildInfo_ambiata_mafia
+import           DependencyInfo_ambiata_mafia
 
 import           Control.Concurrent (setNumCapabilities)
 import           Control.Monad.IO.Class (MonadIO(..))
@@ -56,6 +57,8 @@ main = do
   dispatch parser >>= \case
     VersionCommand ->
       putStrLn buildInfoVersion >> exitSuccess
+    DependencyCommand ->
+      traverse putStrLn dependencyInfo >> exitSuccess
     RunCommand DryRun c ->
       print c >> exitSuccess
     RunCommand RealRun c ->
