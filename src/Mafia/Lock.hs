@@ -1,7 +1,6 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 module Mafia.Lock (
     LockError(..)
@@ -44,7 +43,7 @@ renderLockError = \case
     renderGhcError e
   LockFileVersionUnknown file header ->
     "Cannot read lock file: " <> file <>
-    "\nExpected Header> " <> LockFileHeader <>
+    "\nExpected Header> " <> lockFileHeader <>
     "\n  Actual Header> " <> header
 
 getLockFile :: Directory -> EitherT LockError IO File
@@ -53,7 +52,8 @@ getLockFile dir = do
   project <- firstT LockProjectError $ getProjectName dir
   return $ dir </> project <> ".lock-" <> ghcver
 
-pattern LockFileHeader =
+lockFileHeader :: Text
+lockFileHeader =
   "# mafia-lock-file-version: 0"
 
 readLockFile :: File -> EitherT LockError IO (Maybe [Constraint])
@@ -64,7 +64,7 @@ readLockFile file = do
       pure Nothing
     Just txt ->
       case T.lines txt of
-        (LockFileHeader : xs) ->
+        (x : xs) | x == lockFileHeader ->
           fmap Just $
           traverse (hoistEither . first LockCabalError . parseConstraint) xs
         (x : _) ->
@@ -75,5 +75,5 @@ readLockFile file = do
 writeLockFile :: File -> [Constraint] -> EitherT LockError IO ()
 writeLockFile file xs = do
   writeUtf8 file . T.unlines $
-    LockFileHeader :
+    lockFileHeader :
     fmap renderConstraint xs

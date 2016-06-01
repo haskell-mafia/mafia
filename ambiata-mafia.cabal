@@ -17,9 +17,9 @@ library
                     , ambiata-p
                     , ambiata-x-eithert
                     , ambiata-twine
-                    , aeson                           >= 0.8        && < 0.11
-                    , async                           == 2.0.*
-                    , attoparsec                      == 0.12.*
+                    , aeson                           >= 0.8        && < 0.12
+                    , async                           >= 2.0        && < 2.2
+                    , attoparsec                      >= 0.12       && < 0.14
                     , base16-bytestring               == 0.1.*
                     , bytestring                      == 0.10.*
                     , case-insensitive                == 1.2.*
@@ -31,17 +31,21 @@ library
                     , filepath                        == 1.4.*
                     , memory                          == 0.12.*
                     , parallel                        == 3.2.*
-                    , process                         == 1.2.*
+                    , process                         >= 1.4        && < 1.5
                     , tar                             == 0.4.*
                     , temporary                       == 1.2.*
                     , text                            == 1.2.*
-                    , time                            >= 1.4        && < 1.6
+                    , time                            >= 1.4        && < 1.7
                     , time-locale-compat              == 0.1.*
-                    , transformers                    == 0.4.*
+                    , transformers                    >= 0.4        && < 0.6
                     , unix                            == 2.7.*
 
   ghc-options:
                     -Wall
+
+  if impl(ghc >= 8.0)
+    ghc-options:
+                    -fno-warn-redundant-constraints
 
   hs-source-dirs:
                     src
@@ -95,11 +99,11 @@ executable mafia
                     , containers                      == 0.5.*
                     , directory                       == 1.2.*
                     , filepath                        == 1.4.*
-                    , optparse-applicative            == 0.11.*
+                    , optparse-applicative            >= 0.11       && < 0.13
                     , text                            == 1.2.*
-                    , time                            >= 1.4        && < 1.6
+                    , time                            >= 1.4        && < 1.7
                     , time-locale-compat              == 0.1.*
-                    , transformers                    == 0.4.*
+                    , transformers                    >= 0.4        && < 0.6
 
 
 test-suite test
@@ -135,6 +139,10 @@ test-suite test-io
   ghc-options:
                     -Wall -threaded -O2
 
+  if impl(ghc >= 8.0)
+    ghc-options:
+                    -fno-warn-redundant-constraints
+
   hs-source-dirs:
                     test
 
@@ -151,7 +159,7 @@ test-suite test-io
                     , quickcheck-instances            == 0.3.*
                     , temporary                       == 1.2.*
                     , text                            == 1.2.*
-                    , transformers                    == 0.4.*
+                    , transformers                    >= 0.4        && < 0.6
 
 test-suite test-cli
   type:
