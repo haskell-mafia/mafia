@@ -1,17 +1,20 @@
 #!/usr/bin/env runhaskell
 
-import           Data.Char (isDigit)
-import           Data.List (intercalate)
+import           Data.Char (isDigit, toLower)
+import           Data.Function (on)
+import           Data.List (intercalate, sortBy)
 import           Data.Monoid ((<>))
 import           Data.Version (showVersion)
 
+import           Distribution.InstalledPackageInfo
 import           Distribution.PackageDescription
-import           Distribution.Verbosity
 import           Distribution.Simple
 import           Distribution.Simple.Setup (BuildFlags(..), ReplFlags(..), TestFlags(..), fromFlag)
 import           Distribution.Simple.LocalBuildInfo
+import           Distribution.Simple.PackageIndex
 import           Distribution.Simple.BuildPaths (autogenModulesDir)
 import           Distribution.Simple.Utils (createDirectoryIfMissingVerbose, rewriteFile, rawSystemStdout)
+import           Distribution.Verbosity
 
 main :: IO ()
 main =
@@ -25,12 +28,15 @@ main =
        (sDistHook hooks) pd mlbi uh flags
    , buildHook = \pd lbi uh flags -> do
        genBuildInfo (fromFlag $ buildVerbosity flags) pd
+       genDependencyInfo (fromFlag $ buildVerbosity flags) pd lbi
        (buildHook hooks) pd lbi uh flags
    , replHook = \pd lbi uh flags args -> do
        genBuildInfo (fromFlag $ replVerbosity flags) pd
+       genDependencyInfo (fromFlag $ replVerbosity flags) pd lbi
        (replHook hooks) pd lbi uh flags args
    , testHook = \args pd lbi uh flags -> do
        genBuildInfo (fromFlag $ testVerbosity flags) pd
+       genDependencyInfo (fromFlag $ testVerbosity flags) pd lbi
        (testHook hooks) args pd lbi uh flags
    }
 
@@ -56,6 +62,31 @@ genBuildInfo verbosity pkg = do
     , "buildInfoVersion = \"" ++ buildVersion ++ "\""
     ]
   rewriteFile targetText buildVersion
+
+genDependencyInfo :: Verbosity -> PackageDescription -> LocalBuildInfo -> IO ()
+genDependencyInfo verbosity pkg info = do
+  let
+    (PackageName pname) = pkgName . package $ pkg
+    name = "DependencyInfo_" ++ (map (\c -> if c == '-' then '_' else c) pname)
+    targetHs = autogenModulesDir info ++ "/" ++ name ++ ".hs"
+    render p =
+      let
+        n = unPackageName $ pkgName p
+        v = intercalate "." . fmap show . versionBranch $ pkgVersion p
+      in
+       n ++ "-" ++ v
+    deps = fmap (render . sourcePackageId) . allPackages $ installedPkgs info
+    sdeps = sortBy (compare `on` fmap toLower) deps
+    strs = flip fmap sdeps $ \d -> "\"" ++ d ++ "\""
+
+  createDirectoryIfMissingVerbose verbosity True (autogenModulesDir info)
+
+  rewriteFile targetHs $ unlines [
+      "module " ++ name ++ " where"
+    , "import Prelude"
+    , "dependencyInfo :: [String]"
+    , "dependencyInfo = [\n    " ++ intercalate "\n  , " strs ++ "\n  ]"
+    ]
 
 gitVersion :: Verbosity -> IO String
 gitVersion verbosity = do
