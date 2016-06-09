@@ -16,6 +16,7 @@ module Mafia.IO
   , makeRelativeToCurrentDirectory
   , tryMakeRelativeToCurrent
   , canonicalizePath
+  , createSymbolicLink
 
     -- * Existence Tests
   , doesFileExist
@@ -73,6 +74,7 @@ import qualified System.Environment as Environment
 import           System.IO (IO)
 import           System.IO.Error (isDoesNotExistError)
 import qualified System.IO.Temp as Temp
+import qualified System.Posix.Files as Posix
 
 import           X.Control.Monad.Trans.Either (EitherT, pattern EitherT)
 import           X.Control.Monad.Trans.Either (runEitherT, hoistEither)
@@ -139,6 +141,10 @@ tryMakeRelativeToCurrent dir =
 canonicalizePath :: MonadIO m => Path -> m Path
 canonicalizePath path =
   T.pack `liftM` liftIO (Directory.canonicalizePath (T.unpack path))
+
+createSymbolicLink :: MonadIO m => Path -> File -> m ()
+createSymbolicLink src dst =
+  liftIO $ Posix.createSymbolicLink (T.unpack src) (T.unpack dst)
 
 ------------------------------------------------------------------------
 -- Existence Tests

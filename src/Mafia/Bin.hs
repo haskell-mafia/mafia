@@ -16,10 +16,6 @@ module Mafia.Bin
   , ensureExeOnPath
   ) where
 
-import           Control.Monad.IO.Class (MonadIO(..))
-
-import qualified Data.Text as T
-
 import           Mafia.Home
 import           Mafia.IO
 import           Mafia.Install
@@ -29,7 +25,6 @@ import           Mafia.Cabal.Types
 import           P
 
 import           System.IO (IO)
-import           System.Posix.Files (createSymbolicLink)
 
 import           X.Control.Monad.Trans.Either (EitherT, left)
 
@@ -37,6 +32,7 @@ import           X.Control.Monad.Trans.Either (EitherT, left)
 data BinError =
     BinInstallError InstallError
   | BinNotExecutable PackageId
+  | BinFailedToCreateSymbolicLink Path File
     deriving (Show)
 
 renderBinError :: BinError -> Text
@@ -45,6 +41,8 @@ renderBinError = \case
     renderInstallError err
   BinNotExecutable pid ->
     "Cannot link bin/ directory for " <> renderPackageId pid <> " as no executables were installed."
+  BinFailedToCreateSymbolicLink src dst ->
+    "Failed to create symbolic link from " <> src <> " -> " <> dst <> "."
 
 data InstallPackage =
     InstallPackageName PackageName
@@ -98,7 +96,17 @@ installBinary ipkg = do
     unlessM (doesDirectoryExist $ gdir </> "bin") $
       left (BinNotExecutable . refId $ pkgRef pkg)
 
-    liftIO $ createSymbolicLink (T.unpack gdir) (T.unpack plink)
+    -- There can easily be a race where two processes are trying to install the
+    -- same binary, so catch any errors that occur when trying to create the
+    -- symbolic link.
+    ignoreIO $ createSymbolicLink gdir plink
+
+    -- We can't check that 'plink' points to 'gdir' as the other process may
+    -- have built the same package, but with a different hash, and this is ok.
+    -- Instead, we'll need to settle for checking that the bin/ directory
+    -- exists.
+    unlessM (doesDirectoryExist $ plink </> "bin") $
+      left (BinFailedToCreateSymbolicLink gdir plink)
 
   return pbin
 

@@ -55,7 +55,6 @@ import           P
 import           System.FileLock (SharedExclusive(..), FileLock)
 import           System.FileLock (lockFile, tryLockFile, unlockFile)
 import           System.IO (IO, stderr)
-import           System.Posix.Files (createSymbolicLink)
 
 import           Twine.Parallel (RunError(..), consume_)
 import           Twine.Data.Queue  (writeQueue)
@@ -394,7 +393,7 @@ link db env p@(Package (PackageRef pid _ _) _ _) = do
     left (InstallLinkError p pcfg)
 
   let dest = db </> renderPackageId pid <> ".conf"
-  liftIO $ createSymbolicLink (T.unpack pcfg) (T.unpack dest)
+  createSymbolicLink pcfg dest
 
 squashRunError :: Set Package -> RunError InstallError -> InstallError
 squashRunError pkgs = \case
