@@ -1,8 +1,26 @@
 [boris]
   version = 1
 
-[build.dist]
+[build.submodules]
+  git = "refs/heads/**"
+
+[build.validate]
   git = "refs/heads/master"
 
-[build.branches]
+[build.dist-7-8]
+  git = "refs/heads/master"
+
+[build.dist-7-10]
+  git = "refs/heads/master"
+
+[build.dist-8-0]
+  git = "refs/heads/master"
+
+[build.branches-7-8]
+  git = "refs/heads/topic/*"
+
+[build.branches-7-10]
+  git = "refs/heads/topic/*"
+
+[build.branches-8-0]
   git = "refs/heads/topic/*"
