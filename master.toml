@@ -1,0 +1,44 @@
+[master]
+  runner = "s3://ambiata-dispensary-v2/dist/master/master-haskell/linux/x86_64/20160627025738-519272a/master-haskell-20160627025738-519272a"
+  version = 1
+  sha1 = "e649e684fa907f54ae4f1a35a12ce4183cb91bd6"
+
+[build.dist-7-8]
+  GHC_VERSION="7.8.4"
+  CABAL_VERSION="1.22.4.0"
+  MAFIA_HAPPY = "true"
+
+[build.dist-7-10]
+  GHC_VERSION="7.10.2"
+  CABAL_VERSION="1.22.4.0"
+  MAFIA_HAPPY = "true"
+  HADDOCK = "true"
+  HADDOCK_S3 = "$AMBIATA_HADDOCK_MASTER"
+  PUBLISH = "true"
+  PUBLISH_S3 = "$AMBIATA_ARTEFACTS_MASTER"
+  PUBLISH_EXECUTABLES = "mafia"
+
+[build.dist-8-0]
+  GHC_VERSION="8.0.1"
+  CABAL_VERSION="1.24.0.0"
+  MAFIA_HAPPY = "true"
+
+[build.branches-7-8]
+  GHC_VERSION = "7.8.4"
+  CABAL_VERSION = "1.22.4.0"
+  MAFIA_HAPPY = "true"
+
+[build.branches-7-10]
+  GHC_VERSION = "7.10.2"
+  CABAL_VERSION = "1.22.4.0"
+  MAFIA_HAPPY = "true"
+  HADDOCK = "true"
+  HADDOCK_S3 = "$AMBIATA_HADDOCK_BRANCHES"
+  PUBLISH = "true"
+  PUBLISH_S3 = "$AMBIATA_ARTEFACTS_BRANCHES"
+  PUBLISH_EXECUTABLES = "mafia"
+
+[build.branches-8-0]
+  GHC_VERSION="8.0.1"
+  CABAL_VERSION="1.24.0.0"
+  MAFIA_HAPPY = "true"
