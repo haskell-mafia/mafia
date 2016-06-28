@@ -16,7 +16,7 @@ module Mafia.Install
   , renderInstallError
   ) where
 
-import           Control.Exception (SomeException)
+import           Control.Exception (SomeException, bracket)
 import           Control.Monad.IO.Class (MonadIO(..))
 import           Control.Parallel.Strategies (rpar, parMap)
 
@@ -54,7 +54,8 @@ import           P
 
 import           System.FileLock (SharedExclusive(..), FileLock)
 import           System.FileLock (lockFile, tryLockFile, unlockFile)
-import           System.IO (IO, stderr)
+import           System.IO (IO, FilePath, stderr)
+import           System.Posix.IO (OpenMode(..), OpenFileFlags(..), openFd, closeFd)
 
 import           Twine.Parallel (RunError(..), consume_)
 import           Twine.Data.Queue  (writeQueue)
@@ -446,12 +447,28 @@ lockPackage :: PackageEnv -> Package -> Flavour -> EitherT InstallError IO FileL
 lockPackage env p f = do
   let path = packageLockPath env p
   ignoreIO $ createDirectoryIfMissing True (takeDirectory path)
+  liftIO . touch $ T.unpack path
   mlock <- liftIO $ tryLockFile (T.unpack path) Exclusive
   case mlock of
     Just lock -> return lock
     Nothing   -> liftIO $ do
       T.hPutStrLn stderr ("Waiting for " <> renderHashId p <> renderFlavourSuffix f)
       lockFile (T.unpack path) Exclusive
+
+touch :: FilePath -> IO ()
+touch path =
+  let
+    flags =
+      OpenFileFlags {
+          append = False
+        , exclusive = False
+        , noctty = False
+        , nonBlock = False
+        , trunc = False
+        }
+  in
+    bracket (openFd path ReadOnly (Just 0o666) flags) closeFd $ \_ ->
+      pure ()
 
 packageConfig :: PackageEnv -> Package -> File
 packageConfig env p =
