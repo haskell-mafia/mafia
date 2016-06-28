@@ -3,7 +3,7 @@ module Mafia.Flock (
     withFileLock
   ) where
 
-import           Control.Monad.Catch (MonadMask(..), bracket)
+import           Control.Monad.Catch (MonadMask(..))
 import           Control.Monad.IO.Class (MonadIO(..))
 
 import           Control.Concurrent.STM (TMVar, newTMVar, tryTakeTMVar, takeTMVar, putTMVar)
@@ -23,7 +23,6 @@ import           System.FileLock (SharedExclusive(..), FileLock)
 import qualified System.FileLock as FileLock
 import           System.IO (IO)
 import           System.IO.Unsafe (unsafePerformIO)
-import           System.Posix.IO (OpenMode(..), OpenFileFlags(..), openFd, closeFd)
 
 import           X.Control.Monad.Trans.Either (EitherT, bracketEitherT')
 
@@ -82,7 +81,6 @@ withProcessLock path onWait =
 processLock :: (MonadIO m, MonadMask m) => File -> EitherT x m () -> EitherT x m FileLock
 processLock path onWait = do
   ignoreIO $ createDirectoryIfMissing True (takeDirectory path)
-  touch path
   mlock <- liftIO $ FileLock.tryLockFile (T.unpack path) Exclusive
   case mlock of
     Just lock ->
@@ -94,23 +92,3 @@ processLock path onWait = do
 processUnlock :: MonadIO m => FileLock -> m ()
 processUnlock =
   liftIO . FileLock.unlockFile
-
-touch :: MonadIO m => Path -> m ()
-touch path =
-  let
-    flags =
-      OpenFileFlags {
-          append = False
-        , exclusive = True
-        , noctty = False
-        , nonBlock = False
-        , trunc = True
-        }
-
-    acquire =
-      openFd (T.unpack path) WriteOnly (Just 0o666) flags
-
-    release =
-      closeFd
-  in
-    liftIO . ignoreIO . bracket acquire release . const $ pure ()
