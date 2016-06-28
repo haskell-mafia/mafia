@@ -40,6 +40,7 @@ import           Mafia.Cabal.Package
 import           Mafia.Cabal.Process
 import           Mafia.Cabal.Sandbox
 import           Mafia.Cabal.Types
+import           Mafia.Flock
 import           Mafia.Ghc
 import           Mafia.Home
 import           Mafia.IO
@@ -52,8 +53,6 @@ import           Numeric (showHex)
 
 import           P
 
-import           System.FileLock (SharedExclusive(..), FileLock)
-import           System.FileLock (lockFile, tryLockFile, unlockFile)
 import           System.IO (IO, stderr)
 
 import           Twine.Parallel (RunError(..), consume_)
@@ -439,19 +438,10 @@ getPackageEnv = do
   return (PackageEnv ghc home)
 
 withPackageLock :: PackageEnv -> Package -> Flavour -> EitherT InstallError IO a -> EitherT InstallError IO a
-withPackageLock env p f io =
-  bracketEitherT' (lockPackage env p f) (liftIO . unlockFile) (const io)
-
-lockPackage :: PackageEnv -> Package -> Flavour -> EitherT InstallError IO FileLock
-lockPackage env p f = do
-  let path = packageLockPath env p
-  ignoreIO $ createDirectoryIfMissing True (takeDirectory path)
-  mlock <- liftIO $ tryLockFile (T.unpack path) Exclusive
-  case mlock of
-    Just lock -> return lock
-    Nothing   -> liftIO $ do
-      T.hPutStrLn stderr ("Waiting for " <> renderHashId p <> renderFlavourSuffix f)
-      lockFile (T.unpack path) Exclusive
+withPackageLock env p f =
+  withFileLock (packageLockPath env p) $ do
+    liftIO . T.hPutStrLn stderr $
+      "Waiting for " <> renderHashId p <> renderFlavourSuffix f
 
 packageConfig :: PackageEnv -> Package -> File
 packageConfig env p =
