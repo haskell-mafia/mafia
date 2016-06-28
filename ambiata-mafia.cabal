@@ -32,6 +32,7 @@ library
                     , memory                          == 0.12.*
                     , parallel                        == 3.2.*
                     , process                         >= 1.4        && < 1.5
+                    , stm                             == 2.4.*
                     , tar                             == 0.4.*
                     , temporary                       == 1.2.*
                     , text                            == 1.2.*
@@ -62,14 +63,15 @@ library
                     Mafia.Cabal.Types
                     Mafia.Cabal.Version
                     Mafia.Error
+                    Mafia.Flock
                     Mafia.Ghc
                     Mafia.Git
                     Mafia.Hash
                     Mafia.Home
                     Mafia.Hoogle
-                    Mafia.IO
                     Mafia.Init
                     Mafia.Install
+                    Mafia.IO
                     Mafia.Lock
                     Mafia.Package
                     Mafia.Path
@@ -125,9 +127,13 @@ test-suite test
                     , ambiata-disorder-corpus
                     , ambiata-mafia
                     , ambiata-p
+                    , ambiata-x-eithert
+                    , async                           >= 2.0        && < 2.2
                     , QuickCheck                      == 2.8.*
                     , quickcheck-instances            == 0.3.*
+                    , temporary                       == 1.2.*
                     , text
+                    , transformers                    >= 0.4        && < 0.6
 
 test-suite test-io
   type:
