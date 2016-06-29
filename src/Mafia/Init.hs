@@ -38,7 +38,7 @@ import           P
 
 import           System.IO (IO, stderr)
 
-import           X.Control.Monad.Trans.Either (EitherT, left, hoistEither)
+import           X.Control.Monad.Trans.Either (EitherT, runEitherT, left, hoistEither)
 
 
 data InitError =
@@ -86,6 +86,21 @@ initialize mprofiling mflags = do
 
   sandboxDir <- firstT InitCabalError initSandbox
 
+  -- When switching between ghc versions, cabal-install 1.24 and later get
+  -- confused about where the sandbox is supposed to be because they read the
+  -- ghc version from 'dist/setup-config' rather than looking at the ghc on the
+  -- PATH to detect the version.
+  --
+  -- We don't want to read the 'dist/setup-config' because the format is a
+  -- binary blob that changes with every Cabal library release, so we detect
+  -- this situation by running a benign command that uses the cabal sandbox and
+  -- if it errors out then we delete 'dist/setup-config' and ensure that
+  -- 'cabal configure' is re-run below.
+  sandboxStatus <- liftIO checkSandbox
+
+  when (sandboxStatus == SandboxKO) $
+    ignoreIO $ removeFile "dist/setup-config"
+
   let statePath = sandboxDir </> "mafia/state." <> T.pack (show mafiaStateVersion) <> ".json"
 
   clearAddSourceDependencies sandboxDir
@@ -95,7 +110,7 @@ initialize mprofiling mflags = do
 
   previous <- readMafiaState statePath
   current <- getMafiaState (mprofiling <|> fmap msProfiling previous) (mflags <|> fmap msFlags previous) lockFile
-  hasDist <- liftIO $ doesDirectoryExist "dist"
+  hasSetupConfig <- liftIO $ doesFileExist "dist/setup-config"
 
   packages <- checkPackages
 
@@ -126,7 +141,7 @@ initialize mprofiling mflags = do
       fmap pkgRef $
       Set.toList installed
 
-  let needConfigure = needInstall || not hasDist
+  let needConfigure = needInstall || not hasSetupConfig
 
   when needConfigure $ do
     firstT InitCabalError . cabal_ "configure" $
@@ -168,6 +183,22 @@ clearAddSourceDependencies sandboxDir = do
     liftIO . T.hPutStrLn stderr $ "Removing add-source dependency: " <> dep'
 
   firstT InitCabalError $ createIndexFile [] sandboxDir
+
+------------------------------------------------------------------------
+
+data SandboxStatus =
+    SandboxOK
+  | SandboxKO
+    deriving (Eq, Ord, Show)
+
+checkSandbox :: IO SandboxStatus
+checkSandbox = do
+  e <- runEitherT $ cabal "sandbox" ["hc-pkg", "list"]
+  case e of
+    Left _ ->
+      pure SandboxKO
+    Right Hush ->
+      pure SandboxOK
 
 ------------------------------------------------------------------------
 
