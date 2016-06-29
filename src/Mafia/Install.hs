@@ -250,6 +250,16 @@ install w penv flavour p@(Package (PackageRef pid _ _) deps _) = do
     -- install package dependencies
     mapM_ (install w penv flavour) (transitiveOfPackages deps)
 
+    -- detect and install build tools
+    tools <- detectBuildTools p
+
+    for_ tools $ \tool ->
+      liftIO . T.hPutStrLn stderr $
+        "Detected '" <> unPackageName (unBuildTool tool) <> "' " <>
+        "was required to build " <> renderPackageId pid
+
+    paths <- installBuildTools penv tools
+
     -- the vanilla flavour must always be installed first:
     --  + it creates and sets up the package's sandbox
     --  + profiling builds need the vanilla build for template haskell to run
@@ -275,7 +285,7 @@ install w penv flavour p@(Package (PackageRef pid _ _) deps _) = do
               sbcfg = packageSandboxConfig penv p
 
           let sbcabal x xs =
-                firstT (InstallPackageError pid Set.empty) $ cabalFrom sbdir (Just sbcfg) x xs
+                firstT (InstallPackageError pid Set.empty) $ cabalFrom sbdir sbcfg paths x xs
 
           liftIO . T.hPutStrLn stderr $ "Building " <> renderHashId p <> renderFlavourSuffix flavour
 
@@ -327,7 +337,7 @@ createPackageSandbox penv p@(Package (PackageRef pid _ msrc) deps _) = do
       sbsrc = packageSourceDir penv p
 
   let sbcabal x xs =
-        firstT InstallCabalError $ cabalFrom sbdir (Just sbcfg) x xs
+        firstT InstallCabalError $ cabalFrom sbdir sbcfg [] x xs
 
   ignoreIO (removeDirectoryRecursive sbdir)
   createDirectoryIfMissing True sbdir
@@ -384,6 +394,32 @@ createPackageSandbox penv p@(Package (PackageRef pid _ msrc) deps _) = do
   Hush <- sbcabal "sandbox" ["hc-pkg", "recache"]
 
   return ty
+
+-- | Install the specified build tools and return the paths to the 'bin' directories.
+installBuildTools :: PackageEnv -> Set BuildTool -> EitherT InstallError IO [Directory]
+installBuildTools env tools = do
+  pkgs <-
+    traverse (flip installPackage Nothing . unBuildTool) $
+    Set.toList tools
+
+  pure .
+    fmap (</> "bin") $
+    fmap (packageSandboxDir env) pkgs
+
+-- | Detect the build tools required by a package.
+detectBuildTools :: Package -> EitherT InstallError IO (Set BuildTool)
+detectBuildTools (Package (PackageRef pid _ msrc) _ _) =
+  firstT InstallCabalError $ do
+    case msrc of
+      -- hackage package
+      Nothing ->
+        withSystemTempDirectory "mafia-build-tools-" $ \tmp -> do
+          Hush <- cabal "unpack" ["--destdir=" <> tmp, renderPackageId pid]
+          getBuildTools $ tmp </> renderPackageId pid
+
+      -- source package
+      Just src -> do
+        getBuildTools $ spDirectory src
 
 link :: Directory -> PackageEnv -> Package -> EitherT InstallError IO ()
 link db env p@(Package (PackageRef pid _ _) _ _) = do

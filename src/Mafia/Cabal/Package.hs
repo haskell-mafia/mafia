@@ -3,8 +3,11 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-module Mafia.Cabal.Package
-  ( PackageType(..)
+module Mafia.Cabal.Package (
+    BuildTool(..)
+  , getBuildTools
+
+  , PackageType(..)
   , getPackageId
   , getPackageType
   , getCabalFile
@@ -20,8 +23,21 @@ module Mafia.Cabal.Package
 import           Control.Monad.IO.Class (MonadIO(..))
 
 import qualified Data.List as List
+import           Data.Set (Set)
 import qualified Data.Set as Set
 import qualified Data.Text as T
+
+import           Distribution.Package (Dependency(..))
+import qualified Distribution.Package as Cabal (PackageName(..))
+import           Distribution.PackageDescription (BuildInfo(..))
+import           Distribution.PackageDescription (CondTree(..))
+import           Distribution.PackageDescription (Executable(..))
+import           Distribution.PackageDescription (GenericPackageDescription(..))
+import           Distribution.PackageDescription (libBuildInfo)
+import qualified Distribution.PackageDescription as Cabal (Library(..))
+import           Distribution.PackageDescription.Parse (ParseResult(..))
+import           Distribution.PackageDescription.Parse (parsePackageDescription)
+import           Distribution.Version (anyVersion)
 
 import           Mafia.Cabal.Types
 import           Mafia.Hash
@@ -49,6 +65,78 @@ getCabalFile dir = do
     isCabalFile fp =
       (takeExtension fp) == ".cabal" && not (T.isPrefixOf "." fp)
 
+withCabalFile :: Directory -> (File -> EitherT CabalError IO a) -> EitherT CabalError IO a
+withCabalFile dir io = do
+  mf <- getCabalFile dir
+  case mf of
+    Nothing ->
+      left $ CabalFileNotFound dir
+    Just file ->
+      io file
+
+------------------------------------------------------------------------
+
+newtype BuildTool =
+  BuildTool {
+      unBuildTool :: PackageName
+    } deriving (Eq, Ord, Show)
+
+getBuildTools :: Directory -> EitherT CabalError IO (Set BuildTool)
+getBuildTools dir =
+  withCabalFile dir $ \file -> do
+    msrc <- fmap T.unpack <$> readUtf8 file
+    case msrc of
+      Nothing ->
+        left $ CabalCouldNotReadBuildTools file
+      Just src ->
+        case parsePackageDescription src of
+          ParseFailed err ->
+            left $ CabalFileParseError file err
+          ParseOk _ gpd ->
+            pure $ takeTools gpd
+
+takeTools :: GenericPackageDescription -> Set BuildTool
+takeTools gpd =
+  let
+    lib =
+      fromMaybe Set.empty . fmap (toolsOfCondTree toolsOfLibrary) $ condLibrary gpd
+
+    exes =
+      fmap (toolsOfCondTree toolsOfExecutable . snd) $ condExecutables gpd
+  in
+    Set.unions $ lib : exes
+
+toolsOfCondTree :: (a -> Set BuildTool) -> CondTree v c a -> Set BuildTool
+toolsOfCondTree f tree =
+  let
+    loop (_, x, my) =
+      toolsOfCondTree f x <>
+      maybe Set.empty (toolsOfCondTree f) my
+  in
+    Set.unions $
+      f (condTreeData tree) : fmap loop (condTreeComponents tree)
+
+toolsOfLibrary :: Cabal.Library -> Set BuildTool
+toolsOfLibrary =
+  toolsOfBuildInfo . libBuildInfo
+
+toolsOfExecutable :: Executable -> Set BuildTool
+toolsOfExecutable =
+  toolsOfBuildInfo . buildInfo
+
+toolsOfBuildInfo :: BuildInfo -> Set BuildTool
+toolsOfBuildInfo =
+  Set.fromList . mapMaybe toolOfDependency . buildTools
+
+toolOfDependency :: Dependency -> Maybe BuildTool
+toolOfDependency = \case
+  Dependency (Cabal.PackageName name) v ->
+    if v == anyVersion then
+      Just . BuildTool . mkPackageName $ T.pack name
+    else
+      -- for now we don't support version ranges for build tools
+      Nothing
+
 ------------------------------------------------------------------------
 
 data PackageType =
@@ -58,17 +146,13 @@ data PackageType =
 
 getPackageType :: Directory -> EitherT CabalError IO PackageType
 getPackageType dir = do
-  mf <- getCabalFile dir
-  case mf of
-    Nothing ->
-      left (CabalFileNotFound dir)
-    Just f -> do
-      mt <- readPackageType f
-      case mt of
-        Nothing  ->
-          left (CabalCouldNotReadPackageType f)
-        Just t ->
-          return t
+  withCabalFile dir $ \file -> do
+    mt <- readPackageType file
+    case mt of
+      Nothing  ->
+        left $ CabalCouldNotReadPackageType file
+      Just t ->
+        return t
 
 readPackageType :: MonadIO m => File -> m (Maybe PackageType)
 readPackageType cabalFile = do

@@ -31,33 +31,43 @@ cabal_ cmd args = do
   PassErr <- cabal cmd args
   return ()
 
-cabalFrom
-  :: ProcessResult a
-  => Directory
-  -> Maybe SandboxConfigFile
-  -> Argument
-  -> [Argument]
-  -> EitherT CabalError IO a
-cabalFrom dir sbcfg cmd args = do
-  menv <- liftIO (mkEnv sbcfg)
+cabalFrom ::
+  ProcessResult a =>
+  Directory ->
+  SandboxConfigFile ->
+  [Directory] ->
+  Argument ->
+  [Argument] ->
+  EitherT CabalError IO a
+cabalFrom dir sbcfg extraPath cmd args = do
+  env <- liftIO (mkEnv sbcfg extraPath)
 
   let process =
         Process {
             processCommand     = "cabal"
           , processArguments   = cmd : args
           , processDirectory   = Just dir
-          , processEnvironment = menv
+          , processEnvironment = Just env
           }
 
   firstT CabalProcessError (callProcess process)
 
-mkEnv :: Maybe SandboxConfigFile -> IO (Maybe (Map EnvKey EnvValue))
-mkEnv sbcfg =
-  case sbcfg of
-    Nothing  -> return Nothing
-    Just cfg -> Just <$> mergeEnv (Map.fromList [("CABAL_SANDBOX_CONFIG", cfg)])
+mkEnv :: SandboxConfigFile -> [Directory] -> IO (Map EnvKey EnvValue)
+mkEnv sbcfg extraPaths =
+  fmap (Map.insert "CABAL_SANDBOX_CONFIG" sbcfg . prependPaths extraPaths) getEnv
 
-mergeEnv :: Map EnvKey EnvValue -> IO (Map EnvKey EnvValue)
-mergeEnv extra = do
-  env <- Map.fromList . fmap (bimap T.pack T.pack) <$> getEnvironment
-  return (Map.union extra env)
+prependPaths :: [Directory] -> Map EnvKey EnvValue -> Map EnvKey EnvValue
+prependPaths new kvs =
+  let
+    key =
+      "PATH"
+  in
+    case Map.lookup key kvs of
+      Nothing ->
+        Map.insert key (T.intercalate ":" new) kvs
+      Just old ->
+        Map.insert key (T.intercalate ":" $ new <> T.splitOn ":" old) kvs
+
+getEnv :: IO (Map EnvKey EnvValue)
+getEnv =
+  Map.fromList . fmap (bimap T.pack T.pack) <$> getEnvironment
