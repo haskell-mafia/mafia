@@ -36,6 +36,9 @@ import           Data.Set (Set)
 import qualified Data.Set as Set
 import qualified Data.Text as T
 
+import           Distribution.InstalledPackageInfo (PError(..))
+import           Distribution.ParseUtils (locatedErrorMsg)
+
 import           Mafia.Ghc
 import           Mafia.Hash
 import           Mafia.Path
@@ -207,7 +210,8 @@ data CabalError =
   | CabalProjectError ProjectError
   | CabalGhcError GhcError
   | CabalHashError HashError
-  | CabalParseError Text
+  | CabalInstallPlanParseError Text
+  | CabalFileParseError File PError
   | CabalIndexFileNotFound File
   | CabalCorruptIndexFile Tar.FormatError
   | CabalSandboxConfigFileNotFound SandboxConfigFile
@@ -217,6 +221,7 @@ data CabalError =
   | CabalSDistFailedCouldNotReadFile Directory File
   | CabalReinstallsDetected [PackagePlan]
   | CabalFileNotFound Directory
+  | CabalCouldNotReadBuildTools File
   | CabalCouldNotReadPackageId File
   | CabalCouldNotReadPackageType File
   | CabalCouldNotParseCabalVersion Text
@@ -244,8 +249,15 @@ renderCabalError = \case
   CabalHashError e ->
     renderHashError e
 
-  CabalParseError err ->
-    "Parse error: " <> err
+  CabalFileParseError file err ->
+    let
+      (line, msg) =
+        locatedErrorMsg err
+    in
+      "Parse error " <> file <> ":" <> T.pack (show line) <> ": " <> T.pack msg
+
+  CabalInstallPlanParseError err ->
+    "Install plan parse error: " <> err
 
   CabalIndexFileNotFound file ->
     "Index file not found: " <> file
@@ -271,6 +283,9 @@ renderCabalError = \case
 
   CabalFileNotFound dir ->
     "Could not find .cabal file in: " <> dir
+
+  CabalCouldNotReadBuildTools cabalFile ->
+    "Failed to read build-tools from: " <> cabalFile
 
   CabalCouldNotReadPackageId cabalFile ->
     "Failed to read package-id from: " <> cabalFile

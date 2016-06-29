@@ -182,7 +182,7 @@ makeInstallPlan mdir sourcePkgs installArgs = do
   withSystemTempDirectory "mafia-deps-" $ \tmp -> do
     let
       dir = fromMaybe tmp mdir
-      cabal = cabalFrom dir (Just (tmp </> "sandbox.config"))
+      cabal = cabalFrom dir (tmp </> "sandbox.config") []
 
     Hush <- cabal "sandbox" ["init", "--sandbox", tmp]
 
@@ -227,7 +227,7 @@ takeReinstall p =
 
 parseInstallPlan :: Text -> Either CabalError [PackagePlan]
 parseInstallPlan =
-  first (CabalParseError . T.pack) .
+  first (CabalInstallPlanParseError . T.pack) .
   traverse parsePackagePlan .
   List.drop 1 .
   List.dropWhile (/= "In order, the following would be installed:") .
