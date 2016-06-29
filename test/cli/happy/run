@@ -1,0 +1,12 @@
+#!/bin/sh -eux
+
+absolute_path() {
+  echo "$(cd "$(dirname "$1")" && pwd)/$(basename "$1")"
+}
+
+MAFIA=$(absolute_path ${1:-./dist/build/mafia/mafia})
+
+MAFIA_TEMP=$(mktemp -d 2>/dev/null || mktemp -d -t 'mafia')
+trap "rm -rf \"${MAFIA_TEMP}\"" EXIT
+
+MAFIA_HOME=$MAFIA_TEMP $MAFIA install pretty-show
