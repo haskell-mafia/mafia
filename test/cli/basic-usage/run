@@ -24,10 +24,9 @@ check() {
   git clone git@github.com:ambiata/${MAFIA_REPO}
 
   cd ${MAFIA_DIR}
-  ${MAFIA} build
-  ${MAFIA} build
-
-  ${MAFIA} quick ${MAFIA_ENTRY} <<EOF
+  MAFIA_HOME=${MAFIA_TEMP} ${MAFIA} build
+  MAFIA_HOME=${MAFIA_TEMP} ${MAFIA} build
+  MAFIA_HOME=${MAFIA_TEMP} ${MAFIA} quick ${MAFIA_ENTRY} <<EOF
     :q
 EOF
 }
