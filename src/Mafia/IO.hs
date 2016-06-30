@@ -36,6 +36,7 @@ module Mafia.IO
 
     -- * Environment
   , findExecutable
+  , prependPath
   , lookupEnv
   , setEnv
   , unsetEnv
@@ -207,6 +208,10 @@ findExecutable :: MonadIO m => Text -> m (Maybe File)
 findExecutable name = liftIO $ do
   path <- Directory.findExecutable (T.unpack name)
   return (fmap T.pack path)
+
+prependPath :: MonadIO m => Directory -> m ()
+prependPath dir =
+  setEnv "PATH" . maybe dir (\path -> dir <> ":" <> path) =<< lookupEnv "PATH"
 
 lookupEnv :: MonadIO m => Text -> m (Maybe Text)
 lookupEnv key = liftIO $ do

@@ -108,7 +108,7 @@ hoogleCacheDir =
 installHoogle :: EitherT MafiaError IO File
 installHoogle =
   bimapT MafiaBinError (</> "hoogle") $ do
-    installBinary (ipackageId "hoogle" [4, 2, 43])
+    installBinary (ipackageId "hoogle" [4, 2, 43]) []
 
 hoogleDbFile :: Directory -> PackageId -> File
 hoogleDbFile db pkg =

@@ -228,6 +228,8 @@ data CabalError =
   | CabalCouldNotParseConstraint Text
   | CabalCouldNotParseVersion Text
   | CabalCouldNotParseFlag Text
+  | CabalCouldNotParseLowerBound Text Text
+  | CabalCouldNotParseUpperBound Text Text
   | CabalNoTopLevelPackage
   | CabalTopLevelPackageNotFoundInPlan PackageId
   | CabalMultipleTopLevelPackages [PackageId]
@@ -304,6 +306,12 @@ renderCabalError = \case
 
   CabalCouldNotParseFlag flag ->
     "Could not parse flag: " <> flag
+
+  CabalCouldNotParseLowerBound sym ver ->
+    "Could not parse lower bound: " <> sym <> " " <> ver
+
+  CabalCouldNotParseUpperBound sym ver ->
+    "Could not parse upper bound: " <> sym <> " " <> ver
 
   CabalNoTopLevelPackage ->
     "No top level package found after parsing install plan"

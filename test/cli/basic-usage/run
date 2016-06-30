@@ -12,22 +12,23 @@ ${MAFIA} --version
 ${MAFIA} -h
 ${MAFIA} --help
 
+MAFIA_TEMP=$(mktemp -d 2>/dev/null || mktemp -d -t 'mafia')
+trap "rm -rf \"${MAFIA_TEMP}\"" EXIT
+
 check() {
   MAFIA_REPO=$1
   MAFIA_DIR=$2
   MAFIA_ENTRY=$3
 
-  MAFIA_TEMP=$(mktemp -d 2>/dev/null || mktemp -d -t 'mafia')
-  trap "rm -rf \"${MAFIA_TEMP}\"" EXIT
-
   cd ${MAFIA_TEMP}
-  git clone git@github.com:ambiata/${MAFIA_REPO}
+  if [ ! -d "${MAFIA_REPO}" ]; then
+    git clone git@github.com:ambiata/${MAFIA_REPO}
+  fi
 
   cd ${MAFIA_DIR}
-  ${MAFIA} build
-  ${MAFIA} build
-
-  ${MAFIA} quick ${MAFIA_ENTRY} <<EOF
+  MAFIA_HOME=${MAFIA_TEMP} ${MAFIA} build
+  MAFIA_HOME=${MAFIA_TEMP} ${MAFIA} build
+  MAFIA_HOME=${MAFIA_TEMP} ${MAFIA} quick ${MAFIA_ENTRY} <<EOF
     :q
 EOF
 }

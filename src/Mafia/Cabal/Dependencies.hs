@@ -71,9 +71,9 @@ findDependenciesForCurrentDirectory :: [Flag] -> [SourcePackage] -> [Constraint]
 findDependenciesForCurrentDirectory flags spkgs constraints = do
   hoistEither . fromInstallPlan spkgs =<< installPlanForCurrentDirectory flags spkgs constraints
 
-findDependenciesForPackage :: PackageName -> Maybe Version -> EitherT CabalError IO Package
-findDependenciesForPackage name mver = do
-  hoistEither . fromInstallPlan [] =<< installPlanForPackage name mver
+findDependenciesForPackage :: PackageName -> [Constraint] -> EitherT CabalError IO Package
+findDependenciesForPackage name constraints = do
+  hoistEither . fromInstallPlan [] =<< installPlanForPackage name constraints
 
 fromInstallPlan :: [SourcePackage] -> [PackagePlan] -> Either CabalError Package
 fromInstallPlan spkgs rdeps =
@@ -167,12 +167,9 @@ installPlanForCurrentDirectory flags spkgs constraints0 = do
   dir <- getCurrentDirectory
   makeInstallPlan (Just dir) (fmap spDirectory spkgs) (args <> constraints <> flagArgs)
 
-installPlanForPackage :: PackageName -> Maybe Version -> EitherT CabalError IO [PackagePlan]
-installPlanForPackage name = \case
-  Nothing ->
-    makeInstallPlan Nothing [] [unPackageName name]
-  Just ver ->
-    makeInstallPlan Nothing [] [renderPackageId (PackageId name ver)]
+installPlanForPackage :: PackageName -> [Constraint] -> EitherT CabalError IO [PackagePlan]
+installPlanForPackage name constraints =
+  makeInstallPlan Nothing [] $ [unPackageName name] <> constraintArgs constraints
 
 makeInstallPlan :: Maybe Directory -> [Directory] -> [Argument] -> EitherT CabalError IO [PackagePlan]
 makeInstallPlan mdir sourcePkgs installArgs = do

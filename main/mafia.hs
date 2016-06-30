@@ -385,7 +385,7 @@ mafiaQuick flags extraIncludes paths = do
 
 mafiaWatch :: [Flag] -> [GhciInclude] -> File -> [Argument] -> EitherT MafiaError IO ()
 mafiaWatch flags extraIncludes path extraArgs = do
-  ghcidExe <- bimapT MafiaBinError (</> "ghcid") $ installBinary (ipackageId "ghcid" [0, 5])
+  ghcidExe <- bimapT MafiaBinError (</> "ghcid") $ installBinary (ipackageId "ghcid" [0, 5]) []
   args <- ghciArgs extraIncludes [path]
   initMafia DisableProfiling flags
   exec MafiaProcessError ghcidExe $ [ "-c", T.unwords ("ghci" : args) ] <> extraArgs
@@ -398,7 +398,7 @@ mafiaHoogle args = do
 
 mafiaInstall :: InstallPackage -> EitherT MafiaError IO ()
 mafiaInstall ipkg = do
-  liftIO . T.putStrLn =<< firstT MafiaBinError (installBinary ipkg)
+  liftIO . T.putStrLn =<< firstT MafiaBinError (installBinary ipkg [])
 
 ghciArgs :: [GhciInclude] -> [File] -> EitherT MafiaError IO [Argument]
 ghciArgs extraIncludes paths = do
@@ -457,5 +457,5 @@ ensureBuildTools :: EitherT MafiaError IO ()
 ensureBuildTools = do
   tools <- firstT MafiaCabalError $ getBuildTools =<< getCurrentDirectory
 
-  firstT MafiaBinError $
-    traverse_ (ensureExeOnPath . InstallPackageName . unBuildTool) tools
+  firstT MafiaBinError . for_ tools $ \(BuildTool name constraints) ->
+    installOnPath (InstallPackageName name) constraints

@@ -37,8 +37,10 @@ import           Distribution.PackageDescription (libBuildInfo)
 import qualified Distribution.PackageDescription as Cabal (Library(..))
 import           Distribution.PackageDescription.Parse (ParseResult(..))
 import           Distribution.PackageDescription.Parse (parsePackageDescription)
-import           Distribution.Version (anyVersion)
+import           Distribution.Version (VersionRange, anyVersion, asVersionIntervals)
+import qualified Distribution.Version as Cabal (LowerBound(..), UpperBound(..), Bound(..))
 
+import           Mafia.Cabal.Constraint
 import           Mafia.Cabal.Types
 import           Mafia.Hash
 import           Mafia.IO
@@ -76,9 +78,10 @@ withCabalFile dir io = do
 
 ------------------------------------------------------------------------
 
-newtype BuildTool =
+data BuildTool =
   BuildTool {
-      unBuildTool :: PackageName
+      toolName :: PackageName
+    , toolConstraints :: [Constraint]
     } deriving (Eq, Ord, Show)
 
 getBuildTools :: Directory -> EitherT CabalError IO (Set BuildTool)
@@ -126,16 +129,45 @@ toolsOfExecutable =
 
 toolsOfBuildInfo :: BuildInfo -> Set BuildTool
 toolsOfBuildInfo =
-  Set.fromList . mapMaybe toolOfDependency . buildTools
+  Set.fromList . fmap toolOfDependency . buildTools
 
-toolOfDependency :: Dependency -> Maybe BuildTool
+toolOfDependency :: Dependency -> BuildTool
 toolOfDependency = \case
   Dependency (Cabal.PackageName name) v ->
-    if v == anyVersion then
-      Just . BuildTool . mkPackageName $ T.pack name
+    let
+      pname =
+        mkPackageName $ T.pack name
+    in
+      BuildTool pname $ constraintsOfVersion pname v
+
+constraintsOfVersion :: PackageName -> VersionRange -> [Constraint]
+constraintsOfVersion name range =
+  let
+    go (lower, upper) =
+      ConstraintBounded name (boundOfLower lower) (boundOfUpper upper)
+  in
+    if range == anyVersion then
+      []
     else
-      -- for now we don't support version ranges for build tools
-      Nothing
+      fmap go $ asVersionIntervals range
+
+boundOfLower :: Cabal.LowerBound -> Bound
+boundOfLower (Cabal.LowerBound ver b) =
+  boundOfBound ver b
+
+boundOfUpper :: Cabal.UpperBound -> Maybe Bound
+boundOfUpper = \case
+  Cabal.NoUpperBound ->
+    Nothing
+  Cabal.UpperBound ver b ->
+    Just $ boundOfBound ver b
+
+boundOfBound :: Version -> Cabal.Bound -> Bound
+boundOfBound ver = \case
+  Cabal.InclusiveBound ->
+    Inclusive ver
+  Cabal.ExclusiveBound ->
+    Exclusive ver
 
 ------------------------------------------------------------------------
 

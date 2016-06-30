@@ -129,10 +129,8 @@ test-suite test
                     , ambiata-mafia
                     , ambiata-p
                     , ambiata-x-eithert
-                    , async                           >= 2.0        && < 2.2
                     , QuickCheck                      == 2.8.*
                     , quickcheck-instances            == 0.3.*
-                    , temporary                       == 1.2.*
                     , text
                     , transformers                    >= 0.4        && < 0.6
 
@@ -160,6 +158,7 @@ test-suite test-io
                     , ambiata-mafia
                     , ambiata-p
                     , ambiata-x-eithert
+                    , async                           >= 2.0        && < 2.2
                     , containers                      == 0.5.*
                     , exceptions                      == 0.8.*
                     , QuickCheck                      == 2.8.*
