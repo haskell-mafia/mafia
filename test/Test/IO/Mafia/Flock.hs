@@ -1,7 +1,7 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TemplateHaskell #-}
-module Test.Mafia.Flock where
+module Test.IO.Mafia.Flock where
 
 import           Control.Concurrent (threadDelay)
 import           Control.Concurrent.MVar (newEmptyMVar, readMVar, putMVar)
@@ -21,7 +21,6 @@ import           P
 import           System.IO (IO)
 import qualified System.IO.Temp as Temp
 
-import           Test.Mafia.Arbitrary ()
 import           Test.QuickCheck
 import           Test.QuickCheck.Instances ()
 

@@ -82,6 +82,14 @@ instance Arbitrary PackagePlan where
 instance Arbitrary Constraint where
   arbitrary =
     oneof [
-        ConstraintPackage <$> arbitrary
+        ConstraintPackage <$> arbitrary <*> arbitrary
       , ConstraintFlag <$> arbitrary <*> arbitrary
+      , ConstraintBounded <$> arbitrary <*> arbitrary <*> arbitrary
+      ]
+
+instance Arbitrary Bound where
+  arbitrary =
+    oneof [
+        Inclusive <$> arbitrary
+      , Exclusive <$> arbitrary
       ]

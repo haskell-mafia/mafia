@@ -10,18 +10,22 @@ module Mafia.Bin
   , ipackageId
   , renderInstallPackage
   , ipkgName
-  , ipkgVersion
+  , ipkgConstraints
 
   , installBinary
-  , ensureExeOnPath
+  , installOnPath
   ) where
 
+import           Mafia.Cabal.Constraint
+import           Mafia.Cabal.Sandbox
+import           Mafia.Cabal.Types
+import           Mafia.Hash
 import           Mafia.Home
-import           Mafia.IO
 import           Mafia.Install
+import           Mafia.IO
 import           Mafia.Package
 import           Mafia.Path
-import           Mafia.Cabal.Types
+
 import           P
 
 import           System.IO (IO)
@@ -31,6 +35,7 @@ import           X.Control.Monad.Trans.Either (EitherT, left)
 
 data BinError =
     BinInstallError InstallError
+  | BinCabalError CabalError
   | BinNotExecutable PackageId
   | BinFailedToCreateSymbolicLink Path File
     deriving (Show)
@@ -39,6 +44,8 @@ renderBinError :: BinError -> Text
 renderBinError = \case
   BinInstallError err ->
     renderInstallError err
+  BinCabalError err ->
+    renderCabalError err
   BinNotExecutable pid ->
     "Cannot link bin/ directory for " <> renderPackageId pid <> " as no executables were installed."
   BinFailedToCreateSymbolicLink src dst ->
@@ -67,20 +74,41 @@ ipkgName = \case
   InstallPackageId pid ->
     pkgName pid
 
-ipkgVersion :: InstallPackage -> Maybe Version
-ipkgVersion = \case
+ipkgConstraints :: InstallPackage -> [Constraint]
+ipkgConstraints = \case
   InstallPackageName _ ->
-    Nothing
-  InstallPackageId pid ->
-    Just (pkgVersion pid)
+    []
+  InstallPackageId (PackageId name ver) ->
+    [ConstraintPackage name ver]
+
+destinationOfInstallPackage :: InstallPackage -> [Constraint] -> Text
+destinationOfInstallPackage ipkg = \case
+  [] ->
+    renderInstallPackage ipkg
+  cs ->
+    renderInstallPackage ipkg <> "-" <> renderHash (hashConstraints cs)
+
+hashConstraints :: [Constraint] -> Hash
+hashConstraints =
+  hashHashes . fmap (hashText . renderConstraint)
 
 -- | Installs a given cabal package at a specific version and return a directory containing all executables
-installBinary :: InstallPackage -> EitherT BinError IO Directory
-installBinary ipkg = do
+installBinary :: InstallPackage -> [Constraint] -> EitherT BinError IO Directory
+installBinary ipkg constraints = do
   bin <- ensureMafiaDir "bin"
+  installInDirectory bin ipkg constraints
 
+installOnPath :: InstallPackage -> [Constraint] -> EitherT BinError IO ()
+installOnPath pkg constraints = do
+  sandboxBin <- (</> "bin") <$> firstT BinCabalError initSandbox
+  createDirectoryIfMissing False sandboxBin
+  pkgBin <- installInDirectory sandboxBin pkg constraints
+  prependPath pkgBin
+
+installInDirectory :: Directory -> InstallPackage -> [Constraint] -> EitherT BinError IO Directory
+installInDirectory bin ipkg constraints = do
   let
-    plink = bin </> renderInstallPackage ipkg
+    plink = bin </> destinationOfInstallPackage ipkg constraints
     pdir = plink <> "/"
     pbin = plink <> "/bin"
 
@@ -89,9 +117,14 @@ installBinary ipkg = do
     -- must have a dead symlink, so lets remove it and install it again.
     ignoreIO $ removeFile plink
 
-    pkg <- firstT BinInstallError $ installPackage (ipkgName ipkg) (ipkgVersion ipkg)
-    env <- firstT BinInstallError $ getPackageEnv
-    let gdir = packageSandboxDir env pkg
+    pkg <-
+      firstT BinInstallError $
+      installPackage (ipkgName ipkg) (ipkgConstraints ipkg <> constraints)
+
+    gdir <-
+      fmap (flip packageSandboxDir pkg) .
+      firstT BinInstallError $
+      getPackageEnv
 
     unlessM (doesDirectoryExist $ gdir </> "bin") $
       left (BinNotExecutable . refId $ pkgRef pkg)
@@ -109,8 +142,3 @@ installBinary ipkg = do
       left (BinFailedToCreateSymbolicLink gdir plink)
 
   return pbin
-
-ensureExeOnPath :: InstallPackage -> EitherT BinError IO ()
-ensureExeOnPath pkg = do
-  dir <- installBinary pkg
-  setEnv "PATH" . maybe dir (\path -> dir <> ":" <> path) =<< lookupEnv "PATH"

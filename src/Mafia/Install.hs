@@ -149,9 +149,9 @@ installDependencies flavour flags spkgs constraints = do
 
   return tdeps
 
-installPackage :: PackageName -> Maybe Version -> EitherT InstallError IO Package
-installPackage name mver = do
-  pkg <- firstT InstallCabalError $ findDependenciesForPackage name mver
+installPackage :: PackageName -> [Constraint] -> EitherT InstallError IO Package
+installPackage name constraints = do
+  pkg <- firstT InstallCabalError $ findDependenciesForPackage name constraints
   installGlobalPackages Vanilla (transitiveOfPackages (Set.singleton pkg))
   return pkg
 
@@ -255,7 +255,7 @@ install w penv flavour p@(Package (PackageRef pid _ _) deps _) = do
 
     for_ tools $ \tool ->
       liftIO . T.hPutStrLn stderr $
-        "Detected '" <> unPackageName (unBuildTool tool) <> "' " <>
+        "Detected '" <> unPackageName (toolName tool) <> "' " <>
         "was required to build " <> renderPackageId pid
 
     paths <- installBuildTools penv tools
@@ -399,8 +399,8 @@ createPackageSandbox penv p@(Package (PackageRef pid _ msrc) deps _) = do
 installBuildTools :: PackageEnv -> Set BuildTool -> EitherT InstallError IO [Directory]
 installBuildTools env tools = do
   pkgs <-
-    traverse (flip installPackage Nothing . unBuildTool) $
-    Set.toList tools
+    for (Set.toList tools) $ \(BuildTool name constraints) ->
+      installPackage name constraints
 
   pure .
     fmap (</> "bin") $
