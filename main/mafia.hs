@@ -43,7 +43,7 @@ import           X.Control.Monad.Trans.Either (EitherT, hoistEither, left)
 import           X.Control.Monad.Trans.Either.Exit (orDie)
 import           X.Options.Applicative (Parser, CommandFields, Mod)
 import           X.Options.Applicative (SafeCommand(..), RunType(..))
-import           X.Options.Applicative (argument, textRead, metavar, help, long, short, option, flag, flag')
+import           X.Options.Applicative (argument, textRead, metavar, help, long, short, option, flag, flag', eitherTextReader)
 import           X.Options.Applicative (dispatch, subparser, safeCommand, command')
 
 ------------------------------------------------------------------------
@@ -81,7 +81,7 @@ data MafiaCommand =
   | MafiaQuick [Flag] [GhciInclude] [File]
   | MafiaWatch [Flag] [GhciInclude] File [Argument]
   | MafiaHoogle [Argument]
-  | MafiaInstall InstallPackage
+  | MafiaInstall [Constraint] InstallPackage
     deriving (Eq, Show)
 
 data Warnings =
@@ -129,8 +129,8 @@ run = \case
     mafiaWatch flags incs entry args
   MafiaHoogle args -> do
     mafiaHoogle args
-  MafiaInstall ipkg -> do
-    mafiaInstall ipkg
+  MafiaInstall constraints ipkg -> do
+    mafiaInstall ipkg constraints
 
 parser :: Parser (SafeCommand MafiaCommand)
 parser = safeCommand . subparser . mconcat $ commands
@@ -190,7 +190,7 @@ commands =
 
  , command' "install" ( "Install a hackage package and print the path to its bin directory. "
                      <> "The general usage is as follows:  $(mafia install pretty-show)/ppsh" )
-            (MafiaInstall <$> pInstallPackage)
+            (MafiaInstall <$> many pConstraint <*> pInstallPackage)
  ]
 
 pProfiling :: Parser Profiling
@@ -275,6 +275,12 @@ pGhcidArgs =
   argument textRead $
        metavar "GHCID_ARGUMENTS"
     <> help "Extra arguments to pass on to ghcid."
+
+pConstraint :: Parser Constraint
+pConstraint =
+ option (eitherTextReader renderCabalError parseConstraint) $
+       long "constraint"
+    <> help "Specify constraints on a package (version, installed/source, flags)"
 
 ------------------------------------------------------------------------
 
@@ -396,9 +402,9 @@ mafiaHoogle args = do
   firstT MafiaInitError (initialize Nothing Nothing)
   hoogle hkg args
 
-mafiaInstall :: InstallPackage -> EitherT MafiaError IO ()
-mafiaInstall ipkg = do
-  liftIO . T.putStrLn =<< firstT MafiaBinError (installBinary ipkg [])
+mafiaInstall :: InstallPackage -> [Constraint] -> EitherT MafiaError IO ()
+mafiaInstall ipkg constraints = do
+  liftIO . T.putStrLn =<< firstT MafiaBinError (installBinary ipkg constraints)
 
 ghciArgs :: [GhciInclude] -> [File] -> EitherT MafiaError IO [Argument]
 ghciArgs extraIncludes paths = do
