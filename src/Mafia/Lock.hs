@@ -48,7 +48,7 @@ renderLockError = \case
 
 getLockFile :: Directory -> EitherT LockError IO File
 getLockFile dir = do
-  ghcver <- firstT LockGhcError getGhcVersion
+  GhcVersion ghcver <- firstT LockGhcError getGhcVersion
   project <- firstT LockProjectError $ getProjectName dir
   return $ dir </> project <> ".lock-" <> ghcver
 

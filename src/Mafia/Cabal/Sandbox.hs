@@ -92,8 +92,9 @@ sandboxRoot =
 -- | The location where the sandbox is inferred to be (based on the GHC version)
 getInferredSandboxDir :: EitherT CabalError IO SandboxDir
 getInferredSandboxDir = do
-  ghcVer <- firstT CabalGhcError getGhcVersion
-  return $ sandboxRoot </> ghcVer
+  GhcTarget target <- firstT CabalGhcError getGhcTarget
+  GhcVersion version <- firstT CabalGhcError getGhcVersion
+  return $ sandboxRoot </> target </> version
 
 -- | The location where the sandbox is configured to be (based on the cabal.sandbox.config)
 getSandboxDir :: EitherT CabalError IO SandboxDir

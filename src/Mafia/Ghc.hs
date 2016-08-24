@@ -1,9 +1,12 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
-module Mafia.Ghc
-  ( GhcVersion
+module Mafia.Ghc (
+    GhcVersion(..)
   , getGhcVersion
+
+  , GhcTarget(..)
+  , getGhcTarget
 
   , GhcError(..)
   , renderGhcError
@@ -20,12 +23,20 @@ import           System.IO (IO)
 import           X.Control.Monad.Trans.Either (EitherT, left, runEitherT)
 
 
-type GhcVersion = Text
+newtype GhcVersion =
+  GhcVersion {
+      unGhcVersion :: Text
+    } deriving (Eq, Ord, Show)
+
+newtype GhcTarget =
+  GhcTarget {
+      unGhcTarget :: Text
+    } deriving (Eq, Ord, Show)
 
 data GhcError =
-    GhcProcessError ProcessError
+    GhcProcessError !ProcessError
   | GhcNotInstalled
-  deriving (Show)
+    deriving (Show)
 
 renderGhcError :: GhcError -> Text
 renderGhcError = \case
@@ -43,11 +54,18 @@ renderGhcError = \case
       , "\n - add $HOME/haskell/ghc/bin to your $PATH" ]
 
 getGhcVersion :: EitherT GhcError IO GhcVersion
-getGhcVersion = do
-  result <- runEitherT (call GhcProcessError "ghc" ["--version"])
+getGhcVersion =
+  GhcVersion <$> ghc "--numeric-version"
+
+getGhcTarget :: EitherT GhcError IO GhcTarget
+getGhcTarget = do
+  GhcTarget <$> ghc "--print-target-platform"
+
+ghc :: Text -> EitherT GhcError IO Text
+ghc argument = do
+  result <- runEitherT (call GhcProcessError "ghc" [argument])
   case result of
-    Left  _         -> left GhcNotInstalled
+    Left _ ->
+      left GhcNotInstalled
     Right (Out out) ->
-      case reverse (T.words out) of
-        []      -> left GhcNotInstalled
-        (ver:_) -> return ver
+      pure $ T.strip out
