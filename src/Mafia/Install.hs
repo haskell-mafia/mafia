@@ -454,24 +454,31 @@ transitiveOfPackages deps =
 
 data PackageEnv =
   PackageEnv {
-      envGhcVersion :: GhcVersion
-    , envMafiaHome  :: Directory
+      envGhcTarget :: !GhcTarget
+    , envGhcVersion :: !GhcVersion
+    , envMafiaHome :: !Directory
     } deriving (Eq, Ord, Show)
 
 -- the package cache path includes a version number in case the contents or
 -- layout of the cache changes in subsequent mafia versions.
 envPackageCacheVersion :: Int
-envPackageCacheVersion = 1
+envPackageCacheVersion =
+  2
 
 envPackageCache :: PackageEnv -> Directory
 envPackageCache env =
-  envMafiaHome env </> "packages" </> T.pack (show envPackageCacheVersion) </> envGhcVersion env
+  envMafiaHome env
+    </> "packages"
+    </> T.pack (show envPackageCacheVersion)
+    </> unGhcTarget (envGhcTarget env)
+    </> unGhcVersion (envGhcVersion env)
 
 getPackageEnv :: EitherT InstallError IO PackageEnv
 getPackageEnv = do
-  ghc  <- firstT InstallGhcError getGhcVersion
+  target <- firstT InstallGhcError getGhcTarget
+  version <- firstT InstallGhcError getGhcVersion
   home <- getMafiaHome
-  return (PackageEnv ghc home)
+  return (PackageEnv target version home)
 
 withPackageLock :: PackageEnv -> Package -> Flavour -> EitherT InstallError IO a -> EitherT InstallError IO a
 withPackageLock env p f =
