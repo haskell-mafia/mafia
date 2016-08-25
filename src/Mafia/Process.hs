@@ -22,10 +22,13 @@ module Mafia.Process
   , Out(..)
   , Err(..)
   , OutErr(..)
+  , OutErrCode(..)
+  , renderOutErrCode
 
     -- * Errors
   , ProcessError(..)
   , ExitStatus
+  , ExitCode(..)
   , renderProcessError
 
     -- * Running Processes
@@ -34,6 +37,7 @@ module Mafia.Process
   , call_
   , callFrom
   , callFrom_
+  , capture
   , exec
   , execFrom
 
@@ -66,7 +70,7 @@ import qualified System.Process as Process
 import qualified System.Posix.Process as Posix
 
 import           X.Control.Monad.Trans.Either (EitherT, pattern EitherT)
-import           X.Control.Monad.Trans.Either (hoistEither)
+import           X.Control.Monad.Trans.Either (hoistEither, left)
 
 ------------------------------------------------------------------------
 
@@ -84,42 +88,79 @@ data Process = Process
 ------------------------------------------------------------------------
 
 -- | Pass @stdout@ and @stderr@ through to the console.
-data Pass = Pass
+data Pass =
+  Pass
   deriving (Eq, Ord, Show)
 
 -- | Pass @stdout@ and @stderr@ through to the console, but redirect @stdout@ > @stderr.
-data PassErr = PassErr
+data PassErr =
+  PassErr
   deriving (Eq, Ord, Show)
 
 -- | Pass @stdout@ and @stderr@ through to the console, but process control
 --   characters (such as \b, \r) prior to emitting each line of output.
-data Clean = Clean
+data Clean =
+  Clean
   deriving (Eq, Ord, Show)
 
 -- | Capture @stdout@ and @stderr@ but ignore them.
-data Hush = Hush
+data Hush =
+  Hush
   deriving (Eq, Ord, Show)
 
 -- | Capture @stdout@ and pass @stderr@ through to the console.
-newtype Out a = Out { unOut :: a }
-  deriving (Eq, Ord, Show, Functor)
+newtype Out a =
+  Out {
+      unOut :: a
+    } deriving (Eq, Ord, Show, Functor)
 
 -- | Capture @stderr@ and pass @stdout@ through to the console.
-newtype Err a = Err { unErr :: a }
-  deriving (Eq, Ord, Show, Functor)
+newtype Err a =
+  Err {
+      unErr :: a
+    } deriving (Eq, Ord, Show, Functor)
 
 -- | Capture both @stdout@ and @stderr@.
-data OutErr a = OutErr { oeOut :: !a, oeErr :: !a }
+data OutErr a =
+  OutErr !a !a
   deriving (Eq, Ord, Show, Functor)
+
+-- | Capture @stdout@, @stderr@ and the 'ExitCode'.
+--   /This never causes a @ProcessFailure@/
+data OutErrCode a =
+  OutErrCode !a !a !ExitCode
+  deriving (Eq, Ord, Show, Functor)
+
+renderOutErrCode :: OutErrCode Text -> Text
+renderOutErrCode (OutErrCode out0 err0 exit) =
+  let
+    out =
+      T.strip out0
+
+    err =
+      T.strip err0
+
+    output =
+     out <> (if T.null out then "" else "\n") <>
+     err
+  in
+    case exit of
+      ExitFailure code ->
+        "Process failed with exit code: " <> T.pack (show code) <> "\n" <>
+        output
+      ExitSuccess ->
+        "Process finished successfully:\n" <>
+        output
 
 ------------------------------------------------------------------------
 
-type ExitStatus = Int
+type ExitStatus =
+  Int
 
-data ProcessError
-  = ProcessFailure   Process ExitStatus
-  | ProcessException Process SomeException
-  deriving (Show)
+data ProcessError =
+    ProcessFailure !Process !ExitStatus
+  | ProcessException !Process !SomeException
+    deriving (Show)
 
 renderProcessError :: ProcessError -> Text
 renderProcessError = \case
@@ -193,6 +234,22 @@ instance ProcessResult (OutErr ByteString) where
 
     return (code, OutErr out err)
 
+instance ProcessResult (OutErrCode ByteString) where
+  callProcess p = withProcess p $ do
+    let cp = (fromProcess p) { Process.std_out = Process.CreatePipe
+                             , Process.std_err = Process.CreatePipe }
+
+    (Nothing, Just hOut, Just hErr, pid) <- liftIO (Process.createProcess cp)
+
+    asyncOut <- liftIO (async (B.hGetContents hOut))
+    asyncErr <- liftIO (async (B.hGetContents hErr))
+
+    out  <- waitCatchE p asyncOut
+    err  <- waitCatchE p asyncErr
+    code <- liftIO (Process.waitForProcess pid)
+
+    return (ExitSuccess, OutErrCode out err code)
+
 instance ProcessResult Hush where
   callProcess p = do
     OutErr (_ :: ByteString) (_ :: ByteString) <- callProcess p
@@ -221,6 +278,9 @@ instance ProcessResult (Err Text) where
   callProcess p = fmap T.decodeUtf8 <$> callProcess p
 
 instance ProcessResult (OutErr Text) where
+  callProcess p = fmap T.decodeUtf8 <$> callProcess p
+
+instance ProcessResult (OutErrCode Text) where
   callProcess p = fmap T.decodeUtf8 <$> callProcess p
 
 ------------------------------------------------------------------------
@@ -280,6 +340,20 @@ callFrom_ :: (Functor m, MonadIO m, MonadCatch m)
 callFrom_ up dir cmd args = do
   Pass <- callFrom up dir cmd args
   return ()
+
+-- | Capture the output of a process when it fails.
+--
+capture ::
+  (OutErrCode Text -> x) ->
+  EitherT x IO (OutErrCode Text) ->
+  EitherT x IO ()
+capture fromOutput p = do
+  output@(OutErrCode _ _ code) <- p
+  case code of
+    ExitFailure _ ->
+      left $ fromOutput output
+    ExitSuccess ->
+      pure ()
 
 ------------------------------------------------------------------------
 

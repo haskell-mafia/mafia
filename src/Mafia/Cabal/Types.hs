@@ -217,7 +217,8 @@ data CabalError =
   | CabalSandboxConfigFileNotFound SandboxConfigFile
   | CabalSandboxConfigFieldNotFound SandboxConfigFile Text
   | CabalInstallIsNotReferentiallyTransparent
-  | CabalSDistFailed Directory
+  | CabalSDistDisaster Directory ProcessError
+  | CabalSDistFailed Directory (OutErrCode Text)
   | CabalSDistFailedCouldNotReadFile Directory File
   | CabalReinstallsDetected [PackagePlan]
   | CabalFileNotFound Directory
@@ -276,8 +277,13 @@ renderCabalError = \case
   CabalInstallIsNotReferentiallyTransparent ->
     "The impossible happened, cabal-install gave different answers on subsequent dry runs"
 
-  CabalSDistFailed dir ->
-    "Failed to run 'cabal sdist' for source package: " <> dir
+  CabalSDistDisaster dir err ->
+    "Failed to run 'cabal sdist' for source package: " <> dir <> "\n" <>
+    renderProcessError err
+
+  CabalSDistFailed dir out ->
+    "Failed to run 'cabal sdist' for source package: " <> dir <> "\n" <>
+    renderOutErrCode out
 
   CabalSDistFailedCouldNotReadFile dir path ->
     "Failed to run 'cabal sdist' for source package: " <> dir <> "\n" <>
