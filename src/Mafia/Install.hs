@@ -71,6 +71,7 @@ data InstallError =
   | InstallPlanPackageMissing PackageName
   | InstallPlanPackageDuplicate PackageName [Package]
   | InstallUnknownPackageType PackageId
+  | InstallUnpackFailed PackageId Directory (OutErrCode Text)
   | InstallDisaster SomeException
     deriving (Show)
 
@@ -120,6 +121,10 @@ renderInstallError = \case
 
   InstallUnknownPackageType pid ->
     "Unknown package type for: " <> renderPackageId pid
+
+  InstallUnpackFailed pid tmp out ->
+    "Failed to unpack " <> renderPackageId pid <> " to " <> tmp <> "\n" <>
+    renderOutErrCode out
 
   InstallDisaster ex ->
     "Disaster: " <> T.pack (show ex)
@@ -357,7 +362,9 @@ createPackageSandbox penv p@(Package (PackageRef pid _ msrc) deps _) = do
       let
         srcdir = sbsrc </> renderPackageId pid
 
-      Hush <- sbcabal "unpack" ["--destdir=" <> sbsrc, renderPackageId pid]
+      capture (InstallUnpackFailed pid sbsrc) $
+        sbcabal "unpack" ["--destdir=" <> sbsrc, renderPackageId pid]
+
       Hush <- sbcabal "sandbox" ["add-source", srcdir]
 
       -- We need to shuffle anything which was unpacked to 'dist' in to
@@ -409,16 +416,18 @@ installBuildTools env tools = do
 -- | Detect the build tools required by a package.
 detectBuildTools :: Package -> EitherT InstallError IO (Set BuildTool)
 detectBuildTools (Package (PackageRef pid _ msrc) _ _) =
-  firstT InstallCabalError $ do
-    case msrc of
-      -- hackage package
-      Nothing ->
-        withSystemTempDirectory "mafia-build-tools-" $ \tmp -> do
-          Hush <- cabal "unpack" ["--destdir=" <> tmp, renderPackageId pid]
+  case msrc of
+    -- hackage package
+    Nothing ->
+      withSystemTempDirectory "mafia-build-tools-" $ \tmp -> do
+        capture (InstallUnpackFailed pid tmp) . firstT InstallCabalError $
+          cabal "unpack" ["--destdir=" <> tmp, renderPackageId pid]
+        firstT InstallCabalError .
           getBuildTools $ tmp </> renderPackageId pid
 
-      -- source package
-      Just src -> do
+    -- source package
+    Just src ->
+      firstT InstallCabalError .
         getBuildTools $ spDirectory src
 
 link :: Directory -> PackageEnv -> Package -> EitherT InstallError IO ()

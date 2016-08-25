@@ -283,9 +283,11 @@ hashSourcePackage dir = do
 
   sdistFiles <- withSystemTempDirectory "mafia-sdist-" $ \tmp -> do
     let
-      sdistError _ = CabalSDistFailed rdir
       path = tmp </> "sources.txt"
-    OutErr (_ :: Text) _ <- callFrom sdistError dir "cabal" ["sdist", "--list-sources=" <> path]
+
+    capture (CabalSDistFailed rdir) $
+      callFrom (CabalSDistDisaster rdir) dir "cabal" ["sdist", "--list-sources=" <> path]
+
     mfile <- readUtf8 path
     case mfile of
       Nothing ->
