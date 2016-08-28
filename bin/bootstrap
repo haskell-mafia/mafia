@@ -1,5 +1,20 @@
 #!/bin/sh -eu
 
+#
+# Run 'cabal update' if the cache is older than a day.
+#
+
+CACHE="$HOME/.cabal/packages/hackage.haskell.org/00-index.cache"
+
+if ! test -f "$CACHE" || find "$CACHE" -type f -mtime +1 | grep -q 00-index; then
+  cabal update
+fi
+
+
+#
+# Install dependencies and build mafia in a sandbox.
+#
+
 git submodule update --init
 
 cabal sandbox init
@@ -9,5 +24,4 @@ for CABAL_SOURCE in $CABAL_SOURCES; do
   cabal sandbox add-source -- $CABAL_SOURCE
 done
 
-cabal update
-cabal install
+cabal install --reorder-goals --max-backjumps=-1
