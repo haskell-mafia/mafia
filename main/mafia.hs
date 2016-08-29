@@ -71,7 +71,7 @@ data MafiaCommand =
   | MafiaHash
   | MafiaDepends DependsUI (Maybe PackageName) [Flag]
   | MafiaClean
-  | MafiaBuild Profiling Warnings [Flag] [Argument]
+  | MafiaBuild Profiling Warnings CoreDump [Flag] [Argument]
   | MafiaTest [Flag] [Argument]
   | MafiaTestCI [Flag] [Argument]
   | MafiaRepl [Flag] [Argument]
@@ -87,6 +87,11 @@ data MafiaCommand =
 data Warnings =
     DisableWarnings
   | EnableWarnings
+    deriving (Eq, Show)
+
+data CoreDump =
+    DisableCoreDump
+  | EnableCoreDump
     deriving (Eq, Show)
 
 data GhciInclude =
@@ -109,8 +114,8 @@ run = \case
     mafiaDepends tree pkg flags
   MafiaClean ->
     mafiaClean
-  MafiaBuild p w flags args ->
-    mafiaBuild p w flags args
+  MafiaBuild p w dump flags args ->
+    mafiaBuild p w dump flags args
   MafiaTest flags args ->
     mafiaTest flags args
   MafiaTestCI flags args ->
@@ -153,7 +158,7 @@ commands =
             (pure MafiaClean)
 
  , command' "build" "Build this project, including all executables and test suites."
-            (MafiaBuild <$> pProfiling <*> pWarnings <*> many pFlag <*> many pCabalArgs)
+            (MafiaBuild <$> pProfiling <*> pWarnings <*> pCoreDump <*> many pFlag <*> many pCabalArgs)
 
  , command' "test" "Test this project, by default this runs all test suites."
             (MafiaTest <$> many pFlag <*> many pCabalArgs)
@@ -206,6 +211,12 @@ pWarnings =
        long "disable-warnings"
     <> short 'w'
     <> help "Disable warnings for this build."
+
+pCoreDump :: Parser CoreDump
+pCoreDump =
+  flag DisableCoreDump EnableCoreDump $
+       long "dump-core"
+    <> help "Dump prepared Core output to dist/build/*."
 
 pDependsUI :: Parser DependsUI
 pDependsUI =
@@ -332,8 +343,8 @@ mafiaClean = do
   Out (_ :: ByteString) <- liftCabal $ cabal "clean" []
   liftCabal removeSandbox
 
-mafiaBuild :: Profiling -> Warnings -> [Flag] -> [Argument] -> EitherT MafiaError IO ()
-mafiaBuild p w flags args = do
+mafiaBuild :: Profiling -> Warnings -> CoreDump -> [Flag] -> [Argument] -> EitherT MafiaError IO ()
+mafiaBuild p w dump flags args = do
   initMafia p flags
 
   let
@@ -344,7 +355,15 @@ mafiaBuild p w flags args = do
         EnableWarnings ->
           ["--ghc-options=-Werror"]
 
-  liftCabal . cabal_ "build" $ ["-j"] <> wargs <> args
+    dumpargs =
+      case dump of
+        DisableCoreDump ->
+          []
+        EnableCoreDump ->
+          ["--ghc-options=-ddump-prep -ddump-to-file -dppr-case-as-let -dsuppress-all"]
+
+
+  liftCabal . cabal_ "build" $ ["-j"] <> wargs <> dumpargs <> args
 
 mafiaTest :: [Flag] -> [Argument] -> EitherT MafiaError IO ()
 mafiaTest flags args = do
