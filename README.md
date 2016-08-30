@@ -71,9 +71,12 @@ to think about it.
 
 Builds a project, including all executables, test suites and benchmarks.
 
-Mafia uses whichever GHC it finds on the `PATH` to build a project. It
-keeps Cabal sandboxes in version specific directories, so that it is
-easy to [switch](https://gist.github.com/jystic/efded8238bc4c64affb7)
+Mafia uses whichever version of
+[GHC](https://github.com/ambiata/mafia/blob/master/doc/ghc.md) and
+[Cabal](https://github.com/ambiata/mafia/blob/master/doc/cabal.md) it
+finds on the `PATH` to build a project. It keeps cabal sandboxes in
+version specific directories, so that it is easy to
+[switch](https://github.com/ambiata/mafia/blob/master/doc/ghc.md#advanced-multiple-ghc-versions)
 between versions of GHC while developing a project.
 
 Using the switching setup linked above, a typical multi-GHC session
@@ -86,7 +89,7 @@ $ mafia build
 Writing a default package environment file to
 /Users/bob/src/foo/cabal.sandbox.config
 Creating a new sandbox at
-/Users/bob/src/foo/.cabal-sandbox/7.8.4
+/Users/bob/src/foo/.cabal-sandbox/x86_64-apple-darwin/7.8.4
 Checking for changes to dependencies...
 Installing dependencies...
 -- snip --
@@ -96,7 +99,7 @@ $ mafia build
 Writing a default package environment file to
 /Users/bob/src/foo/cabal.sandbox.config
 Creating a new sandbox at
-/Users/bob/src/foo/.cabal-sandbox/7.10.2
+/Users/bob/src/foo/.cabal-sandbox/x86_64-apple-darwin/7.10.2
 Checking for changes to dependencies...
 Installing dependencies...
 -- snip --
@@ -372,3 +375,14 @@ The same as `cabal update`, but limited to retrieving a new index
 tarball at most once per day. This is useful for scripting CI build bots
 to prevent them from wasting time updating from Hackage when there are
 likely no interesting changes.
+
+
+System configuration
+--------------------
+
+Mafia expects both GHC and Cabal to be installed and on the `PATH`.
+
+Follow the guides below to configure your system correctly:
+
+- [Installing GHC](https://github.com/ambiata/mafia/blob/master/doc/ghc.md)
+- [Installing Cabal](https://github.com/ambiata/mafia/blob/master/doc/cabal.md)
