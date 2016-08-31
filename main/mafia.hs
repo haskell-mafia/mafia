@@ -216,7 +216,7 @@ pCoreDump :: Parser CoreDump
 pCoreDump =
   flag DisableCoreDump EnableCoreDump $
        long "dump-core"
-    <> help "Dump prepared Core output to dist/build/*."
+    <> help "Dump the optimised Core output to dist/build/*. This is simply a shorthand for other GHC options."
 
 pDependsUI :: Parser DependsUI
 pDependsUI =
@@ -359,8 +359,16 @@ mafiaBuild p w dump flags args = do
       case dump of
         DisableCoreDump ->
           []
-        EnableCoreDump ->
-          ["--ghc-options=-ddump-prep -ddump-to-file -dppr-case-as-let -dsuppress-all"]
+        EnableCoreDump -> fmap ("--ghc-options="<>)
+          ["-ddump-simpl"
+          ,"-ddump-to-file"
+          ,"-dppr-case-as-let"
+          ,"-dsuppress-uniques"
+          ,"-dsuppress-idinfo"
+          ,"-dsuppress-coercions"
+          ,"-dsuppress-type-applications"
+          ,"-dsuppress-module-prefixes"
+          ]
 
 
   liftCabal . cabal_ "build" $ ["-j"] <> wargs <> dumpargs <> args
