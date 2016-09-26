@@ -48,6 +48,10 @@ in the same directory as your `.cabal` project file and then run
 `./mafia upgrade`. This will ensure that you have the latest script and
 also bake the git hash of the Mafia version in to the script.
 
+```
+curl -O https://raw.githubusercontent.com/ambiata/mafia/master/script/mafia && chmod +x mafia
+```
+
 You can now run `./mafia build` for the first time. This will build the
 Mafia executable with the git hash specified in the script, and then
 build the current project. Having the hash baked in to the script means
