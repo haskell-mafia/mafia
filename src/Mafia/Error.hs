@@ -9,6 +9,7 @@ module Mafia.Error
 
 import           Mafia.Bin
 import           Mafia.Cabal.Types
+import           Mafia.Ghc
 import           Mafia.Git
 import           Mafia.Hash
 import           Mafia.Init
@@ -30,6 +31,7 @@ data MafiaError
   = MafiaProjectError ProjectError
   | MafiaProcessError ProcessError
   | MafiaGitError GitError
+  | MafiaGhcError GhcError
   | MafiaCabalError CabalError
   | MafiaSubmoduleError SubmoduleError
   | MafiaInstallError InstallError
@@ -54,6 +56,9 @@ renderMafiaError = \case
 
   MafiaGitError e ->
     renderGitError e
+
+  MafiaGhcError e ->
+    renderGhcError e
 
   MafiaCabalError e ->
     renderCabalError e

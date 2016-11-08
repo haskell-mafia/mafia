@@ -1,3 +1,4 @@
+{-# LANGUAGE DoAndIfThenElse #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -22,6 +23,7 @@ import           GHC.Conc (getNumProcessors)
 import           Mafia.Bin
 import           Mafia.Cabal
 import           Mafia.Error
+import           Mafia.Ghc
 import           Mafia.Hoogle
 import           Mafia.IO
 import           Mafia.Init
@@ -500,14 +502,39 @@ ghciArgs extraIncludes paths = do
 
   extras <- concat <$> mapM reifyInclude extraIncludes
 
-  let dirs = ["src", "test", "gen", "dist/build/autogen"] <> extras
-  includes  <- catMaybes <$> mapM ensureDirectory dirs
+  let
+    dirs =
+      ["src", "test", "gen", "dist/build/autogen"] <> extras
+
+  headers <- getHeaders
+  includes <- catMaybes <$> mapM ensureDirectory dirs
   databases <- getPackageDatabases
 
-  return $ [ "-no-user-package-db" ]
-        <> (fmap ("-i" <>)           includes)
-        <> (fmap ("-package-db=" <>) databases)
-        <> paths
+  return $ mconcat [
+      [ "-no-user-package-db" ]
+    , concatMap (\x -> ["-optP-include", "-optP" <> x]) headers
+    , fmap ("-i" <>) includes
+    , fmap ("-package-db=" <>) databases
+    , paths
+    ]
+
+getHeaders :: EitherT MafiaError IO [File]
+getHeaders = do
+  version <- firstT MafiaGhcError getGhcVersion
+
+  if version >= mkGhcVersion [8,0,1] then
+    return []
+  else do
+    let
+      cabalMacros =
+        "dist/build/autogen/cabal_macros.h"
+
+    ok <- doesFileExist cabalMacros
+
+    if ok then
+      return [cabalMacros]
+    else
+      return []
 
 checkEntryPoint :: File -> EitherT MafiaError IO ()
 checkEntryPoint file = do
