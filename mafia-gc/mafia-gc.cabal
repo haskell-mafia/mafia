@@ -1,0 +1,34 @@
+name:                  mafia-gc
+version:               0.0.1
+license:               AllRightsReserved
+author:                Ambiata <info@ambiata.com>
+maintainer:            Ambiata <info@ambiata.com>
+copyright:             (c) 2015 Ambiata.
+synopsis:              mafia-gc
+category:              Build
+cabal-version:         >= 1.8
+build-type:            Custom
+description:           Garbage collection for the mafia cache
+
+executable mafia-gc
+  build-depends:
+                          base                        >= 4.6        && < 5
+                        , ambiata-p
+                        , transformers
+                        , containers
+                        , directory
+                        , conduit                     == 1.2.*
+                        , find-conduit                == 0.4.*
+                        , resourcet
+                        , unix
+                        , filepath
+
+  ghc-options:          -Wall
+  if impl(ghc >= 8.0)
+    ghc-options:        -fno-warn-redundant-constraints
+
+  hs-source-dirs:
+                       gen
+
+  main-is:
+                       ../main/mafia-gc.hs
