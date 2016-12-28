@@ -78,6 +78,7 @@ library
                     Mafia.Path
                     Mafia.Process
                     Mafia.Project
+                    Mafia.Shell
                     Mafia.Submodule
                     Mafia.Tree
                     Paths_ambiata_mafia

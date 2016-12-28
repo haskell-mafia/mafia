@@ -1,0 +1,377 @@
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE NoImplicitPrelude #-}
+{-# LANGUAGE OverloadedStrings #-}
+module Mafia.Shell (
+    ShellError(..)
+  , renderShellError
+  , runShell
+  ) where
+
+import           Control.Monad.IO.Class (MonadIO(..))
+
+import qualified Data.Attoparsec.Text as Atto
+import qualified Data.Map as Map
+import qualified Data.Text as T
+
+import           Mafia.Hash
+import           Mafia.Home
+import           Mafia.IO
+import           Mafia.Path
+import           Mafia.Process
+
+import           P
+
+import           System.IO (IO)
+
+import           X.Control.Monad.Trans.Either (EitherT, hoistMaybe, hoistEither)
+
+
+data Script =
+  Script {
+      scriptId :: !Text
+    , scriptHash :: !Hash
+    , scriptPath :: !File
+    , scriptPackages :: ![Package]
+    , scriptSubmodules :: ![Submodule]
+    , scriptMain :: !Text
+    } deriving (Eq, Ord, Show)
+
+newtype Package =
+  Package {
+      unPackage :: Text
+    } deriving (Eq, Ord, Show)
+
+data Submodule =
+  Submodule {
+      submoduleUser :: !Text
+    , submoduleRepo :: !Text
+    , submoduleCommit :: !(Maybe Text)
+    } deriving (Eq, Ord, Show)
+
+data Pragma =
+    PragmaPackage !Package
+  | PragmaSubmodule !Submodule
+    deriving (Eq, Ord, Show)
+
+data ShellError =
+    ShellProcessError !ProcessError
+  | ShellFileNotFound !File
+  | ShellGitParseError ![Char]
+    deriving (Show)
+
+renderShellError :: ShellError -> Text
+renderShellError = \case
+  ShellProcessError err ->
+    renderProcessError err
+
+  ShellFileNotFound path ->
+    "File not found: " <> path
+
+  ShellGitParseError err ->
+    "Failed parsing git output: " <> T.pack err
+
+pPragma :: Text -> Atto.Parser a -> Atto.Parser a
+pPragma pragma parser = do
+  _ <- Atto.string "{-#" *> Atto.skipSpace *> Atto.string pragma
+  x <- Atto.skipSpace *> parser <* Atto.skipSpace
+  _ <- Atto.string "#-}"
+  pure x
+
+pPackage :: Atto.Parser Pragma
+pPackage =
+  fmap PragmaPackage . pPragma "PACKAGE" $
+    Package . T.strip <$> Atto.takeWhile (/= '#')
+
+pAlphaNum :: Atto.Parser Text
+pAlphaNum =
+  Atto.takeWhile1 (Atto.inClass "a-zA-Z0-9")
+
+pHash :: Atto.Parser Text
+pHash =
+  Atto.takeWhile1 (Atto.inClass "a-fA-F0-9")
+
+pSubmodule :: Atto.Parser Pragma
+pSubmodule =
+  fmap PragmaSubmodule . pPragma "SUBMODULE" $
+    Submodule
+      <$> pAlphaNum <* Atto.char '/'
+      <*> pAlphaNum
+      <*> optional (Atto.char '@' *> pHash)
+
+tryParsePragma :: Text -> Maybe Pragma
+tryParsePragma =
+  rightToMaybe . Atto.parseOnly (Atto.try pPackage <|> pSubmodule)
+
+takePackage :: Pragma -> Maybe Package
+takePackage = \case
+  PragmaPackage x ->
+    Just x
+  _ ->
+    Nothing
+
+takeSubmodule :: Pragma -> Maybe Submodule
+takeSubmodule = \case
+  PragmaSubmodule x ->
+    Just x
+  _ ->
+    Nothing
+
+parseScript :: File -> Text -> Script
+parseScript path source =
+  let
+    pragmas =
+      mapMaybe tryParsePragma $
+      T.lines source
+
+    packages =
+      mapMaybe takePackage pragmas
+
+    submodules =
+      mapMaybe takeSubmodule pragmas
+
+    sid =
+      renderHash $ hashText path
+  in
+    Script sid (hashText source) path packages submodules source
+
+renderSubmoduleUrl :: Submodule -> Text
+renderSubmoduleUrl s =
+  "git@github.com:" <> submoduleUser s <> "/" <> submoduleRepo s
+
+submoduleName :: Submodule -> Text
+submoduleName s =
+  "lib/" <> submoduleUser s <> "/" <> submoduleRepo s
+
+getScriptHome :: MonadIO m => m Directory
+getScriptHome =
+  liftM (</> "scripts") getMafiaHome
+
+getScriptDirectory :: MonadIO m => Script -> m Directory
+getScriptDirectory script =
+  liftM (</> scriptId script) getScriptHome
+
+cabalText :: [Package] -> Text
+cabalText deps =
+  T.unlines $ [
+      "name:          script"
+    , "version:       0.0.1"
+    , "license:       AllRightsReserved"
+    , "author:        script"
+    , "maintainer:    script"
+    , "synopsis:      script"
+    , "category:      Tools"
+    , "cabal-version: >= 1.8"
+    , "build-type:    Simple"
+    , "description:   script"
+    , ""
+    , "executable script"
+    , "  main-is:"
+    , "    script.hs"
+    , ""
+    , "  ghc-options:"
+    , "    -fno-warn-unrecognised-pragmas"
+    , ""
+    , "  build-depends:"
+    , "      base"
+    ] <> fmap (("    , " <>) . unPackage) deps
+
+readHash :: MonadIO m => File -> m (Maybe Hash)
+readHash file = do
+  mtxt <- readUtf8 file
+  return $ mtxt >>= parseHash
+
+writeChanged :: MonadIO m => File -> Text -> m ()
+writeChanged file txt = do
+  mtxt <- readUtf8 file
+  unless (Just txt == mtxt) $ do
+    writeUtf8 file txt
+
+pGitSubmodule :: Atto.Parser Submodule
+pGitSubmodule = do
+  _ <- Atto.char ' ' -- should never be '-' or '+' given we're managing the directory
+  commit <- Atto.takeWhile (Atto.inClass "0-9a-f") <* Atto.char ' '
+  _ <- Atto.string "lib/"
+  user <- pAlphaNum <* Atto.char '/'
+  repo <- pAlphaNum <* Atto.char ' '
+  _ <- Atto.char '(' *> Atto.takeWhile (/= ')') <* Atto.char ')' <* Atto.endOfLine
+  pure $ Submodule user repo (Just commit)
+
+parseGitSubmodules :: Text -> Either ShellError [Submodule]
+parseGitSubmodules =
+  first ShellGitParseError . Atto.parseOnly (many pGitSubmodule <* Atto.endOfInput)
+
+getSubmodules :: Directory -> EitherT ShellError IO [Submodule]
+getSubmodules dir = do
+   Out xs <- callFrom ShellProcessError dir "git" ["submodule"]
+   hoistEither $ parseGitSubmodules xs
+
+data SubmoduleAction =
+    Add !Submodule
+  | Remove !Submodule
+  | Update !Submodule
+    deriving (Eq, Ord, Show)
+
+diffSubmodules :: [Submodule] -> [Submodule] -> [SubmoduleAction]
+diffSubmodules current0 desired0 =
+  let
+    mkMap =
+      Map.fromList .
+      fmap (\x -> (submoduleName x, x))
+
+    current =
+      mkMap current0
+
+    desired =
+      mkMap desired0
+
+    update _key d c =
+      case (submoduleCommit d, submoduleCommit c) of
+        (Nothing, Nothing) ->
+          Nothing
+        (Nothing, Just _) ->
+          Nothing
+        (Just _, Nothing) ->
+          Just $ Update d
+        (Just dcommit, Just ccommit) ->
+          if T.isPrefixOf dcommit ccommit then
+            Nothing -- already up to date, no change required
+          else
+            Just $ Update d
+
+    diff =
+      Map.mergeWithKey update (fmap Add) (fmap Remove) desired current
+  in
+    Map.elems diff
+
+setupSubmodules :: Directory -> [Submodule] -> EitherT ShellError IO ()
+setupSubmodules dir desired = do
+  current <- getSubmodules dir
+
+  let
+    diff =
+      diffSubmodules current desired
+
+    git =
+      callFrom_ ShellProcessError dir "git"
+
+    add s = do
+      git ["submodule", "add", renderSubmoduleUrl s, submoduleName s]
+      for_ (submoduleCommit s) $ \commit ->
+        callFrom_ ShellProcessError (dir </> submoduleName s) "git" ["reset", "--hard", commit]
+      git ["add", "."]
+
+    remove s = do
+      callFrom_ ShellProcessError dir "rm" ["-rf", "./" <> submoduleName s]
+      callFrom_ ShellProcessError dir "rm" ["-rf", ".git/modules/" <> submoduleName s]
+
+      git ["config", "-f", ".gitmodules", "--remove-section", "submodule." <> submoduleName s]
+      git ["config", "-f", ".git/config", "--remove-section", "submodule." <> submoduleName s]
+      git ["add", "."]
+
+  for_ diff $ \case
+    Add s ->
+      add s
+    Remove s ->
+      remove s
+    Update s -> do
+      remove s
+      add s
+
+setupSandbox :: Script -> EitherT ShellError IO ()
+setupSandbox script = do
+  dir <- getScriptDirectory script
+  createDirectoryIfMissing True dir
+
+  let
+    git =
+      dir </> ".git"
+
+    ghci =
+      dir </> ".ghci"
+
+    cabal =
+      dir </> "script.cabal"
+
+    path =
+      dir </> "script.path"
+
+  unlessM (doesFileExist path) $
+    writeUtf8 path (scriptPath script)
+
+  unlessM (doesDirectoryExist git) $ do
+    Hush <- callFrom ShellProcessError dir "git" ["init"]
+    pure ()
+
+  setupSubmodules dir (scriptSubmodules script)
+
+  writeChanged ghci $
+    ":set -fno-warn-unrecognised-pragmas"
+
+  writeChanged cabal $
+    cabalText (scriptPackages script)
+
+  pure ()
+
+runScript :: Script -> [Argument] -> EitherT ShellError IO ()
+runScript script args = do
+  dir <- getScriptDirectory script
+
+  let
+    name =
+      takeFileName (scriptPath script)
+
+    hash =
+      dir </> "script.hash"
+
+    hs =
+      dir </> "script.hs"
+
+    exe_orig =
+      dir </> "dist/build/script/script"
+
+    exe =
+      dir </> "dist/build/script/" <> name
+
+  previousHash <- readHash hash
+
+  unless (previousHash == Just (scriptHash script)) $ do
+    ignoreIO $ removeFile hash
+
+    setupSandbox script
+
+    writeChanged hs $
+      scriptMain script
+
+    mafia <- getExecutablePath
+    Pass <- callFrom ShellProcessError dir mafia ["build"]
+
+    copyFile exe_orig exe
+
+    writeUtf8 hash $
+      renderHash (scriptHash script)
+
+  exec ShellProcessError exe args
+
+mafiaScript :: Script -> [Argument] -> EitherT ShellError IO ()
+mafiaScript script args = do
+  setupSandbox script
+
+  dir <- getScriptDirectory script
+  mafia <- getExecutablePath
+
+  execFrom ShellProcessError dir mafia $ args <> [scriptPath script]
+
+runShell :: File -> [Argument] -> EitherT ShellError IO ()
+runShell file args0 = do
+  path <- canonicalizePath file
+  source <- hoistMaybe (ShellFileNotFound file) =<< readUtf8 path
+
+  let
+    script =
+      parseScript path source
+
+  case args0 of
+    "+MAFIA" : args ->
+      mafiaScript script args
+    args ->
+      runScript script args
