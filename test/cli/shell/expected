@@ -1,0 +1,7 @@
+[ Int 123
+, String "abc"
+, Int 456
+, String "def"
+, Int 789
+, String "ghi"
+]

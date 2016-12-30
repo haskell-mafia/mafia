@@ -1,0 +1,70 @@
+#!/bin/sh -eux
+
+absolute_path() {
+  echo "$(cd "$(dirname "$1")" && pwd)/$(basename "$1")"
+}
+
+ROOT=$( cd $(dirname "$0") && pwd -L )
+EXPECTED=$ROOT/expected
+
+MAFIA=$(absolute_path ${1:-./dist/build/mafia/mafia})
+
+MAFIA_TEMP=$(mktemp -d 2>/dev/null || mktemp -d -t 'mafia')
+SCRIPT=$MAFIA_TEMP/script.hs
+trap "rm -rf \"$MAFIA_TEMP\"" EXIT
+
+cat << EOF > $SCRIPT
+#!$MAFIA shell
+
+{-# LANGUAGE NoImplicitPrelude #-}
+{-# LANGUAGE OverloadedStrings #-}
+
+{-# SUBMODULE ambiata/p@3ea83a82b058ba2e1dd216d9e7832fd49cf33dbd #-}
+
+{-# PACKAGE ambiata-p #-}
+{-# PACKAGE pretty-show == 1.6.* #-}
+{-# PACKAGE text == 1.2.* #-}
+
+import qualified Data.Text as T
+import qualified Data.Text.Read as T
+
+import           P
+
+import           System.IO (IO, putStrLn)
+import           System.Environment (getArgs)
+
+import           Text.Show.Pretty (ppShow)
+
+data Argument =
+    Int !Int64
+  | String !Text
+    deriving (Show)
+
+parseArgument :: Text -> Argument
+parseArgument xs =
+  case T.decimal xs of
+    Left _ ->
+      String xs
+    Right (x, "") ->
+      Int x
+    Right _ ->
+      String xs
+
+main :: IO ()
+main = do
+  args <- fmap (parseArgument . T.pack) <$> getArgs
+  putStrLn $ ppShow args
+EOF
+
+chmod +x $SCRIPT
+
+if hash colordiff 2>/dev/null; then
+  DIFF=colordiff
+else
+  DIFF=diff
+fi
+
+cd $MAFIA_TEMP
+# First run contains build output, so write to /dev/null
+MAFIA_HOME=$MAFIA_TEMP $SCRIPT 123 abc 456 def 789 ghi >/dev/null
+MAFIA_HOME=$MAFIA_TEMP $SCRIPT 123 abc 456 def 789 ghi | $DIFF -u $EXPECTED -
