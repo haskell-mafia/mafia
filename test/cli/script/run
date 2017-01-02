@@ -1,20 +1,25 @@
 #!/bin/sh -eux
 
-absolute_path() {
-  echo "$(cd "$(dirname "$1")" && pwd)/$(basename "$1")"
+absolute_dir() {
+  echo "$(cd "$(dirname "$1")" && pwd)"
 }
 
 ROOT=$( cd $(dirname "$0") && pwd -L )
 EXPECTED=$ROOT/expected
 
-MAFIA=$(absolute_path ${1:-./dist/build/mafia/mafia})
+#
+# It's important that the test executes mafia on the PATH via /usr/bin/env
+# as that is the actual usage scenario.
+#
+DIST_MAFIA=$(absolute_dir ${1:-./dist/build/mafia/mafia})
+export PATH=$DIST_MAFIA:$PATH
 
 MAFIA_TEMP=$(mktemp -d 2>/dev/null || mktemp -d -t 'mafia')
 SCRIPT=$MAFIA_TEMP/script.hs
 trap "rm -rf \"$MAFIA_TEMP\"" EXIT
 
 cat << EOF > $SCRIPT
-#!$MAFIA script
+#!/usr/bin/env mafia
 
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
