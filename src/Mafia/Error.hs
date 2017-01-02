@@ -16,7 +16,7 @@ import           Mafia.Install
 import           Mafia.Lock
 import           Mafia.Process
 import           Mafia.Project
-import           Mafia.Shell
+import           Mafia.Script
 import           Mafia.Submodule
 
 import           P
@@ -37,7 +37,7 @@ data MafiaError
   | MafiaHashError HashError
   | MafiaInitError InitError
   | MafiaLockError LockError
-  | MafiaShellError ShellError
+  | MafiaScriptError ScriptError
   | MafiaNoInstallConstraints
   | MafiaParseError Text
   | MafiaEntryPointNotFound File
@@ -76,8 +76,8 @@ renderMafiaError = \case
   MafiaLockError e ->
     renderLockError e
 
-  MafiaShellError e ->
-    renderShellError e
+  MafiaScriptError e ->
+    renderScriptError e
 
   MafiaNoInstallConstraints ->
     "Could not find the dependency constraints calculated during the last install."

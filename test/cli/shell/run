@@ -14,7 +14,7 @@ SCRIPT=$MAFIA_TEMP/script.hs
 trap "rm -rf \"$MAFIA_TEMP\"" EXIT
 
 cat << EOF > $SCRIPT
-#!$MAFIA shell
+#!$MAFIA script
 
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}

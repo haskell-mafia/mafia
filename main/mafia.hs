@@ -30,7 +30,7 @@ import           Mafia.Package
 import           Mafia.Path
 import           Mafia.Process
 import           Mafia.Project
-import           Mafia.Shell
+import           Mafia.Script
 import           Mafia.Submodule
 import           Mafia.Tree
 
@@ -57,9 +57,9 @@ main = do
   hSetBuffering stderr LineBuffering
   args0 <- getArgs
   case args0 of
-    "shell" : path : args ->
+    "script" : path : args ->
       -- bypass optparse until https://github.com/pcapriotti/optparse-applicative/pull/234 is merged
-      runOrDie $ MafiaShell (T.pack path) (fmap T.pack args)
+      runOrDie $ MafiaScript (T.pack path) (fmap T.pack args)
     _ ->
       cli "mafia" buildInfoVersion dependencyInfo parser runOrDie
 
@@ -85,7 +85,7 @@ data MafiaCommand =
   | MafiaWatch [Flag] [GhciInclude] File [Argument]
   | MafiaHoogle [Argument]
   | MafiaInstall [Constraint] InstallPackage
-  | MafiaShell Path [Argument]
+  | MafiaScript Path [Argument]
     deriving (Eq, Show)
 
 data Warnings =
@@ -140,8 +140,8 @@ run = \case
     mafiaHoogle args
   MafiaInstall constraints ipkg ->
     mafiaInstall ipkg constraints
-  MafiaShell path args ->
-    mafiaShell path args
+  MafiaScript path args ->
+    mafiaScript path args
 
 parser :: Parser MafiaCommand
 parser = subparser . mconcat $ commands
@@ -203,8 +203,8 @@ commands =
                      <> "The general usage is as follows:  $(mafia install pretty-show)/ppsh" )
             (MafiaInstall <$> many pConstraint <*> pInstallPackage)
 
- , command' "shell" "Run a haskell file as a shell script."
-            (MafiaShell <$> pScriptPath <*> many pScriptArgs)
+ , command' "script" "Run a haskell file as a standalone script."
+            (MafiaScript <$> pScriptPath <*> many pScriptArgs)
  ]
 
 pProfiling :: Parser Profiling
@@ -454,9 +454,9 @@ mafiaInstall :: InstallPackage -> [Constraint] -> EitherT MafiaError IO ()
 mafiaInstall ipkg constraints = do
   liftIO . T.putStrLn =<< firstT MafiaBinError (installBinary ipkg constraints)
 
-mafiaShell :: File -> [Argument] -> EitherT MafiaError IO ()
-mafiaShell file args =
-  firstT MafiaShellError $ runShell file args
+mafiaScript :: File -> [Argument] -> EitherT MafiaError IO ()
+mafiaScript file args =
+  firstT MafiaScriptError $ runScript file args
 
 ghciArgs :: [GhciInclude] -> [File] -> EitherT MafiaError IO [Argument]
 ghciArgs extraIncludes paths = do

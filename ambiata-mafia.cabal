@@ -70,15 +70,15 @@ library
                     Mafia.Hash
                     Mafia.Home
                     Mafia.Hoogle
+                    Mafia.IO
                     Mafia.Init
                     Mafia.Install
-                    Mafia.IO
                     Mafia.Lock
                     Mafia.Package
                     Mafia.Path
                     Mafia.Process
                     Mafia.Project
-                    Mafia.Shell
+                    Mafia.Script
                     Mafia.Submodule
                     Mafia.Tree
                     Paths_ambiata_mafia

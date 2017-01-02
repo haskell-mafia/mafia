@@ -1,10 +1,10 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
-module Mafia.Shell (
-    ShellError(..)
-  , renderShellError
-  , runShell
+module Mafia.Script (
+    ScriptError(..)
+  , renderScriptError
+  , runScript
   ) where
 
 import           Control.Monad.IO.Class (MonadIO(..))
@@ -53,21 +53,21 @@ data Pragma =
   | PragmaSubmodule !Submodule
     deriving (Eq, Ord, Show)
 
-data ShellError =
-    ShellProcessError !ProcessError
-  | ShellFileNotFound !File
-  | ShellGitParseError ![Char]
+data ScriptError =
+    ScriptProcessError !ProcessError
+  | ScriptFileNotFound !File
+  | ScriptGitParseError ![Char]
     deriving (Show)
 
-renderShellError :: ShellError -> Text
-renderShellError = \case
-  ShellProcessError err ->
+renderScriptError :: ScriptError -> Text
+renderScriptError = \case
+  ScriptProcessError err ->
     renderProcessError err
 
-  ShellFileNotFound path ->
+  ScriptFileNotFound path ->
     "File not found: " <> path
 
-  ShellGitParseError err ->
+  ScriptGitParseError err ->
     "Failed parsing git output: " <> T.pack err
 
 pPragma :: Text -> Atto.Parser a -> Atto.Parser a
@@ -196,13 +196,13 @@ pGitSubmodule = do
   _ <- Atto.char '(' *> Atto.takeWhile (/= ')') <* Atto.char ')' <* Atto.endOfLine
   pure $ Submodule user repo (Just commit)
 
-parseGitSubmodules :: Text -> Either ShellError [Submodule]
+parseGitSubmodules :: Text -> Either ScriptError [Submodule]
 parseGitSubmodules =
-  first ShellGitParseError . Atto.parseOnly (many pGitSubmodule <* Atto.endOfInput)
+  first ScriptGitParseError . Atto.parseOnly (many pGitSubmodule <* Atto.endOfInput)
 
-getSubmodules :: Directory -> EitherT ShellError IO [Submodule]
+getSubmodules :: Directory -> EitherT ScriptError IO [Submodule]
 getSubmodules dir = do
-   Out xs <- callFrom ShellProcessError dir "git" ["submodule"]
+   Out xs <- callFrom ScriptProcessError dir "git" ["submodule"]
    hoistEither $ parseGitSubmodules xs
 
 data SubmoduleAction =
@@ -243,7 +243,7 @@ diffSubmodules current0 desired0 =
   in
     Map.elems diff
 
-setupSubmodules :: Directory -> [Submodule] -> EitherT ShellError IO ()
+setupSubmodules :: Directory -> [Submodule] -> EitherT ScriptError IO ()
 setupSubmodules dir desired = do
   current <- getSubmodules dir
 
@@ -252,17 +252,17 @@ setupSubmodules dir desired = do
       diffSubmodules current desired
 
     git =
-      callFrom_ ShellProcessError dir "git"
+      callFrom_ ScriptProcessError dir "git"
 
     add s = do
       git ["submodule", "add", renderSubmoduleUrl s, submoduleName s]
       for_ (submoduleCommit s) $ \commit ->
-        callFrom_ ShellProcessError (dir </> submoduleName s) "git" ["reset", "--hard", commit]
+        callFrom_ ScriptProcessError (dir </> submoduleName s) "git" ["reset", "--hard", commit]
       git ["add", "."]
 
     remove s = do
-      callFrom_ ShellProcessError dir "rm" ["-rf", "./" <> submoduleName s]
-      callFrom_ ShellProcessError dir "rm" ["-rf", ".git/modules/" <> submoduleName s]
+      callFrom_ ScriptProcessError dir "rm" ["-rf", "./" <> submoduleName s]
+      callFrom_ ScriptProcessError dir "rm" ["-rf", ".git/modules/" <> submoduleName s]
 
       git ["config", "-f", ".gitmodules", "--remove-section", "submodule." <> submoduleName s]
       git ["config", "-f", ".git/config", "--remove-section", "submodule." <> submoduleName s]
@@ -277,7 +277,7 @@ setupSubmodules dir desired = do
       remove s
       add s
 
-setupSandbox :: Script -> EitherT ShellError IO ()
+setupSandbox :: Script -> EitherT ScriptError IO ()
 setupSandbox script = do
   dir <- getScriptDirectory script
   createDirectoryIfMissing True dir
@@ -299,7 +299,7 @@ setupSandbox script = do
     writeUtf8 path (scriptPath script)
 
   unlessM (doesDirectoryExist git) $ do
-    Hush <- callFrom ShellProcessError dir "git" ["init"]
+    Hush <- callFrom ScriptProcessError dir "git" ["init"]
     pure ()
 
   setupSubmodules dir (scriptSubmodules script)
@@ -312,8 +312,8 @@ setupSandbox script = do
 
   pure ()
 
-runScript :: Script -> [Argument] -> EitherT ShellError IO ()
-runScript script args = do
+execScript :: Script -> [Argument] -> EitherT ScriptError IO ()
+execScript script args = do
   dir <- getScriptDirectory script
 
   let
@@ -343,28 +343,28 @@ runScript script args = do
       scriptMain script
 
     mafia <- getExecutablePath
-    Pass <- callFrom ShellProcessError dir mafia ["build"]
+    Pass <- callFrom ScriptProcessError dir mafia ["build"]
 
     copyFile exe_orig exe
 
     writeUtf8 hash $
       renderHash (scriptHash script)
 
-  exec ShellProcessError exe args
+  exec ScriptProcessError exe args
 
-mafiaScript :: Script -> [Argument] -> EitherT ShellError IO ()
+mafiaScript :: Script -> [Argument] -> EitherT ScriptError IO ()
 mafiaScript script args = do
   setupSandbox script
 
   dir <- getScriptDirectory script
   mafia <- getExecutablePath
 
-  execFrom ShellProcessError dir mafia $ args <> [scriptPath script]
+  execFrom ScriptProcessError dir mafia $ args <> [scriptPath script]
 
-runShell :: File -> [Argument] -> EitherT ShellError IO ()
-runShell file args0 = do
+runScript :: File -> [Argument] -> EitherT ScriptError IO ()
+runScript file args0 = do
   path <- canonicalizePath file
-  source <- hoistMaybe (ShellFileNotFound file) =<< readUtf8 path
+  source <- hoistMaybe (ScriptFileNotFound file) =<< readUtf8 path
 
   let
     script =
@@ -374,4 +374,4 @@ runShell file args0 = do
     "+MAFIA" : args ->
       mafiaScript script args
     args ->
-      runScript script args
+      execScript script args
