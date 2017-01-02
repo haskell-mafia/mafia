@@ -35,6 +35,7 @@ module Mafia.IO
   , renameFile
 
     -- * Environment
+  , getExecutablePath
   , findExecutable
   , prependPath
   , lookupEnv
@@ -203,6 +204,10 @@ renameFile src dst = liftIO (Directory.renameFile (T.unpack src) (T.unpack dst))
 
 ------------------------------------------------------------------------
 -- Environment
+
+getExecutablePath :: MonadIO m => m File
+getExecutablePath =
+  liftIO . fmap T.pack $ Environment.getExecutablePath
 
 findExecutable :: MonadIO m => Text -> m (Maybe File)
 findExecutable name = liftIO $ do

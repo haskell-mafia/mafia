@@ -30,21 +30,22 @@ import           Mafia.Package
 import           Mafia.Path
 import           Mafia.Process
 import           Mafia.Project
+import           Mafia.Script
 import           Mafia.Submodule
 import           Mafia.Tree
 
 import           P hiding (Last)
 
-import           System.Exit (exitSuccess)
+import           System.Environment (getArgs)
 import           System.IO (BufferMode(..), hSetBuffering)
-import           System.IO (IO, stdout, stderr, putStrLn, print)
+import           System.IO (IO, stdout, stderr)
 
 import           X.Control.Monad.Trans.Either (EitherT, hoistEither, left)
 import           X.Control.Monad.Trans.Either.Exit (orDie)
 import           X.Options.Applicative (Parser, CommandFields, Mod)
-import           X.Options.Applicative (SafeCommand(..), RunType(..))
-import           X.Options.Applicative (argument, textRead, metavar, help, long, short, option, flag, flag', eitherTextReader)
-import           X.Options.Applicative (dispatch, subparser, safeCommand, command')
+import           X.Options.Applicative (argument, textRead, metavar, help, long, short)
+import           X.Options.Applicative (option, flag, flag', eitherTextReader)
+import           X.Options.Applicative (cli, subparser, command')
 
 ------------------------------------------------------------------------
 
@@ -54,15 +55,17 @@ main = do
   setNumCapabilities nprocs
   hSetBuffering stdout LineBuffering
   hSetBuffering stderr LineBuffering
-  dispatch parser >>= \case
-    VersionCommand ->
-      putStrLn buildInfoVersion >> exitSuccess
-    DependencyCommand ->
-      traverse putStrLn dependencyInfo >> exitSuccess
-    RunCommand DryRun c ->
-      print c >> exitSuccess
-    RunCommand RealRun c ->
-      orDie renderMafiaError (run c)
+  args0 <- getArgs
+  case args0 of
+    "script" : path : args ->
+      -- bypass optparse until https://github.com/pcapriotti/optparse-applicative/pull/234 is merged
+      runOrDie $ MafiaScript (T.pack path) (fmap T.pack args)
+    _ ->
+      cli "mafia" buildInfoVersion dependencyInfo parser runOrDie
+
+runOrDie :: MafiaCommand -> IO ()
+runOrDie =
+  orDie renderMafiaError . run
 
 ------------------------------------------------------------------------
 
@@ -82,6 +85,7 @@ data MafiaCommand =
   | MafiaWatch [Flag] [GhciInclude] File [Argument]
   | MafiaHoogle [Argument]
   | MafiaInstall [Constraint] InstallPackage
+  | MafiaScript Path [Argument]
     deriving (Eq, Show)
 
 data Warnings =
@@ -134,11 +138,13 @@ run = \case
     mafiaWatch flags incs entry args
   MafiaHoogle args -> do
     mafiaHoogle args
-  MafiaInstall constraints ipkg -> do
+  MafiaInstall constraints ipkg ->
     mafiaInstall ipkg constraints
+  MafiaScript path args ->
+    mafiaScript path args
 
-parser :: Parser (SafeCommand MafiaCommand)
-parser = safeCommand . subparser . mconcat $ commands
+parser :: Parser MafiaCommand
+parser = subparser . mconcat $ commands
 
 commands :: [Mod CommandFields MafiaCommand]
 commands =
@@ -196,6 +202,9 @@ commands =
  , command' "install" ( "Install a hackage package and print the path to its bin directory. "
                      <> "The general usage is as follows:  $(mafia install pretty-show)/ppsh" )
             (MafiaInstall <$> many pConstraint <*> pInstallPackage)
+
+ , command' "script" "Run a haskell file as a standalone script."
+            (MafiaScript <$> pScriptPath <*> many pScriptArgs)
  ]
 
 pProfiling :: Parser Profiling
@@ -292,6 +301,18 @@ pConstraint =
  option (eitherTextReader renderCabalError parseConstraint) $
        long "constraint"
     <> help "Specify constraints on a package (version, installed/source, flags)"
+
+pScriptPath :: Parser File
+pScriptPath =
+  argument textRead $
+       metavar "SCRIPT"
+    <> help "The path to the Haskell shell script."
+
+pScriptArgs :: Parser File
+pScriptArgs =
+  argument textRead $
+       metavar "SCRIPT_ARGUMENTS"
+    <> help "Argument to pass to the shell script."
 
 ------------------------------------------------------------------------
 
@@ -432,6 +453,10 @@ mafiaHoogle args = do
 mafiaInstall :: InstallPackage -> [Constraint] -> EitherT MafiaError IO ()
 mafiaInstall ipkg constraints = do
   liftIO . T.putStrLn =<< firstT MafiaBinError (installBinary ipkg constraints)
+
+mafiaScript :: File -> [Argument] -> EitherT MafiaError IO ()
+mafiaScript file args =
+  firstT MafiaScriptError $ runScript file args
 
 ghciArgs :: [GhciInclude] -> [File] -> EitherT MafiaError IO [Argument]
 ghciArgs extraIncludes paths = do
