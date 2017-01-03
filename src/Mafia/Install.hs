@@ -480,7 +480,7 @@ envPackageCache env =
     </> "packages"
     </> T.pack (show envPackageCacheVersion)
     </> unGhcTarget (envGhcTarget env)
-    </> unGhcVersion (envGhcVersion env)
+    </> renderGhcVersion (envGhcVersion env)
 
 getPackageEnv :: EitherT InstallError IO PackageEnv
 getPackageEnv = do
