@@ -504,7 +504,7 @@ ghciArgs extraIncludes paths = do
 
   let
     dirs =
-      ["src", "test", "gen", "dist/build/autogen"] <> extras
+      ["src", "test", "gen", "dist/build", "dist/build/autogen"] <> extras
 
   headers <- getHeaders
   includes <- catMaybes <$> mapM ensureDirectory dirs
@@ -548,7 +548,7 @@ reifyInclude = \case
     absDirs <- Set.toList <$> firstT MafiaSubmoduleError getSubmoduleSources
     relDirs <- mapM tryMakeRelativeToCurrent absDirs
     return [ dir </> sub | dir <- relDirs
-                         , sub <- ["src", "test", "gen", "dist/build/autogen"] ]
+                         , sub <- ["src", "test", "gen", "dist/build", "dist/build/autogen"] ]
 
 ensureDirectory :: MonadIO m => Directory -> m (Maybe Directory)
 ensureDirectory dir = do
