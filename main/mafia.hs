@@ -10,6 +10,7 @@ import           Control.Concurrent (setNumCapabilities)
 import           Control.Monad.IO.Class (MonadIO(..))
 
 import           Data.ByteString (ByteString)
+import qualified Data.List as List
 import qualified Data.Set as Set
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
@@ -38,13 +39,13 @@ import           P hiding (Last)
 
 import           System.Environment (getArgs)
 import           System.IO (BufferMode(..), hSetBuffering)
-import           System.IO (IO, stdout, stderr)
+import           System.IO (IO, FilePath, stdout, stderr)
 
 import           X.Control.Monad.Trans.Either (EitherT, hoistEither, left)
 import           X.Control.Monad.Trans.Either.Exit (orDie)
-import           X.Options.Applicative (Parser, CommandFields, Mod)
+import           X.Options.Applicative (Parser, CommandFields, Mod, ReadM)
 import           X.Options.Applicative (argument, textRead, metavar, help, long, short)
-import           X.Options.Applicative (option, flag, flag', eitherTextReader)
+import           X.Options.Applicative (option, flag, flag', eitherTextReader, eitherReader)
 import           X.Options.Applicative (cli, subparser, command')
 
 ------------------------------------------------------------------------
@@ -57,7 +58,7 @@ main = do
   hSetBuffering stderr LineBuffering
   args0 <- getArgs
   case args0 of
-    "script" : path : args ->
+    path : args | isScriptPath path ->
       -- bypass optparse until https://github.com/pcapriotti/optparse-applicative/pull/234 is merged
       runOrDie $ MafiaScript (T.pack path) (fmap T.pack args)
     _ ->
@@ -144,7 +145,16 @@ run = \case
     mafiaScript path args
 
 parser :: Parser MafiaCommand
-parser = subparser . mconcat $ commands
+parser =
+  subparser (mconcat commands) <|> pScript
+
+-- We only need this so that optparse generates nice help text. Having said
+-- that, we will switch over to this code path instead of the getArgs hack
+-- above once https://github.com/pcapriotti/optparse-applicative/pull/234 is
+-- merged.
+pScript :: Parser MafiaCommand
+pScript =
+  MafiaScript <$> pScriptPath <*> many pScriptArgs
 
 commands :: [Mod CommandFields MafiaCommand]
 commands =
@@ -202,9 +212,6 @@ commands =
  , command' "install" ( "Install a hackage package and print the path to its bin directory. "
                      <> "The general usage is as follows:  $(mafia install pretty-show)/ppsh" )
             (MafiaInstall <$> many pConstraint <*> pInstallPackage)
-
- , command' "script" "Run a haskell file as a standalone script."
-            (MafiaScript <$> pScriptPath <*> many pScriptArgs)
  ]
 
 pProfiling :: Parser Profiling
@@ -304,15 +311,44 @@ pConstraint =
 
 pScriptPath :: Parser File
 pScriptPath =
-  argument textRead $
-       metavar "SCRIPT"
-    <> help "The path to the Haskell shell script."
+  argument scriptRead $
+       metavar "SCRIPT_PATH"
+    <> help "The path to a Haskell script to execute."
 
 pScriptArgs :: Parser File
 pScriptArgs =
   argument textRead $
        metavar "SCRIPT_ARGUMENTS"
-    <> help "Argument to pass to the shell script."
+    <> help "Arguments to pass to the script."
+
+scriptRead :: ReadM File
+scriptRead =
+  eitherReader $ \path ->
+    if isScriptPath path then
+      Left $
+        "Something went wrong, '" <> path <> "' looks like a script, but script" <>
+        " execution should have been handled in an earlier code path.\n" <>
+        "Please report this as a bug: https://github.com/ambiata/mafia/issues"
+    else
+      Left $
+        "Invalid argument '" <> path <> "', not a valid command or a valid script path.\n" <>
+        "Note: paths to scripts must contain a slash, e.g. ./" <> path <> " or /usr/bin/" <> path
+
+-- | Detect if an argument is a path to a script.
+--
+--   The most robust way I can think of is to look for a slash:
+--
+--   - Sub-commands will never contain a slash.
+--
+--   - If the script is on the PATH we'll receive the absolute path which will
+--     contain a slash.
+--
+--   - If it's not on the PATH then the user will need to include a slash in
+--     the relative path in order to execute it anyway, e.g. ./script or dir/script
+--
+isScriptPath :: FilePath -> Bool
+isScriptPath =
+  List.isInfixOf "/"
 
 ------------------------------------------------------------------------
 
