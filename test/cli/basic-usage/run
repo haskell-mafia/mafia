@@ -22,7 +22,7 @@ check() {
 
   cd ${MAFIA_TEMP}
   if [ ! -d "${MAFIA_REPO}" ]; then
-    git clone git@github.com:ambiata/${MAFIA_REPO}
+    git clone https://github.com/ambiata/${MAFIA_REPO}
   fi
 
   cd ${MAFIA_DIR}
