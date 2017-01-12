@@ -197,8 +197,10 @@ commands =
  , command' "unlock" "Allow the cabal solver to choose new versions of packages again."
             (pure MafiaUnlock)
 
- , command' "quick" ( "Start the repl directly skipping cabal, this is useful "
-                   <> "developing across multiple source trees at once." )
+ , command' "quick" ( ghciText <> " This is an alias for the \"ghci\" command." )
+            (MafiaQuick <$> many pFlag <*> pGhciIncludes <*> some pGhciEntryPoint)
+
+ , command' "ghci" ghciText
             (MafiaQuick <$> many pFlag <*> pGhciIncludes <*> some pGhciEntryPoint)
 
  , command' "watch" ( "Watches filesystem for changes and stays running, compiles "
@@ -215,6 +217,10 @@ commands =
                      <> "The general usage is as follows:  $(mafia install pretty-show)/ppsh" )
             (MafiaInstall <$> many pConstraint <*> pInstallPackage)
  ]
+  where
+    ghciText = "Start the repl directly skipping cabal, this is useful "
+                <> "developing across multiple source trees at once or loading "
+                <> "a not-yet-compiling project."
 
 pProfiling :: Parser Profiling
 pProfiling =
