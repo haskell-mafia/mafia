@@ -198,10 +198,10 @@ commands =
             (pure MafiaUnlock)
 
  , command' "quick" ( ghciText <> " This is an alias for the \"ghci\" command." )
-            (MafiaQuick <$> many pFlag <*> pGhciIncludes <*> some pGhciEntryPoint)
+            (MafiaQuick <$> many pFlag <*> pGhciIncludes <*> many pGhciEntryPoint)
 
  , command' "ghci" ghciText
-            (MafiaQuick <$> many pFlag <*> pGhciIncludes <*> some pGhciEntryPoint)
+            (MafiaQuick <$> many pFlag <*> pGhciIncludes <*> many pGhciEntryPoint)
 
  , command' "watch" ( "Watches filesystem for changes and stays running, compiles "
                    <> "and gives quick feedback. "
