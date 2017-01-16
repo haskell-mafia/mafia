@@ -89,6 +89,7 @@ data MafiaCommand =
   | MafiaHoogle [Argument]
   | MafiaInstall [Constraint] InstallPackage
   | MafiaScript Path [Argument]
+  | MafiaExec [Argument]
     deriving (Eq, Show)
 
 data Warnings =
@@ -145,6 +146,8 @@ run = \case
     mafiaInstall ipkg constraints
   MafiaScript path args ->
     mafiaScript path args
+  MafiaExec args ->
+    mafiaExec args
 
 parser :: Parser MafiaCommand
 parser =
@@ -216,6 +219,10 @@ commands =
  , command' "install" ( "Install a hackage package and print the path to its bin directory. "
                      <> "The general usage is as follows:  $(mafia install pretty-show)/ppsh" )
             (MafiaInstall <$> many pConstraint <*> pInstallPackage)
+
+ , command' "exec" ( ghciText <> " Exec the provided command line in the local cabal sandbox." )
+            (MafiaExec <$> many pCabalArgs)
+
  ]
   where
     ghciText = "Start the repl directly skipping cabal, this is useful "
@@ -501,6 +508,18 @@ mafiaInstall ipkg constraints = do
 mafiaScript :: File -> [Argument] -> EitherT MafiaError IO ()
 mafiaScript file args =
   firstT MafiaScriptError $ runScript file args
+
+mafiaExec :: [Argument] -> EitherT MafiaError IO ()
+mafiaExec args = do
+  let fixedArgs =
+        case args of
+          [] -> [] -- Should not happen.
+          [x] -> [x] -- A command without arguments.
+          -- Insert `--` between the command and its arguments so cabal doesn't
+          -- mess with them.
+          (x:xs) -> x : "--" : xs
+  exec MafiaProcessError "cabal" $ "exec" : fixedArgs
+
 
 ghciArgs :: [GhciInclude] -> [File] -> EitherT MafiaError IO [Argument]
 ghciArgs extraIncludes paths = do
