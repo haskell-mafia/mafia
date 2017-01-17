@@ -381,6 +381,17 @@ to prevent them from wasting time updating from Hackage when there are
 likely no interesting changes.
 
 
+### mafia exec
+
+Exec a command in the current cabal sandbox. This can be useful for compiling
+a Haskell source file that is not in the cabal file but with full access to
+packages installed in the local sandbox:
+
+```
+mafia exec -- ghc -Wall wibble.hs -o wibble
+```
+
+
 System configuration
 --------------------
 

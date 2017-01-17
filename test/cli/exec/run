@@ -1,0 +1,31 @@
+#!/bin/sh -eux
+
+absolute_path() {
+  echo "$(cd "$(dirname "$1")" && pwd)/$(basename "$1")"
+}
+
+MAFIA=$(absolute_path ${1:-./dist/build/mafia/mafia})
+
+MAFIA_TEMP=$(mktemp -d 2>/dev/null || mktemp -d -t 'mafia')
+trap "rm -rf \"${MAFIA_TEMP}\"" EXIT
+
+INPUT=$(dirname $(absolute_path $0))
+
+echo "INPUT $INPUT"
+
+cd ${MAFIA_TEMP}
+
+cp ${INPUT}/trivial/* .
+
+# Mafia wants to be in a current git tree, so create one.
+git init
+git add *
+git commit -m "Initial commit"
+
+# Sets up sandbox, nstalls packages and builds project.
+mafia build
+
+# Create a new Haskell file not in the cabal file so we can build it.
+cp trivial.hs xxx.hs
+
+MAFIA_HOME=${MAFIA_TEMP} ${MAFIA} exec -- ghc -Wall xxx.hs -o xxx
