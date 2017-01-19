@@ -325,7 +325,7 @@ getCabalFileHash dir = do
 
 getSourceDependencies :: EitherT InitError IO (Set SourcePackage)
 getSourceDependencies = do
-  sources <- Set.toList <$> firstT InitSubmoduleError getSubmoduleSources
+  sources <- Set.toList <$> firstT InitSubmoduleError getAvailableSources
   Set.fromList . catMaybes <$> firstT InitCabalError (mapConcurrentlyE getSourcePackage sources)
 
 readMafiaState :: File -> EitherT InitError IO (Maybe MafiaState)
