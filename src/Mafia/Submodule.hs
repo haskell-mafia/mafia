@@ -27,7 +27,6 @@ import           Mafia.Git
 import           Mafia.IO
 import           Mafia.Path
 import           Mafia.Process
-import           Mafia.Project
 
 import           P
 
@@ -37,16 +36,12 @@ import           X.Control.Monad.Trans.Either (EitherT)
 
 
 data SubmoduleError =
-    SubmoduleProjectError ProjectError
-  | SubmoduleCabalError CabalError
+    SubmoduleCabalError CabalError
   | SubmoduleGitError GitError
-  deriving (Show)
+    deriving (Show)
 
 renderSubmoduleError :: SubmoduleError -> Text
 renderSubmoduleError = \case
-  SubmoduleProjectError e ->
-    renderProjectError e
-
   SubmoduleCabalError e ->
     renderCabalError e
 
@@ -101,7 +96,7 @@ getConfiguredSources :: EitherT SubmoduleError IO (Set Directory)
 getConfiguredSources = do
   dir <- getCurrentDirectory
   root <- firstT SubmoduleGitError getProjectRoot
-  name <- firstT SubmoduleProjectError $ getProjectName dir
+  name <- fmap dropExtension . firstT SubmoduleCabalError $ getCabalFile dir
   cfg <- readUtf8 (name <> ".submodules")
   return . Set.fromList
          . fmap (root </>)

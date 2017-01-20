@@ -32,7 +32,6 @@ import           Mafia.Lock
 import           Mafia.Package
 import           Mafia.Path
 import           Mafia.Process
-import           Mafia.Project
 import           Mafia.Script
 import           Mafia.Submodule
 import           Mafia.Tree
@@ -179,20 +178,20 @@ commands =
  , command' "clean" "Clean up after build. Removes the sandbox and the dist directory."
             (pure MafiaClean)
 
- , command' "build" "Build this project, including all executables and test suites."
+ , command' "build" "Build this package, including all executables and test suites."
             (MafiaBuild <$> pProfiling <*> pWarnings <*> pCoreDump <*> many pFlag <*> many pCabalArgs)
 
- , command' "test" "Test this project, by default this runs all test suites."
+ , command' "test" "Test this package, by default this runs all test suites."
             (MafiaTest <$> many pFlag <*> many pCabalArgs)
 
- , command' "testci" ("Test this project, but process control characters (\\b, \\r) which "
+ , command' "testci" ("Test this package, but process control characters (\\b, \\r) which "
                    <> "reposition the cursor, prior to emitting each line of output.")
             (MafiaTestCI <$> many pFlag <*> many pCabalArgs)
 
  , command' "repl" "Start the repl, by default on the main library source."
             (MafiaRepl <$> many pFlag <*> many pCabalArgs)
 
- , command' "bench" "Run project benchmarks"
+ , command' "bench" "Run package benchmarks"
             (MafiaBench <$> many pFlag <*> many pCabalArgs)
 
  , command' "lock" "Lock down the versions of all this packages transitive dependencies."
@@ -228,7 +227,7 @@ commands =
   where
     ghciText = "Start the repl directly skipping cabal, this is useful "
                 <> "developing across multiple source trees at once or loading "
-                <> "a not-yet-compiling project."
+                <> "a not-yet-compiling package."
 
 pProfiling :: Parser Profiling
 pProfiling =
@@ -618,7 +617,7 @@ initMafia :: Profiling -> [Flag] -> EitherT MafiaError IO ()
 initMafia prof flags = do
   -- we just call this for the side-effect, if we can't find a .cabal file then
   -- mafia should fail fast and not polute the directory with a sandbox.
-  (_ :: ProjectName) <- firstT MafiaProjectError $ getProjectName =<< getCurrentDirectory
+  (_ :: File) <- firstT MafiaCabalError $ getCabalFile =<< getCurrentDirectory
 
   ensureBuildTools
 

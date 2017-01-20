@@ -41,10 +41,9 @@ import           Distribution.ParseUtils (locatedErrorMsg)
 
 import           Mafia.Ghc
 import           Mafia.Hash
+import           Mafia.Package
 import           Mafia.Path
 import           Mafia.Process
-import           Mafia.Project
-import           Mafia.Package
 
 import           P
 
@@ -207,7 +206,6 @@ type MaxVersion = Version
 
 data CabalError =
     CabalProcessError ProcessError
-  | CabalProjectError ProjectError
   | CabalGhcError GhcError
   | CabalHashError HashError
   | CabalInstallPlanParseError Text
@@ -222,6 +220,7 @@ data CabalError =
   | CabalSDistFailedCouldNotReadFile Directory File
   | CabalReinstallsDetected [PackagePlan]
   | CabalFileNotFound Directory
+  | CabalMultipleFilesFound Directory [File]
   | CabalCouldNotReadBuildTools File
   | CabalCouldNotReadPackageId File
   | CabalCouldNotReadPackageType File
@@ -242,9 +241,6 @@ renderCabalError :: CabalError -> Text
 renderCabalError = \case
   CabalProcessError e ->
     renderProcessError e
-
-  CabalProjectError e ->
-    renderProjectError e
 
   CabalGhcError e ->
     renderGhcError e
@@ -291,6 +287,9 @@ renderCabalError = \case
 
   CabalFileNotFound dir ->
     "Could not find .cabal file in: " <> dir
+
+  CabalMultipleFilesFound dir files ->
+    "Found multiple possible .cabal files (" <> T.intercalate ", " files <> ") in: " <> dir
 
   CabalCouldNotReadBuildTools cabalFile ->
     "Failed to read build-tools from: " <> cabalFile

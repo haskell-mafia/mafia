@@ -16,7 +16,6 @@ import           Mafia.Init
 import           Mafia.Install
 import           Mafia.Lock
 import           Mafia.Process
-import           Mafia.Project
 import           Mafia.Script
 import           Mafia.Submodule
 
@@ -27,9 +26,8 @@ import           X.Control.Monad.Trans.Either (EitherT)
 
 -- FIX Leaving this to make code cleanup easier, but ideally is a union of
 -- sub-exceptions rather than this module being the root of most dependencies
-data MafiaError
-  = MafiaProjectError ProjectError
-  | MafiaProcessError ProcessError
+data MafiaError =
+    MafiaProcessError ProcessError
   | MafiaGitError GitError
   | MafiaGhcError GhcError
   | MafiaCabalError CabalError
@@ -48,9 +46,6 @@ data MafiaError
 
 renderMafiaError :: MafiaError -> Text
 renderMafiaError = \case
-  MafiaProjectError e ->
-    renderProjectError e
-
   MafiaProcessError e ->
     renderProcessError e
 
