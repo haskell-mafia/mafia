@@ -13,6 +13,7 @@ module Mafia.Path
   , dropTrailingPathSeparator
   , normalise
   , makeRelative
+  , isAbsolute
 
     -- * Extension functions
   , takeExtension
@@ -51,6 +52,9 @@ dropTrailingPathSeparator = T.pack . FilePath.dropTrailingPathSeparator . T.unpa
 
 normalise :: Path -> Path
 normalise = T.pack . FilePath.normalise . T.unpack
+
+isAbsolute :: Path -> Bool
+isAbsolute = FilePath.isAbsolute . T.unpack
 
 makeRelative :: Path -> Path -> Maybe Path
 makeRelative xp yp =

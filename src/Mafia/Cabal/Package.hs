@@ -11,6 +11,7 @@ module Mafia.Cabal.Package (
   , getPackageId
   , getPackageType
   , getCabalFile
+  , findCabalRoot
 
   , SourcePackage(..)
   , getSourcePackage
@@ -69,6 +70,27 @@ getCabalFile dir = do
       return x
     _ : _ ->
       left $ CabalMultipleFilesFound dir xs
+
+-- | Given a file or directory path, try to find the .cabal file by searching
+--   its parent directories.
+findCabalRoot :: MonadIO m => Path -> m (Maybe Directory)
+findCabalRoot path0 = do
+  path <- canonicalizePath path0
+  entries <- tryGetDirectoryContents path
+  if any (\x -> extension ".cabal" x && x /= ".cabal" && not (T.isSuffixOf "-test.cabal" x)) entries then
+    return $ Just path
+  else if path == "/" then
+    return Nothing
+  else
+    findCabalRoot $ takeDirectory path
+
+tryGetDirectoryContents :: MonadIO m => Path -> m [File]
+tryGetDirectoryContents path = do
+  isDir <- doesDirectoryExist path
+  if isDir then
+    getDirectoryContents path
+  else
+    return []
 
 isCabalFile :: MonadIO m => File -> m Bool
 isCabalFile file =

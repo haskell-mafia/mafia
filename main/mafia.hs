@@ -506,15 +506,17 @@ mafiaUnlock = do
 
 mafiaQuick :: [Flag] -> [GhciInclude] -> [File] -> EitherT MafiaError IO ()
 mafiaQuick flags extraIncludes paths = do
-  args <- ghciArgs extraIncludes paths
-  initMafia DisableProfiling flags
+  dir <- getWorkingDirectory $ listToMaybe paths
+  args <- ghciArgs dir extraIncludes paths
+  withDirectory dir $ initMafia DisableProfiling flags
   exec MafiaProcessError "ghci" args
 
 mafiaWatch :: [Flag] -> [GhciInclude] -> File -> [Argument] -> EitherT MafiaError IO ()
 mafiaWatch flags extraIncludes path extraArgs = do
   ghcidExe <- bimapT MafiaBinError (</> "ghcid") $ installBinary (ipackageId "ghcid" [0, 5]) []
-  args <- ghciArgs extraIncludes [path]
-  initMafia DisableProfiling flags
+  dir <- getWorkingDirectory $ Just path
+  args <- ghciArgs dir extraIncludes [path]
+  withDirectory dir $ initMafia DisableProfiling flags
   exec MafiaProcessError ghcidExe $ [ "-c", T.unwords ("ghci" : args) ] <> extraArgs
 
 mafiaHoogle :: [Argument] -> EitherT MafiaError IO ()
@@ -551,19 +553,41 @@ mafiaCFlags = do
     mapM_ (\d -> T.putStr " -I" >> T.putStr d) dirs
     T.putStrLn ""
 
-ghciArgs :: [GhciInclude] -> [File] -> EitherT MafiaError IO [Argument]
-ghciArgs extraIncludes paths = do
+getWorkingDirectory :: Maybe File -> EitherT MafiaError IO Directory
+getWorkingDirectory mpath =
+  case mpath of
+    Nothing ->
+      getCurrentDirectory
+    Just path -> do
+      mdir <- findCabalRoot path
+      case mdir of
+        Nothing ->
+          getCurrentDirectory
+        Just dir ->
+          return dir
+
+withDirectory :: MonadIO m => Directory -> m a -> m a
+withDirectory dir io = do
+  old <- getCurrentDirectory
+  setCurrentDirectory dir
+  x <- io
+  setCurrentDirectory old
+  return x
+
+ghciArgs :: Directory -> [GhciInclude] -> [File] -> EitherT MafiaError IO [Argument]
+ghciArgs wdir extraIncludes paths = do
   mapM_ checkEntryPoint paths
 
-  extras <- concat <$> mapM reifyInclude extraIncludes
+  standard <- mapM (tryMakeRelativeToCurrent . (wdir </>)) standardSourceDirs
+  extras <- concat <$> mapM (reifyInclude wdir) extraIncludes
 
   let
     dirs =
-      standardSourceDirs <> extras
+      standard <> extras
 
   headers <- getHeaders
   includes <- catMaybes <$> mapM ensureDirectory dirs
-  databases <- getPackageDatabases
+  databases <- mapM tryMakeRelativeToCurrent =<< getPackageDatabases wdir
 
   return $ mconcat [
       [ "-no-user-package-db" ]
@@ -572,6 +596,16 @@ ghciArgs extraIncludes paths = do
     , fmap ("-package-db=" <>) databases
     , paths
     ]
+
+getPackageDatabases :: Directory -> EitherT MafiaError IO [Directory]
+getPackageDatabases wdir =
+  withDirectory wdir $ do
+    let
+      isPackage =
+        ("-packages.conf.d" `T.isSuffixOf`)
+
+    sandboxDir <- liftCabal initSandbox
+    filter isPackage <$> getDirectoryListing Recursive (wdir </> sandboxDir)
 
 getHeaders :: EitherT MafiaError IO [File]
 getHeaders = do
@@ -596,17 +630,21 @@ checkEntryPoint file = do
   unlessM (doesFileExist file) $
     hoistEither (Left (MafiaEntryPointNotFound file))
 
-reifyInclude :: GhciInclude -> EitherT MafiaError IO [Directory]
-reifyInclude = \case
+reifyInclude :: Directory -> GhciInclude -> EitherT MafiaError IO [Directory]
+reifyInclude wdir = \case
   Directory dir ->
     return [dir]
 
   ProjectLibraries -> do
-    dirs <- Set.toList <$> firstT MafiaGitError getProjectSources
+    dirs <- firstT MafiaGitError . withDirectory wdir $
+      mapM canonicalizePath =<< fmap Set.toList getProjectSources
+
     concatMap appendStandardDirs <$> mapM tryMakeRelativeToCurrent dirs
 
   AllLibraries -> do
-    dirs <- Set.toList <$> firstT MafiaSubmoduleError getAvailableSources
+    dirs <- firstT MafiaSubmoduleError . withDirectory wdir $
+      mapM canonicalizePath =<< fmap Set.toList getAvailableSources
+
     concatMap appendStandardDirs <$> mapM tryMakeRelativeToCurrent dirs
 
 appendStandardDirs :: Directory -> [Directory]
@@ -623,13 +661,6 @@ ensureDirectory dir = do
   case exists of
     False -> return Nothing
     True  -> return (Just dir)
-
-getPackageDatabases :: EitherT MafiaError IO [Directory]
-getPackageDatabases = do
-    sandboxDir <- liftCabal initSandbox
-    filter isPackage <$> getDirectoryListing Recursive sandboxDir
-  where
-    isPackage = ("-packages.conf.d" `T.isSuffixOf`)
 
 initMafia :: Profiling -> [Flag] -> EitherT MafiaError IO ()
 initMafia prof flags = do
