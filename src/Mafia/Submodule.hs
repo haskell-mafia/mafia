@@ -1,12 +1,18 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
-module Mafia.Submodule
-  ( SubmoduleError(..)
+module Mafia.Submodule (
+    SubmoduleError(..)
   , renderSubmoduleError
   , syncCabalSources
+
   , getSandboxSources
+  , getAvailableSources
+  , getConfiguredSources
+  , getConventionSources
   , getSubmoduleSources
+  , getProjectSources
+  , getSourcesFrom
   ) where
 
 import           Control.Monad.IO.Class (MonadIO(..))
@@ -51,7 +57,7 @@ syncCabalSources :: EitherT SubmoduleError IO ()
 syncCabalSources = do
   repairSandbox
   installed <- getSandboxSources
-  required  <- getSubmoduleSources
+  required  <- getAvailableSources
   traverse_ addSandboxSource    (required `Set.difference` installed)
   traverse_ removeSandboxSource (installed `Set.difference` required)
 
@@ -85,9 +91,11 @@ getSandboxSources = do
          . T.lines
          $ sources
 
-getSubmoduleSources :: EitherT SubmoduleError IO (Set Directory)
-getSubmoduleSources = Set.union <$> getConfiguredSources
-                                <*> firstT SubmoduleGitError getConventionSources
+getAvailableSources :: EitherT SubmoduleError IO (Set Directory)
+getAvailableSources =
+  Set.union
+    <$> getConfiguredSources
+    <*> firstT SubmoduleGitError getConventionSources
 
 getConfiguredSources :: EitherT SubmoduleError IO (Set Directory)
 getConfiguredSources = do
@@ -103,16 +111,26 @@ getConfiguredSources = do
 
 getConventionSources :: EitherT GitError IO (Set Directory)
 getConventionSources = do
-  -- make sure we never include the current directory (i.e. the project we're
-  -- trying to build) as a source dependency
-  dir <- getCurrentDirectory
+  Set.union
+    <$> getProjectSources
+    <*> getSubmoduleSources
+
+getSubmoduleSources :: EitherT GitError IO (Set Directory)
+getSubmoduleSources = do
   root <- getProjectRoot
-  repoPaths <- Set.filter (/= dir) <$> getSourcesFrom root
-
   subs <- fmap ((root </>) . subName) <$> getSubmodules
-  subPaths <- Set.unions <$> traverse getSourcesFrom subs
+  Set.unions <$> traverse getSourcesFrom subs
 
-  return $ Set.union repoPaths subPaths
+getProjectSources :: EitherT GitError IO (Set Directory)
+getProjectSources = do
+  root <- getProjectRoot
+  dirs <- getSourcesFrom root
+
+  -- make sure we never include the current directory as a source dependency
+  -- (i.e. the project we're trying to build)
+  current <- getCurrentDirectory
+  return $
+    Set.filter (/= current) dirs
 
 getSourcesFrom :: MonadIO m => Directory -> m (Set Path)
 getSourcesFrom dir = do

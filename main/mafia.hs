@@ -104,6 +104,7 @@ data CoreDump =
 
 data GhciInclude =
     Directory Directory
+  | ProjectLibraries
   | AllLibraries
     deriving (Eq, Show)
 
@@ -281,14 +282,26 @@ pGhciEntryPoint =
     <> help "The entry point for GHCi."
 
 pGhciIncludes :: Parser [GhciInclude]
-pGhciIncludes = many (pGhciIncludeDirectory <|> pGhciIncludeAllLibraries)
+pGhciIncludes =
+  fmap concat $ sequenceA [
+      many pGhciIncludeDirectory
+    , toList <$> optional pGhciIncludeProjectLibraries
+    , toList <$> optional pGhciIncludeAllLibraries
+    ]
+
+pGhciIncludeProjectLibraries :: Parser GhciInclude
+pGhciIncludeProjectLibraries =
+  flag' ProjectLibraries $
+       long "project"
+    <> short 'p'
+    <> help "Make all project source directories available for GHCi, does not include submodules."
 
 pGhciIncludeAllLibraries :: Parser GhciInclude
 pGhciIncludeAllLibraries =
   flag' AllLibraries $
        long "all"
     <> short 'a'
-    <> help "Include all library source directories for GHCi."
+    <> help "Make all source directories available for GHCi, even from submodules."
 
 pGhciIncludeDirectory :: Parser GhciInclude
 pGhciIncludeDirectory =
@@ -529,7 +542,7 @@ ghciArgs extraIncludes paths = do
 
   let
     dirs =
-      ["src", "test", "gen", "dist/build", "dist/build/autogen"] <> extras
+      standardSourceDirs <> extras
 
   headers <- getHeaders
   includes <- catMaybes <$> mapM ensureDirectory dirs
@@ -568,12 +581,24 @@ checkEntryPoint file = do
 
 reifyInclude :: GhciInclude -> EitherT MafiaError IO [Directory]
 reifyInclude = \case
-  Directory dir -> return [dir]
-  AllLibraries  -> do
-    absDirs <- Set.toList <$> firstT MafiaSubmoduleError getSubmoduleSources
-    relDirs <- mapM tryMakeRelativeToCurrent absDirs
-    return [ dir </> sub | dir <- relDirs
-                         , sub <- ["src", "test", "gen", "dist/build", "dist/build/autogen"] ]
+  Directory dir ->
+    return [dir]
+
+  ProjectLibraries -> do
+    dirs <- Set.toList <$> firstT MafiaGitError getProjectSources
+    concatMap appendStandardDirs <$> mapM tryMakeRelativeToCurrent dirs
+
+  AllLibraries -> do
+    dirs <- Set.toList <$> firstT MafiaSubmoduleError getAvailableSources
+    concatMap appendStandardDirs <$> mapM tryMakeRelativeToCurrent dirs
+
+appendStandardDirs :: Directory -> [Directory]
+appendStandardDirs dir =
+  fmap (dir </>) standardSourceDirs
+
+standardSourceDirs :: [Directory]
+standardSourceDirs =
+  ["src", "test", "gen", "dist/build", "dist/build/autogen"]
 
 ensureDirectory :: MonadIO m => Directory -> m (Maybe Directory)
 ensureDirectory dir = do
