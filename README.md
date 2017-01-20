@@ -44,7 +44,7 @@ Mafia is designed to be run via a shell script which will bootstrap the
 
 Place the
 [script](https://raw.githubusercontent.com/ambiata/mafia/master/script/mafia)
-in the same directory as your `.cabal` project file and then run
+in the same directory as your `.cabal` package file and then run
 `./mafia upgrade`. This will ensure that you have the latest script and
 also bake the git hash of the Mafia version in to the script.
 
@@ -54,8 +54,8 @@ curl -O https://raw.githubusercontent.com/ambiata/mafia/master/script/mafia && c
 
 You can now run `./mafia build` for the first time. This will build the
 Mafia executable with the git hash specified in the script, and then
-build the current project. Having the hash baked in to the script means
-that anyone trying to build the project will be using exactly the same
+build the current package. Having the hash baked in to the script means
+that anyone trying to build the package will be using exactly the same
 version of Mafia.
 
 To upgrade to the latest Mafia, you can `./mafia upgrade` again at any time.
@@ -68,12 +68,12 @@ Commands
 
 Many of Mafia's commands are, more or less, direct wrappers of Cabal
 commands. The main difference is that they have a pre-step which takes
-care of installing any dependencies your project has, so you never have
+care of installing any dependencies your package has, so you never have
 to think about it.
 
 ### mafia build
 
-Builds a project, including all executables, test suites and benchmarks.
+Builds a package, including all executables, test suites and benchmarks.
 
 Mafia uses whichever version of
 [GHC](https://github.com/ambiata/mafia/blob/master/doc/ghc.md) and
@@ -81,7 +81,7 @@ Mafia uses whichever version of
 finds on the `PATH` to build a project. It keeps cabal sandboxes in
 version specific directories, so that it is easy to
 [switch](https://github.com/ambiata/mafia/blob/master/doc/ghc.md#advanced-multiple-ghc-versions)
-between versions of GHC while developing a project.
+between versions of GHC while developing a package.
 
 Using the switching setup linked above, a typical multi-GHC session
 might look as follows:
@@ -116,7 +116,7 @@ benefit from the sandbox which Mafia has constructed.
 
 Mafia makes it easy to build your executable with profiling enabled,
 just run `mafia build -p`. Mafia will then build profiling versions of
-all the packages which your project depends on. Packages in the global
+all the packages which your package depends on. Packages in the global
 cache are upgraded to support profiling in-place, so you don't need to
 perform the regular build for those packages all over again.
 
@@ -128,17 +128,17 @@ Clean up after a build. This removes the Cabal sandbox and the `dist` directory.
 
 ### mafia test
 
-Test this project, by default this runs all test suites.
+Test this package, by default this runs all test suites.
 
 
 ### mafia bench
 
-Benchmark this project, by default this runs all the benchmarks.
+Benchmark this package, by default this runs all the benchmarks.
 
 
 ### mafia lock
 
-Creates a lock file, which pins the versions of the project's transitive
+Creates a lock file, which pins the versions of the package's transitive
 dependencies to specific version numbers.
 
 
@@ -150,7 +150,7 @@ of packages again.
 
 ### mafia repl
 
-Start GHCi via `cabal repl`, by default on the library of the project.
+Start GHCi via `cabal repl`, by default on the library of the package.
 
 
 ### mafia quick
@@ -349,9 +349,9 @@ If you plan to use a package as a source dependency, it is a good idea
 to verify that the package's hash is the same every time you run `mafia
 hash`. Sometimes you can have a situation where a custom `Setup.hs` will
 generate files with timestamps in them. It is best to add the paths to
-these generated files to your project's `.mafiaignore`, so that they are
+these generated files to your package's `.mafiaignore`, so that they are
 not considered when calculating the hash. Without this, Mafia will
-rebuild and reinstall the project on every build.
+rebuild and reinstall the package on every build.
 
 
 ### mafia install

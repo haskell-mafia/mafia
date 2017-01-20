@@ -38,7 +38,7 @@ import           P
 
 import           System.IO (IO, stderr)
 
-import           X.Control.Monad.Trans.Either (EitherT, runEitherT, left, hoistEither)
+import           X.Control.Monad.Trans.Either (EitherT, runEitherT, hoistEither)
 
 
 data InitError =
@@ -49,7 +49,6 @@ data InitError =
   | InitInstallError InstallError
   | InitLockError LockError
   | InitParseError File Text
-  | InitCabalFileNotFound Directory
     deriving (Show)
 
 renderInitError :: InitError -> Text
@@ -74,9 +73,6 @@ renderInitError = \case
 
   InitParseError file err ->
     file <> ": parse error: " <> err
-
-  InitCabalFileNotFound dir ->
-    "Could not find a unique cabal file in: " <> dir
 
 ------------------------------------------------------------------------
 
@@ -316,12 +312,8 @@ getMafiaState mprofiling mflags lockFile = do
 
 getCabalFileHash :: Directory -> EitherT InitError IO Hash
 getCabalFileHash dir = do
-  mfile <- getCabalFile dir
-  case mfile of
-    Nothing ->
-      left (InitCabalFileNotFound dir)
-    Just file ->
-      firstT InitHashError (hashFile file)
+  file <- firstT InitCabalError $ getCabalFile dir
+  firstT InitHashError (hashFile file)
 
 getSourceDependencies :: EitherT InitError IO (Set SourcePackage)
 getSourceDependencies = do

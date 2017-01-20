@@ -17,7 +17,6 @@ import           Mafia.Cabal
 import           Mafia.Ghc
 import           Mafia.IO
 import           Mafia.Path
-import           Mafia.Project
 
 import           P
 
@@ -27,16 +26,13 @@ import           X.Control.Monad.Trans.Either (EitherT, hoistEither, left)
 
 
 data LockError =
-    LockProjectError ProjectError
-  | LockCabalError CabalError
+    LockCabalError CabalError
   | LockGhcError GhcError
   | LockFileVersionUnknown File Text
     deriving (Show)
 
 renderLockError :: LockError -> Text
 renderLockError = \case
-  LockProjectError e ->
-    renderProjectError e
   LockCabalError e ->
     renderCabalError e
   LockGhcError e ->
@@ -49,8 +45,8 @@ renderLockError = \case
 getLockFile :: Directory -> EitherT LockError IO File
 getLockFile dir = do
   version <- firstT LockGhcError getGhcVersion
-  project <- firstT LockProjectError $ getProjectName dir
-  return $ dir </> project <> ".lock-" <> renderGhcVersion version
+  name <- fmap dropExtension . firstT LockCabalError $ getCabalFile dir
+  return $ dir </> name <> ".lock-" <> renderGhcVersion version
 
 lockFileHeader :: Text
 lockFileHeader =

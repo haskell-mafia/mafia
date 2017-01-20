@@ -52,29 +52,31 @@ import           P
 
 import           System.IO (IO)
 
-import           X.Control.Monad.Trans.Either (EitherT, left)
+import           X.Control.Monad.Trans.Either (EitherT, left, runEitherT)
 
 ------------------------------------------------------------------------
 
-getCabalFile :: MonadIO m => Directory -> m (Maybe File)
+getCabalFile :: Directory -> EitherT CabalError IO File
 getCabalFile dir = do
-  xs <- filter isCabalFile `liftM` getDirectoryContents dir
+  xs <- filterM isCabalFile =<< getDirectoryListing (RecursiveDepth 0) dir
   case xs of
-    []     -> return Nothing
-    (x:[]) -> return (Just (dir </> x))
-    (_:_)  -> return Nothing
-  where
-    isCabalFile fp =
-      (takeExtension fp) == ".cabal" && not (T.isPrefixOf "." fp)
+    [] ->
+      left $ CabalFileNotFound dir
+    x : [] ->
+      return x
+    _ : _ ->
+      left $ CabalMultipleFilesFound dir xs
+
+isCabalFile :: MonadIO m => File -> m Bool
+isCabalFile file =
+  if takeExtension file == ".cabal" && not (T.isPrefixOf "." file) then
+    doesFileExist file
+  else
+    return False
 
 withCabalFile :: Directory -> (File -> EitherT CabalError IO a) -> EitherT CabalError IO a
 withCabalFile dir io = do
-  mf <- getCabalFile dir
-  case mf of
-    Nothing ->
-      left $ CabalFileNotFound dir
-    Just file ->
-      io file
+  io =<< getCabalFile dir
 
 ------------------------------------------------------------------------
 
@@ -204,10 +206,11 @@ readPackageType cabalFile = do
 
 getPackageId :: Directory -> EitherT CabalError IO (Maybe PackageId)
 getPackageId dir = do
-  mf <- getCabalFile dir
+  mf <- liftIO . runEitherT $ getCabalFile dir
   case mf of
-    Nothing -> return Nothing
-    Just f  -> do
+    Left _ ->
+      return Nothing
+    Right f -> do
       mpid <- readPackageId f
       case mpid of
         Nothing  -> left (CabalCouldNotReadPackageId f)

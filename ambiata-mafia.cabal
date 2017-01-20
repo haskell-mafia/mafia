@@ -77,7 +77,6 @@ library
                     Mafia.Package
                     Mafia.Path
                     Mafia.Process
-                    Mafia.Project
                     Mafia.Script
                     Mafia.Submodule
                     Mafia.Tree
