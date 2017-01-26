@@ -3,8 +3,10 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE LambdaCase #-}
-module Mafia.Init
-  ( Profiling(..)
+module Mafia.Init (
+    Profiling(..)
+  , SourceVintage(..)
+
   , initialize
   , getSourceDependencies
 
@@ -16,9 +18,10 @@ module Mafia.Init
 
 import           Control.Monad.IO.Class (MonadIO(..))
 
-import qualified Data.Aeson as A
 import           Data.Aeson (Value(..), ToJSON(..), FromJSON(..), (.:), (.=))
+import qualified Data.Aeson as A
 import qualified Data.ByteString.Lazy as L
+import qualified Data.Map as Map
 import           Data.Set (Set)
 import qualified Data.Set as Set
 import qualified Data.Text as T
@@ -76,8 +79,8 @@ renderInitError = \case
 
 ------------------------------------------------------------------------
 
-initialize :: Maybe Profiling -> Maybe [Flag] -> EitherT InitError IO ()
-initialize mprofiling mflags = do
+initialize :: SourceVintage -> Maybe Profiling -> Maybe [Flag] -> EitherT InitError IO ()
+initialize dfilter mprofiling mflags = do
   firstT InitGitError initSubmodules
 
   sandboxDir <- firstT InitCabalError initSandbox
@@ -105,7 +108,11 @@ initialize mprofiling mflags = do
   lockFile <- fromMaybe defaultLockFile <$> lookupEnv "MAFIA_LOCK"
 
   previous <- readMafiaState statePath
-  current <- getMafiaState (mprofiling <|> fmap msProfiling previous) (mflags <|> fmap msFlags previous) lockFile
+
+  current <-
+    maybe pure (tryKeepProjectSources dfilter) previous =<<
+    getMafiaState (mprofiling <|> fmap msProfiling previous) (mflags <|> fmap msFlags previous) lockFile
+
   hasSetupConfig <- liftIO $ doesFileExist "dist/setup-config"
 
   packages <- checkPackages
@@ -244,6 +251,11 @@ data Profiling =
   | EnableProfiling
     deriving (Eq, Ord, Show)
 
+data SourceVintage =
+    LatestSources
+  | PermitStaleProjectSources
+    deriving (Eq, Ord, Show)
+
 data MafiaState =
   MafiaState {
       msSourceDependencies :: Set SourcePackage
@@ -297,6 +309,35 @@ parseFlags :: Alternative f => [Text] -> f [Flag]
 parseFlags =
   traverse (maybe empty pure . parseFlag)
 
+tryKeepProjectSources :: SourceVintage -> MafiaState -> MafiaState -> EitherT InitError IO MafiaState
+tryKeepProjectSources vintage previousState currentState =
+  case vintage of
+    LatestSources ->
+      pure currentState
+    PermitStaleProjectSources -> do
+      project <- Map.fromSet (const ()) <$> firstT InitGitError getProjectSources
+
+      let
+        fromSet =
+          Map.fromList .
+          fmap (\x -> (spDirectory x, x)) .
+          Set.toList
+
+        previous =
+          fromSet $ msSourceDependencies previousState
+
+        -- reuse the project source dependencies from the previous state
+        reuse =
+          Map.intersection previous project
+
+        current =
+          Map.union reuse . fromSet $
+          msSourceDependencies currentState
+
+      pure $ currentState {
+          msSourceDependencies = Set.fromList $ Map.elems current
+        }
+
 getMafiaState :: Maybe Profiling -> Maybe [Flag] -> File -> EitherT InitError IO MafiaState
 getMafiaState mprofiling mflags lockFile = do
   sdeps <- getSourceDependencies
@@ -316,9 +357,15 @@ getCabalFileHash dir = do
   firstT InitHashError (hashFile file)
 
 getSourceDependencies :: EitherT InitError IO (Set SourcePackage)
-getSourceDependencies = do
-  sources <- Set.toList <$> firstT InitSubmoduleError getAvailableSources
-  Set.fromList . catMaybes <$> firstT InitCabalError (mapConcurrentlyE getSourcePackage sources)
+getSourceDependencies =
+  getSourcePackages =<< firstT InitSubmoduleError getAvailableSources
+
+getSourcePackages :: Set Directory -> EitherT InitError IO (Set SourcePackage)
+getSourcePackages =
+  fmap (Set.fromList . catMaybes) .
+  firstT InitCabalError .
+  mapConcurrentlyE getSourcePackage .
+  Set.toList
 
 readMafiaState :: File -> EitherT InitError IO (Maybe MafiaState)
 readMafiaState file = do

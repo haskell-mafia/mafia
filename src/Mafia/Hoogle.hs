@@ -46,7 +46,7 @@ hoogle hackageRoot args = do
 
 hooglePackages :: Text -> EitherT MafiaError IO HooglePackagesSandbox
 hooglePackages hackageRoot = do
-  firstT MafiaInitError $ initialize Nothing Nothing
+  firstT MafiaInitError $ initialize LatestSources Nothing Nothing
   db <- hoogleCacheDir
   hoogleExe <- installHoogle
   Out pkgStr <- liftCabal $ cabal "exec" ["--", "ghc-pkg", "list", "--simple-output"]
