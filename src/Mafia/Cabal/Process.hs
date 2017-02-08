@@ -17,7 +17,6 @@ import           Mafia.Process
 
 import           P
 
-import           System.Environment (getEnvironment)
 import           System.IO (IO)
 
 import           X.Control.Monad.Trans.Either (EitherT)
@@ -54,7 +53,7 @@ cabalFrom dir sbcfg extraPath cmd args = do
 
 mkEnv :: SandboxConfigFile -> [Directory] -> IO (Map EnvKey EnvValue)
 mkEnv sbcfg extraPaths =
-  fmap (Map.insert "CABAL_SANDBOX_CONFIG" sbcfg . prependPaths extraPaths) getEnv
+  fmap (Map.insert "CABAL_SANDBOX_CONFIG" sbcfg . prependPaths extraPaths) getEnvironment
 
 prependPaths :: [Directory] -> Map EnvKey EnvValue -> Map EnvKey EnvValue
 prependPaths new kvs =
@@ -67,7 +66,3 @@ prependPaths new kvs =
         Map.insert key (T.intercalate ":" new) kvs
       Just old ->
         Map.insert key (T.intercalate ":" $ new <> T.splitOn ":" old) kvs
-
-getEnv :: IO (Map EnvKey EnvValue)
-getEnv =
-  Map.fromList . fmap (bimap T.pack T.pack) <$> getEnvironment

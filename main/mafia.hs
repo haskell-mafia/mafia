@@ -656,12 +656,13 @@ ensureBuildTools = do
 callMakefile :: File -> EitherT MafiaError IO ()
 callMakefile makeFile = do
   mafia <- getExecutablePath
+  env   <- getEnvironment
   Pass  <- firstT MafiaProcessError
          $ callProcess
          $ Process
          { processCommand     = "make"
          , processArguments   = ["-f", makeFile]
          , processDirectory   = Nothing
-         , processEnvironment = Just (Map.singleton "MAFIA" mafia) }
+         , processEnvironment = Just (Map.insert "MAFIA" mafia env) }
   return ()
 
