@@ -13,6 +13,7 @@ import           Control.Monad.IO.Class (MonadIO(..))
 import           Data.ByteString (ByteString)
 import qualified Data.List as List
 import qualified Data.Set as Set
+import qualified Data.Map as Map
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
 import qualified Data.Text.Lazy.IO as TL
@@ -635,11 +636,15 @@ initMafia :: Profiling -> [Flag] -> EitherT MafiaError IO ()
 initMafia prof flags = do
   -- we just call this for the side-effect, if we can't find a .cabal file then
   -- mafia should fail fast and not polute the directory with a sandbox.
-  (_ :: File) <- firstT MafiaCabalError $ getCabalFile =<< getCurrentDirectory
+  (cabalFile :: File) <- firstT MafiaCabalError $ getCabalFile =<< getCurrentDirectory
 
   ensureBuildTools
 
   firstT MafiaInitError $ initialize (Just prof) (Just flags)
+
+  let makeFile = dropExtension cabalFile <> ".mk"
+  whenM (doesFileExist makeFile) $ do
+    callMakefile makeFile
 
 ensureBuildTools :: EitherT MafiaError IO ()
 ensureBuildTools = do
@@ -647,3 +652,16 @@ ensureBuildTools = do
 
   firstT MafiaBinError . for_ tools $ \(BuildTool name constraints) ->
     installOnPath (InstallPackageName name) constraints
+
+callMakefile :: File -> EitherT MafiaError IO ()
+callMakefile makeFile = do
+  mafia <- getExecutablePath
+  Pass  <- firstT MafiaProcessError
+         $ callProcess
+         $ Process
+         { processCommand     = "make"
+         , processArguments   = ["-f", makeFile]
+         , processDirectory   = Nothing
+         , processEnvironment = Just (Map.singleton "MAFIA" mafia) }
+  return ()
+
