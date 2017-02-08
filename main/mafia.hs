@@ -642,7 +642,8 @@ initMafia prof flags = do
 
   firstT MafiaInitError $ initialize (Just prof) (Just flags)
 
-  buildMakefile
+  directory <- firstT MafiaCabalError $ getCurrentDirectory
+  buildMakefile directory
 
 ensureBuildTools :: EitherT MafiaError IO ()
 ensureBuildTools = do

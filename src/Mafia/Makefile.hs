@@ -18,9 +18,9 @@ import           System.IO (IO)
 
 import           X.Control.Monad.Trans.Either (EitherT)
 
-buildMakefile :: EitherT MafiaError IO ()
-buildMakefile = do
-  cabalFile <- firstT MafiaCabalError $ getCabalFile =<< getCurrentDirectory
+buildMakefile :: Path -> EitherT MafiaError IO ()
+buildMakefile directory = do
+  cabalFile <- firstT MafiaCabalError $ getCabalFile directory
   let makeFile = dropExtension cabalFile <> ".mk"
   whenM (doesFileExist makeFile) $ do
     callMakefile makeFile
