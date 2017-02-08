@@ -75,6 +75,7 @@ library
                     Mafia.Init
                     Mafia.Install
                     Mafia.Lock
+                    Mafia.Makefile
                     Mafia.Package
                     Mafia.Path
                     Mafia.Process

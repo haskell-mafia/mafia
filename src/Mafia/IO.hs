@@ -41,6 +41,7 @@ module Mafia.IO
   , lookupEnv
   , setEnv
   , unsetEnv
+  , getEnvironment
 
     -- * Pre-defined directories
   , getHomeDirectory
@@ -63,6 +64,8 @@ import           Control.Monad.Trans.Maybe (MaybeT(..))
 
 import           Data.ByteString (ByteString)
 import qualified Data.ByteString as B
+import           Data.Map (Map)
+import qualified Data.Map as Map
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import           Data.Time (UTCTime)
@@ -230,6 +233,11 @@ setEnv key value = liftIO $
 unsetEnv :: MonadIO m => Text -> m ()
 unsetEnv key = liftIO $
   Environment.unsetEnv (T.unpack key)
+
+getEnvironment :: MonadIO m => m (Map Text Text)
+getEnvironment =
+  Map.fromList . fmap (bimap T.pack T.pack) <$> liftIO Environment.getEnvironment
+
 
 ------------------------------------------------------------------------
 -- Pre-defined directories

@@ -13,7 +13,6 @@ module Mafia.Process
   , EnvKey
   , EnvValue
   , Process(..)
-  , getEnvironment
 
     -- * Outputs
   , Pass(..)
@@ -64,7 +63,6 @@ import           Mafia.IO (setCurrentDirectory)
 
 import           P
 
-import qualified System.Environment as Env
 import           System.Exit (ExitCode(..))
 import           System.IO (IO, FilePath, Handle, BufferMode(..))
 import qualified System.IO as IO
@@ -86,10 +84,6 @@ data Process = Process
   , processDirectory   :: Maybe Directory
   , processEnvironment :: Maybe (Map EnvKey EnvValue)
   } deriving (Eq, Ord, Show)
-
-getEnvironment :: MonadIO m => m (Map EnvKey EnvValue)
-getEnvironment =
-  Map.fromList . fmap (bimap T.pack T.pack) <$> liftIO Env.getEnvironment
 
 ------------------------------------------------------------------------
 

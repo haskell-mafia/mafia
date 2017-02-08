@@ -14,6 +14,7 @@ import qualified Data.Text as T
 
 import           Mafia.Cabal.Types
 import           Mafia.Process
+import           Mafia.IO (getEnvironment)
 
 import           P
 
