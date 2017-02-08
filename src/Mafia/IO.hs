@@ -234,7 +234,7 @@ unsetEnv :: MonadIO m => Text -> m ()
 unsetEnv key = liftIO $
   Environment.unsetEnv (T.unpack key)
 
-getEnvironment :: MonadIO m => m (Map Text Text)
+getEnvironment :: (Functor m, MonadIO m) => m (Map Text Text)
 getEnvironment =
   Map.fromList . fmap (bimap T.pack T.pack) <$> liftIO Environment.getEnvironment
 
