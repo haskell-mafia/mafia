@@ -27,8 +27,10 @@ import           Mafia.Ghc
 import           Mafia.Hoogle
 import           Mafia.IO
 import           Mafia.Init
+import           Mafia.Include
 import           Mafia.Install
 import           Mafia.Lock
+import           Mafia.Makefile
 import           Mafia.Package
 import           Mafia.Path
 import           Mafia.Process
@@ -48,6 +50,7 @@ import           X.Options.Applicative (Parser, CommandFields, Mod, ReadM)
 import           X.Options.Applicative (argument, textRead, metavar, help, long, short)
 import           X.Options.Applicative (option, flag, flag', eitherTextReader, eitherReader)
 import           X.Options.Applicative (cli, subparser, command')
+
 
 ------------------------------------------------------------------------
 
@@ -89,6 +92,7 @@ data MafiaCommand =
   | MafiaInstall [Constraint] InstallPackage
   | MafiaScript Path [Argument]
   | MafiaExec [Argument]
+  | MafiaCFlags
     deriving (Eq, Show)
 
 data Warnings =
@@ -148,6 +152,8 @@ run = \case
     mafiaScript path args
   MafiaExec args ->
     mafiaExec args
+  MafiaCFlags ->
+    mafiaCFlags
 
 parser :: Parser MafiaCommand
 parser =
@@ -222,6 +228,9 @@ commands =
 
  , command' "exec" ( ghciText <> " Exec the provided command line in the local cabal sandbox." )
             (MafiaExec <$> many pCabalArgs)
+
+ , command' "cflags" ( ghciText <> " Print the flags required to compile C sources" )
+            (pure MafiaCFlags)
 
  ]
   where
@@ -533,6 +542,16 @@ mafiaExec args = do
   exec MafiaProcessError "cabal" $ "exec" : fixedArgs
 
 
+mafiaCFlags :: EitherT MafiaError IO ()
+mafiaCFlags = do
+  dirs <- getIncludeDirs
+  printIncludes dirs
+ where
+  printIncludes dirs = liftIO $ do
+    mapM_ (\d -> T.putStr " -I" >> T.putStr d) dirs
+    T.putStrLn ""
+
+
 ghciArgs :: [GhciInclude] -> [File] -> EitherT MafiaError IO [Argument]
 ghciArgs extraIncludes paths = do
   mapM_ checkEntryPoint paths
@@ -623,9 +642,13 @@ initMafia prof flags = do
 
   firstT MafiaInitError $ initialize (Just prof) (Just flags)
 
+  directory <- firstT MafiaCabalError $ getCurrentDirectory
+  buildMakefile directory
+
 ensureBuildTools :: EitherT MafiaError IO ()
 ensureBuildTools = do
   tools <- firstT MafiaCabalError $ getBuildTools =<< getCurrentDirectory
 
   firstT MafiaBinError . for_ tools $ \(BuildTool name constraints) ->
     installOnPath (InstallPackageName name) constraints
+

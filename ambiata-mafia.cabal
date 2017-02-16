@@ -71,9 +71,11 @@ library
                     Mafia.Home
                     Mafia.Hoogle
                     Mafia.IO
+                    Mafia.Include
                     Mafia.Init
                     Mafia.Install
                     Mafia.Lock
+                    Mafia.Makefile
                     Mafia.Package
                     Mafia.Path
                     Mafia.Process
