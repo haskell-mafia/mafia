@@ -19,6 +19,7 @@ module Mafia.Install
 import           Control.Exception (SomeException)
 import           Control.Monad.IO.Class (MonadIO(..))
 import           Control.Parallel.Strategies (rpar, parMap)
+import qualified Control.Retry as Retry
 
 import           Data.Bits (Bits(..))
 import qualified Data.ByteString as B
@@ -362,7 +363,7 @@ createPackageSandbox penv p@(Package (PackageRef pid _ msrc) deps _) = do
       let
         srcdir = sbsrc </> renderPackageId pid
 
-      capture (InstallUnpackFailed pid sbsrc) $
+      retryOnLeft (unpackRetryMessage pid) . capture (InstallUnpackFailed pid sbsrc) $
         sbcabal "unpack" ["--destdir=" <> sbsrc, renderPackageId pid]
 
       Hush <- sbcabal "sandbox" ["add-source", srcdir]
@@ -419,8 +420,8 @@ detectBuildTools (Package (PackageRef pid _ msrc) _ _) =
   case msrc of
     -- hackage package
     Nothing ->
-      withSystemTempDirectory "mafia-build-tools-" $ \tmp -> do
-        capture (InstallUnpackFailed pid tmp) . firstT InstallCabalError $
+      withSystemTempDirectory "mafia-detect-build-tools-" $ \tmp -> do
+        retryOnLeft (unpackRetryMessage pid) . capture (InstallUnpackFailed pid tmp) . firstT InstallCabalError $
           cabal "unpack" ["--destdir=" <> tmp, renderPackageId pid]
         firstT InstallCabalError .
           getBuildTools $ tmp </> renderPackageId pid
@@ -429,6 +430,34 @@ detectBuildTools (Package (PackageRef pid _ msrc) _ _) =
     Just src ->
       firstT InstallCabalError .
         getBuildTools $ spDirectory src
+
+unpackRetryMessage :: PackageId -> Text
+unpackRetryMessage pid =
+  "Retrying download of " <> renderPackageId pid <> "..."
+
+retryOnLeft :: Text -> EitherT InstallError IO a -> EitherT InstallError IO a
+retryOnLeft msg io =
+  let
+    retries =
+      5
+
+    policy =
+      Retry.exponentialBackoff 500000 {- 0.5s -} <>
+      Retry.limitRetries retries
+
+    check status = \case
+      Left e -> do
+        when (Retry.rsIterNumber status <= retries) $
+          T.hPutStrLn stderr $ renderInstallError e
+        pure True
+
+      Right _ ->
+        pure False
+  in
+    EitherT . Retry.retrying policy check $ \status -> do
+      when (Retry.rsIterNumber status > 0) $
+        T.hPutStrLn stderr msg
+      runEitherT io
 
 link :: Directory -> PackageEnv -> Package -> EitherT InstallError IO ()
 link db env p@(Package (PackageRef pid _ _) _ _) = do
