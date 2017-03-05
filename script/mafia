@@ -25,9 +25,10 @@ build_version() {
         exit "$got"
     }
     chmod +x "$MAFIA_TEMP/.cabal-sandbox/bin/mafia"
-    # Ensure it executable is on same file-system so final mv is atomic.
+    # Ensure executable is on same file-system so final mv is atomic.
     mv -f "$MAFIA_TEMP/.cabal-sandbox/bin/mafia" "$MAFIA_PATH.$$"
     mv "$MAFIA_PATH.$$" "$MAFIA_PATH" || {
+        rm -f "$MAFIA_PATH.$$"
         echo "INFO: mafia version ($MAFIA_VERSION) already exists not overiding," >&2
         echo "INFO: this is expected if parallel builds of the same version of" >&2
         echo "INFO: mafia occur, we are playing by first in, wins." >&2
