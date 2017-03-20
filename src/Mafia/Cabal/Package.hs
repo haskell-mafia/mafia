@@ -28,13 +28,16 @@ import qualified Data.Set as Set
 import qualified Data.Text as T
 
 import           Distribution.Package (Dependency(..))
+import qualified Distribution.Package as Cabal (PackageIdentifier(..))
 import qualified Distribution.Package as Cabal (PackageName(..))
 import           Distribution.PackageDescription (BuildInfo(..))
 import           Distribution.PackageDescription (CondTree(..))
 import           Distribution.PackageDescription (Executable(..))
 import           Distribution.PackageDescription (GenericPackageDescription(..))
 import           Distribution.PackageDescription (libBuildInfo)
+import qualified Distribution.PackageDescription as Cabal (GenericPackageDescription(..))
 import qualified Distribution.PackageDescription as Cabal (Library(..))
+import qualified Distribution.PackageDescription as Cabal (PackageDescription(..))
 import           Distribution.PackageDescription.Parse (ParseResult(..))
 import           Distribution.PackageDescription.Parse (parsePackageDescription)
 import           Distribution.Version (VersionRange, anyVersion, asVersionIntervals)
@@ -211,33 +214,28 @@ getPackageId dir = do
     Left _ ->
       return Nothing
     Right f -> do
-      mpid <- readPackageId f
-      case mpid of
-        Nothing  -> left (CabalCouldNotReadPackageId f)
-        Just pid -> return (Just pid)
+      liftM Just $ readPackageId f
 
-readPackageId :: MonadIO m => File -> m (Maybe PackageId)
-readPackageId cabalFile = do
-  text <- fromMaybe T.empty `liftM` readUtf8 cabalFile
+readPackageId :: MonadIO m => File -> EitherT CabalError m PackageId
+readPackageId file = do
+  msrc <- liftM T.unpack `liftM` readUtf8 file
+  case msrc of
+    Nothing ->
+      left $ CabalCouldNotReadPackageId file
+    Just src ->
+      case parsePackageDescription src of
+        ParseFailed err ->
+          left $ CabalFileParseError file err
+        ParseOk _ gpd ->
+          return $ takePackageId gpd
 
-  let findName    = fmap mkPackageName . findField "name"
-      findVersion = (parseVersion =<<) . findField "version"
-
-  let lines   = fmap T.words (T.lines text)
-      name    = listToMaybe . mapMaybe findName    $ lines
-      version = listToMaybe . mapMaybe findVersion $ lines
-
-  return (PackageId <$> name <*> version)
-
-findField :: Text -> [Text] -> Maybe Text
-findField field = \case
-  (key:value:_)
-    | T.toLower (field <> ":") == T.toLower key ->
-    Just value
-  (_:_) ->
-    Nothing
-  [] ->
-    Nothing
+takePackageId :: GenericPackageDescription -> PackageId
+takePackageId gpd =
+  let
+    Cabal.PackageIdentifier (Cabal.PackageName name) version =
+      Cabal.package $ Cabal.packageDescription gpd
+  in
+    PackageId (mkPackageName $ T.pack name) version
 
 ------------------------------------------------------------------------
 

@@ -541,7 +541,6 @@ mafiaExec args = do
           (x:xs) -> x : "--" : xs
   exec MafiaProcessError "cabal" $ "exec" : fixedArgs
 
-
 mafiaCFlags :: EitherT MafiaError IO ()
 mafiaCFlags = do
   dirs <- getIncludeDirs
@@ -550,7 +549,6 @@ mafiaCFlags = do
   printIncludes dirs = liftIO $ do
     mapM_ (\d -> T.putStr " -I" >> T.putStr d) dirs
     T.putStrLn ""
-
 
 ghciArgs :: [GhciInclude] -> [File] -> EitherT MafiaError IO [Argument]
 ghciArgs extraIncludes paths = do
@@ -651,4 +649,3 @@ ensureBuildTools = do
 
   firstT MafiaBinError . for_ tools $ \(BuildTool name constraints) ->
     installOnPath (InstallPackageName name) constraints
-
