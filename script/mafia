@@ -1,122 +1,62 @@
 #!/bin/sh -eu
 
 : ${MAFIA_HOME:=$HOME/.mafia}
-
-fetch_latest () {
-  if [ -z ${MAFIA_TEST_MODE+x} ]; then
-    TZ=$(date +"%T")
-    curl --silent "https://raw.githubusercontent.com/ambiata/mafia/master/script/mafia?$TZ"
-  else
-    cat ../script/mafia
-  fi
-}
+: ${MAFIA_VERSIONS:=$MAFIA_HOME/versions}
 
 latest_version () {
-  git ls-remote https://github.com/ambiata/mafia | grep refs/heads/master | cut -f 1
+    git ls-remote https://github.com/ambiata/mafia | grep refs/heads/master | cut -f 1
 }
 
-local_version () {
-  awk '/^# Version: / { print $3; exit 0; }' $0
+build_version() {
+    MAFIA_VERSION="$1"
+    MAFIA_TEMP=$(mktemp -d 2>/dev/null || mktemp -d -t 'exec_mafia')
+    MAFIA_FILE=mafia-$MAFIA_VERSION
+    MAFIA_PATH=$MAFIA_VERSIONS/$MAFIA_FILE
+    mkdir -p $MAFIA_VERSIONS
+    echo "Building $MAFIA_FILE in $MAFIA_TEMP"
+    git clone https://github.com/ambiata/mafia $MAFIA_TEMP
+    git --git-dir="$MAFIA_TEMP/.git" --work-tree="$MAFIA_TEMP" reset --hard $MAFIA_VERSION || {
+        echo "mafia version ($MAFIA_VERSION) could not be found." >&2
+        exit 1
+    }
+    (cd "$MAFIA_TEMP" && ./bin/bootstrap) || {
+        got=$?
+        echo "mafia version ($MAFIA_VERSION) could not be built." >&2
+        exit "$got"
+    }
+    chmod +x "$MAFIA_TEMP/.cabal-sandbox/bin/mafia"
+    # Ensure executable is on same file-system so final mv is atomic.
+    mv -f "$MAFIA_TEMP/.cabal-sandbox/bin/mafia" "$MAFIA_PATH.$$"
+    mv "$MAFIA_PATH.$$" "$MAFIA_PATH" || {
+        rm -f "$MAFIA_PATH.$$"
+        echo "INFO: mafia version ($MAFIA_VERSION) already exists not overiding," >&2
+        echo "INFO: this is expected if parallel builds of the same version of" >&2
+        echo "INFO: mafia occur, we are playing by first in, wins." >&2
+        exit 0
+    }
 }
 
-run_upgrade () {
-  MAFIA_TEMP=$(mktemp 2>/dev/null || mktemp -t 'upgrade_mafia')
-
-  clean_up () {
-    rm -f "$MAFIA_TEMP"
-  }
-
-  trap clean_up EXIT
-
-  MAFIA_CUR="$0"
-
-  if [ -L "$MAFIA_CUR" ]; then
-    echo 'Refusing to overwrite a symlink; run `upgrade` from the canonical path.' >&2
-    exit 1
-  fi
-
-  echo "Checking for a new version of mafia ..."
-  fetch_latest > $MAFIA_TEMP
-
-  LATEST_VERSION=$(latest_version)
-  echo "# Version: $LATEST_VERSION" >> $MAFIA_TEMP
-
-  if ! cmp $MAFIA_CUR $MAFIA_TEMP >/dev/null 2>&1; then
-    mv $MAFIA_TEMP $MAFIA_CUR
-    chmod +x $MAFIA_CUR
-    echo "New version found and upgraded. You can now commit it to your git repo."
-  else
-    echo "You have latest mafia."
-  fi
+enable_version() {
+    if [ $# -ne 0 ]; then
+        MAFIA_VERSION="$(latest_version)"
+        echo "INFO: No explicit mafia version requested installing latest ($MAFIA_VERSION)." >&2
+    else
+        MAFIA_VERSION="$1"
+    fi
+    [ -x "$MAFIA_HOME/versions/mafia-$MAFIA_VERSION" ] || build_version "$MAFIA_VERSION"
+    ln -sf "$MAFIA_HOME/versions/mafia-$MAFIA_VERSION" "$MAFIA_HOME/versions/mafia"
 }
 
 exec_mafia () {
-  MAFIA_VERSION=$(local_version)
-
-  if [ "x$MAFIA_VERSION" = "x" ]; then
-    # If we can't find the mafia version, then we need to upgrade the script.
-    run_upgrade
-  else
-    MAFIA_BIN=$MAFIA_HOME/bin
-    MAFIA_FILE=mafia-$MAFIA_VERSION
-    MAFIA_PATH=$MAFIA_BIN/$MAFIA_FILE
-
-    [ -f "$MAFIA_PATH" ] || {
-      # Create a temporary directory which will be deleted when the script
-      # terminates. Unfortunately `mktemp` doesn't behave the same on
-      # Linux and OS/X so we need to try two different approaches.
-      MAFIA_TEMP=$(mktemp -d 2>/dev/null || mktemp -d -t 'exec_mafia')
-
-      # Create a temporary file in MAFIA_BIN so we can do an atomic copy/move dance.
-      mkdir -p $MAFIA_BIN
-
-      clean_up () {
-        rm -rf "$MAFIA_TEMP"
-      }
-
-      trap clean_up EXIT
-
-      echo "Building $MAFIA_FILE in $MAFIA_TEMP"
-
-      ( cd "$MAFIA_TEMP"
-
-        git clone https://github.com/ambiata/mafia
-        cd mafia
-
-        git reset --hard $MAFIA_VERSION
-
-        bin/bootstrap ) || exit $?
-
-      MAFIA_PATH_TEMP=$(mktemp --tmpdir=$MAFIA_BIN $MAFIA_FILE-XXXXXX 2>/dev/null || TMPDIR=$MAFIA_BIN mktemp -t $MAFIA_FILE)
-
-      clean_up_temp () {
-        clean_up
-        rm -f "$MAFIA_PATH_TEMP"
-      }
-      trap clean_up_temp EXIT
-
-      cp "$MAFIA_TEMP/mafia/.cabal-sandbox/bin/mafia" "$MAFIA_PATH_TEMP"
-      chmod 755 "$MAFIA_PATH_TEMP"
-      mv "$MAFIA_PATH_TEMP" "$MAFIA_PATH"
-
-      clean_up_temp
-    }
-
-    exec $MAFIA_PATH "$@"
-  fi
+    [ -x "$MAFIA_HOME/versions/mafia" ] || enable_version
+    "$MAFIA_HOME/versions/mafia" "$@"
 }
 
 #
 # The actual start of the script.....
 #
 
-if [ $# -gt 0 ]; then
-  MODE="$1"
-else
-  MODE=""
-fi
-
-case "$MODE" in
-upgrade) shift; run_upgrade "$@" ;;
+case "${1:-}" in
+upgrade) shift; enable_version "$@" ;;
 *) exec_mafia "$@"
 esac
