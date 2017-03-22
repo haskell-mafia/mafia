@@ -37,7 +37,7 @@ build_version() {
 }
 
 enable_version() {
-    if [ $# -eq 0 ]; then
+    if [ $# -ne 0 ]; then
         MAFIA_VERSION="$(latest_version)"
         echo "INFO: No explicit mafia version requested installing latest ($MAFIA_VERSION)." >&2
     else
@@ -57,6 +57,6 @@ exec_mafia () {
 #
 
 case "${1:-}" in
-set-mafia-version) shift; enable_version "$@" ;;
+upgrade) shift; enable_version "$@" ;;
 *) exec_mafia "$@"
 esac
