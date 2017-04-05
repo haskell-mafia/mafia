@@ -209,7 +209,8 @@ createProcessAnnihilate cp = do
       let ignoreIOE (_ :: IOException) = return Nothing
       handle ignoreIOE (Just <$> Posix.getProcessGroupIDOf h)
 
-  killer = Signals.signalProcessGroup Signals.killProcess
+  -- SIGQUIT
+  killer = Signals.signalProcessGroup Signals.keyboardTermination
 
 
 class ProcessResult a where
