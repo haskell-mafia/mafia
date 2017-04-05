@@ -17,6 +17,7 @@ module Mafia.Process
     -- * Outputs
   , Pass(..)
   , PassErr(..)
+  , PassErrAnnihilate(..)
   , Clean(..)
   , Hush(..)
   , Out(..)
@@ -67,7 +68,9 @@ import           System.Exit (ExitCode(..))
 import           System.IO (IO, FilePath, Handle, BufferMode(..))
 import qualified System.IO as IO
 import qualified System.Process as Process
+import qualified System.Process.Internals as ProcessInternals
 import qualified System.Posix.Process as Posix
+import qualified System.Posix.Signals as Signals
 
 import           X.Control.Monad.Trans.Either (EitherT, pattern EitherT)
 import           X.Control.Monad.Trans.Either (hoistEither, left)
@@ -95,6 +98,11 @@ data Pass =
 -- | Pass @stdout@ and @stderr@ through to the console, but redirect @stdout@ > @stderr.
 data PassErr =
   PassErr
+  deriving (Eq, Ord, Show)
+
+-- | Pass @stdout@ and @stderr@ through to the console, but redirect @stdout@ > @stderr; also kill *everything* on Ctrl-C.
+data PassErrAnnihilate =
+  PassErrAnnihilate
   deriving (Eq, Ord, Show)
 
 -- | Pass @stdout@ and @stderr@ through to the console, but process control
@@ -174,6 +182,36 @@ renderProcessError = \case
 
 ------------------------------------------------------------------------
 
+createProcess :: MonadIO m => Process.CreateProcess -> m (Maybe Handle, Maybe Handle, Maybe Handle, Process.ProcessHandle)
+createProcess = liftIO . Process.createProcess
+
+-- Spawn a new process, and if we get a ctrl-c, make absolutely sure everything we started is finished.
+createProcessAnnihilate :: MonadIO m => Process.CreateProcess -> m (Maybe Handle, Maybe Handle, Maybe Handle, Process.ProcessHandle)
+createProcessAnnihilate cp = do
+  (a, b, c, pid) <- createProcess cp { Process.create_group = True }
+
+  pgid <- liftIO $ ProcessInternals.withProcessHandle pid getPgid
+  case pgid of
+   Just pgid' -> do
+    _ <- liftIO $ Signals.installHandler Signals.keyboardSignal (Signals.Catch $ killer pgid') Nothing
+    return ()
+   Nothing -> return ()
+
+  return (a, b, c, pid)
+ where
+  getPid = \case
+   ProcessInternals.OpenHandle i -> Just i
+   ProcessInternals.ClosedHandle _ -> Nothing
+
+  getPgid i = case getPid i of
+    Nothing -> return Nothing
+    Just h -> do
+      let ignoreIOE (_ :: IOException) = return Nothing
+      handle ignoreIOE (Just <$> Posix.getProcessGroupIDOf h)
+
+  killer = Signals.signalProcessGroup Signals.killProcess
+
+
 class ProcessResult a where
   callProcess :: (Functor m, MonadIO m, MonadCatch m)
               => Process -> EitherT ProcessError m a
@@ -182,7 +220,7 @@ instance ProcessResult Pass where
   callProcess p = withProcess p $ do
     let cp = fromProcess p
 
-    (Nothing, Nothing, Nothing, pid) <- liftIO (Process.createProcess cp)
+    (Nothing, Nothing, Nothing, pid) <- createProcess cp
 
     code <- liftIO (Process.waitForProcess pid)
     return (code, Pass)
@@ -191,16 +229,25 @@ instance ProcessResult PassErr where
   callProcess p = withProcess p $ do
     let cp = (fromProcess p) { Process.std_out = Process.UseHandle IO.stderr }
 
-    (Nothing, Nothing, Nothing, pid) <- liftIO (Process.createProcess cp)
+    (Nothing, Nothing, Nothing, pid) <- createProcess cp
 
     code <- liftIO (Process.waitForProcess pid)
     return (code, PassErr)
+
+instance ProcessResult PassErrAnnihilate where
+  callProcess p = withProcess p $ do
+    let cp = (fromProcess p) { Process.std_out = Process.UseHandle IO.stderr }
+
+    (Nothing, Nothing, Nothing, pid) <- createProcessAnnihilate cp
+
+    code <- liftIO (Process.waitForProcess pid)
+    return (code, PassErrAnnihilate)
 
 instance ProcessResult (Out ByteString) where
   callProcess p = withProcess p $ do
     let cp = (fromProcess p) { Process.std_out = Process.CreatePipe }
 
-    (Nothing, Just hOut, Nothing, pid) <- liftIO (Process.createProcess cp)
+    (Nothing, Just hOut, Nothing, pid) <- createProcess cp
 
     out  <- liftIO (B.hGetContents hOut)
     code <- liftIO (Process.waitForProcess pid)
@@ -211,7 +258,7 @@ instance ProcessResult (Err ByteString) where
   callProcess p = withProcess p $ do
     let cp = (fromProcess p) { Process.std_err = Process.CreatePipe }
 
-    (Nothing, Nothing, Just hErr, pid) <- liftIO (Process.createProcess cp)
+    (Nothing, Nothing, Just hErr, pid) <- createProcess cp
 
     err  <- liftIO (B.hGetContents hErr)
     code <- liftIO (Process.waitForProcess pid)
@@ -223,7 +270,7 @@ instance ProcessResult (OutErr ByteString) where
     let cp = (fromProcess p) { Process.std_out = Process.CreatePipe
                              , Process.std_err = Process.CreatePipe }
 
-    (Nothing, Just hOut, Just hErr, pid) <- liftIO (Process.createProcess cp)
+    (Nothing, Just hOut, Just hErr, pid) <- createProcess cp
 
     asyncOut <- liftIO (async (B.hGetContents hOut))
     asyncErr <- liftIO (async (B.hGetContents hErr))
@@ -239,7 +286,7 @@ instance ProcessResult (OutErrCode ByteString) where
     let cp = (fromProcess p) { Process.std_out = Process.CreatePipe
                              , Process.std_err = Process.CreatePipe }
 
-    (Nothing, Just hOut, Just hErr, pid) <- liftIO (Process.createProcess cp)
+    (Nothing, Just hOut, Just hErr, pid) <- createProcess cp
 
     asyncOut <- liftIO (async (B.hGetContents hOut))
     asyncErr <- liftIO (async (B.hGetContents hErr))
@@ -260,7 +307,7 @@ instance ProcessResult Clean where
     let cp = (fromProcess p) { Process.std_out = Process.CreatePipe
                              , Process.std_err = Process.CreatePipe }
 
-    (Nothing, Just hOut, Just hErr, pid) <- liftIO (Process.createProcess cp)
+    (Nothing, Just hOut, Just hErr, pid) <- createProcess cp
 
     asyncOut <- liftIO (async (clean hOut IO.stdout))
     asyncErr <- liftIO (async (clean hErr IO.stderr))
