@@ -69,6 +69,7 @@ import           System.IO (IO, FilePath, Handle, BufferMode(..))
 import qualified System.IO as IO
 import qualified System.Process as Process
 import qualified System.Process.Internals as ProcessInternals
+import qualified System.Posix.Types   as Posix
 import qualified System.Posix.Process as Posix
 import qualified System.Posix.Signals as Signals
 
@@ -186,31 +187,33 @@ createProcess :: MonadIO m => Process.CreateProcess -> m (Maybe Handle, Maybe Ha
 createProcess = liftIO . Process.createProcess
 
 -- Spawn a new process, and if we get a ctrl-c, make absolutely sure everything we started is finished.
-createProcessAnnihilate :: MonadIO m => Process.CreateProcess -> m (Maybe Handle, Maybe Handle, Maybe Handle, Process.ProcessHandle)
+createProcessAnnihilate :: (MonadIO m, MonadCatch m) => Process.CreateProcess -> m (Maybe Handle, Maybe Handle, Maybe Handle, Process.ProcessHandle)
 createProcessAnnihilate cp = do
-  (a, b, c, pid) <- createProcess cp { Process.create_group = True }
+  (a, b, c, ph) <- createProcess cp { Process.create_group = True }
+  pgid <- tryProcessGroupOfProcessHandle ph
+  fromMaybe (return ()) (installInterruptHandler <$> pgid)
+  return (a, b, c, ph)
 
-  pgid <- liftIO $ ProcessInternals.withProcessHandle pid getPgid
-  case pgid of
-   Just pgid' -> do
-    _ <- liftIO $ Signals.installHandler Signals.keyboardSignal (Signals.Catch $ killer pgid') Nothing
-    return ()
-   Nothing -> return ()
+tryPosixPidOfProcessHandle :: MonadIO m => Process.ProcessHandle -> m (Maybe Posix.ProcessID)
+tryPosixPidOfProcessHandle ph =
+  liftIO $ ProcessInternals.withProcessHandle ph $
+   \case
+    ProcessInternals.OpenHandle i   -> return $ Just i
+    ProcessInternals.ClosedHandle _ -> return $ Nothing
 
-  return (a, b, c, pid)
+tryProcessGroupOfProcessHandle :: (MonadIO m, MonadCatch m) => Process.ProcessHandle -> m (Maybe Posix.ProcessGroupID)
+tryProcessGroupOfProcessHandle ph = do
+  pid <- tryPosixPidOfProcessHandle ph
+  case pid of
+   Nothing -> return Nothing
+   Just h  -> handle ignoreIOE (Just <$> liftIO (Posix.getProcessGroupIDOf h))
  where
-  getPid = \case
-   ProcessInternals.OpenHandle i -> Just i
-   ProcessInternals.ClosedHandle _ -> Nothing
+  ignoreIOE (_ :: IOException) = return Nothing
 
-  getPgid i = case getPid i of
-    Nothing -> return Nothing
-    Just h -> do
-      let ignoreIOE (_ :: IOException) = return Nothing
-      handle ignoreIOE (Just <$> Posix.getProcessGroupIDOf h)
-
-  -- SIGQUIT
-  killer = Signals.signalProcessGroup Signals.keyboardTermination
+installInterruptHandler :: MonadIO m => Posix.ProcessGroupID -> m ()
+installInterruptHandler pgid = do
+  _ <- liftIO $ Signals.installHandler Signals.keyboardSignal (Signals.Catch $ Signals.signalProcessGroup Signals.keyboardTermination pgid) Nothing
+  return ()
 
 
 class ProcessResult a where
