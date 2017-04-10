@@ -206,7 +206,9 @@ tryProcessGroupOfProcessHandle ph = do
   pid <- tryPosixPidOfProcessHandle ph
   case pid of
    Nothing -> return Nothing
-   Just h  -> handle ignoreIOE (Just <$> liftIO (Posix.getProcessGroupIDOf h))
+   Just h  -> handle ignoreIOE $ do
+    pgid <- liftIO (Posix.getProcessGroupIDOf h)
+    return $ Just pgid
  where
   ignoreIOE (_ :: IOException) = return Nothing
 
