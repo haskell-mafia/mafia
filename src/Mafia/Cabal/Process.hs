@@ -3,6 +3,7 @@
 module Mafia.Cabal.Process
   ( cabal
   , cabal_
+  , cabalAnnihilate
   , cabalFrom
   ) where
 
@@ -30,6 +31,12 @@ cabal_ :: Argument -> [Argument] -> EitherT CabalError IO ()
 cabal_ cmd args = do
   PassErr <- cabal cmd args
   return ()
+
+cabalAnnihilate :: Argument -> [Argument] -> EitherT CabalError IO ()
+cabalAnnihilate cmd args = do
+  PassErrAnnihilate <- cabal cmd args
+  return ()
+
 
 cabalFrom ::
   ProcessResult a =>

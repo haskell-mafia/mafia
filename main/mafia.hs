@@ -469,7 +469,7 @@ mafiaBuild p w dump flags args = do
 mafiaTest :: [Flag] -> [Argument] -> EitherT MafiaError IO ()
 mafiaTest flags args = do
   initMafia DisableProfiling flags
-  liftCabal . cabal_ "test" $ ["-j", "--show-details=streaming"] <> args
+  liftCabal . cabalAnnihilate "test" $ ["-j", "--show-details=streaming"] <> args
 
 mafiaTestCI :: [Flag] -> [Argument] -> EitherT MafiaError IO ()
 mafiaTestCI flags args = do
@@ -485,7 +485,7 @@ mafiaRepl flags args = do
 mafiaBench :: [Flag] -> [Argument] -> EitherT MafiaError IO ()
 mafiaBench flags args = do
   initMafia DisableProfiling flags
-  liftCabal $ cabal_ "bench" args
+  liftCabal $ cabalAnnihilate "bench" args
 
 mafiaLock :: [Flag] -> EitherT MafiaError IO ()
 mafiaLock flags = do
