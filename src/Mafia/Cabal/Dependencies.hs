@@ -190,7 +190,10 @@ makeInstallPlan mdir sourcePkgs installArgs = do
       installDryRun args =
         cabal "install" $
           [ "--reorder-goals"
-          , "--max-backjumps=-1"
+            -- 10^3 is an arbitrary "should be enough for anyone" number,
+            -- used rather than -1 to avoid running forever in build scripts
+            -- et cetera.
+          , "--max-backjumps=1000"
           , "--avoid-reinstalls"
           , "--dry-run" ] <> installArgs <> args
 
