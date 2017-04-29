@@ -26,6 +26,7 @@ import qualified Data.List as List
 import           Data.Set (Set)
 import qualified Data.Set as Set
 import qualified Data.Text as T
+import qualified Data.Text.IO as T
 
 import           Distribution.Package (Dependency(..))
 import qualified Distribution.Package as Cabal (PackageIdentifier(..))
@@ -53,7 +54,7 @@ import           Mafia.Process
 
 import           P
 
-import           System.IO (IO)
+import           System.IO (IO, stderr)
 
 import           X.Control.Monad.Trans.Either (EitherT, left, runEitherT)
 
@@ -245,8 +246,12 @@ getSourcePackage dir = do
   case mpid of
     Nothing  -> return Nothing -- no .cabal file found
     Just pid -> do
-      hash <- hashSourcePackage dir
-      return (Just (SourcePackage dir pid (sphHash hash)))
+      -- not necessarily fatal if a package can't be hashed. log it, though
+      hash <- liftIO $ runEitherT (hashSourcePackage dir)
+      either
+        (\e -> liftIO (T.hPutStrLn stderr (renderCabalError e)) *> pure Nothing)
+        (pure . Just . SourcePackage dir pid . sphHash)
+        hash
 
 ------------------------------------------------------------------------
 
