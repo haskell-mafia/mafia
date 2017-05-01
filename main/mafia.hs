@@ -47,7 +47,7 @@ import           System.IO (IO, FilePath, stdout, stderr)
 import           X.Control.Monad.Trans.Either (EitherT, hoistEither, left)
 import           X.Control.Monad.Trans.Either.Exit (orDie)
 import           X.Options.Applicative (Parser, CommandFields, Mod, ReadM)
-import           X.Options.Applicative (argument, textRead, metavar, help, long, short)
+import           X.Options.Applicative (action, argument, textRead, metavar, help, long, short)
 import           X.Options.Applicative (option, flag, flag', eitherTextReader, eitherReader)
 import           X.Options.Applicative (cli, subparser, command')
 
@@ -226,10 +226,10 @@ commands =
                      <> "The general usage is as follows:  $(mafia install pretty-show)/ppsh" )
             (MafiaInstall <$> many pConstraint <*> pInstallPackage)
 
- , command' "exec" ( ghciText <> " Exec the provided command line in the local cabal sandbox." )
+ , command' "exec" "Exec the provided command line in the local cabal sandbox."
             (MafiaExec <$> many pCabalArgs)
 
- , command' "cflags" ( ghciText <> " Print the flags required to compile C sources" )
+ , command' "cflags" "Print the flags required to compile C sources"
             (pure MafiaCFlags)
 
  ]
@@ -287,6 +287,7 @@ pGhciEntryPoint :: Parser File
 pGhciEntryPoint =
   argument textRead $
        metavar "FILE"
+    <> action "file"
     <> help "The entry point for GHCi."
 
 pGhciIncludes :: Parser [GhciInclude]
