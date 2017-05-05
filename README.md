@@ -76,11 +76,11 @@ to think about it.
 Builds a package, including all executables, test suites and benchmarks.
 
 Mafia uses whichever version of
-[GHC](https://github.com/ambiata/mafia/blob/master/doc/ghc.md) and
-[Cabal](https://github.com/ambiata/mafia/blob/master/doc/cabal.md) it
+[GHC](https://github.com/ambiata/mafia/blob/master/doc/installing-ghc.md) and
+[Cabal](https://github.com/ambiata/mafia/blob/master/doc/installing-cabal.md) it
 finds on the `PATH` to build a project. It keeps cabal sandboxes in
 version specific directories, so that it is easy to
-[switch](https://github.com/ambiata/mafia/blob/master/doc/ghc.md#advanced-multiple-ghc-versions)
+[switch](https://github.com/ambiata/mafia/blob/master/doc/installing-ghc.md#advanced-multiple-ghc-versions)
 between versions of GHC while developing a package.
 
 Using the switching setup linked above, a typical multi-GHC session
@@ -399,5 +399,5 @@ Mafia expects both GHC and Cabal to be installed and on the `PATH`.
 
 Follow the guides below to configure your system correctly:
 
-- [Installing GHC](https://github.com/ambiata/mafia/blob/master/doc/ghc.md)
-- [Installing Cabal](https://github.com/ambiata/mafia/blob/master/doc/cabal.md)
+- [Installing GHC](https://github.com/ambiata/mafia/blob/master/doc/installing-ghc.md)
+- [Installing Cabal](https://github.com/ambiata/mafia/blob/master/doc/installing-cabal.md)
