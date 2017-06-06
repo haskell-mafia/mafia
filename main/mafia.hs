@@ -678,8 +678,23 @@ ensureDirectory dir = do
     False -> return Nothing
     True  -> return (Just dir)
 
+resolveVintage :: MonadIO m => SourceVintage -> m SourceVintage
+resolveVintage x0 = do
+  mx <- liftIO $ lookupEnv "MAFIA_FORCE_LATEST_SOURCES"
+  case mx of
+    Just "1" ->
+      return LatestSources
+    Just "true" ->
+      return LatestSources
+    Just _ ->
+      return x0
+    Nothing ->
+      return x0
+
 initMafia :: SourceVintage -> Profiling -> [Flag] -> EitherT MafiaError IO ()
-initMafia vintage prof flags = do
+initMafia vintage0 prof flags = do
+  vintage <- resolveVintage vintage0
+
   -- we just call this for the side-effect, if we can't find a .cabal file then
   -- mafia should fail fast and not polute the directory with a sandbox.
   (_ :: File) <- firstT MafiaCabalError $ getCabalFile =<< getCurrentDirectory
