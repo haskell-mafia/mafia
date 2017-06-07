@@ -142,15 +142,20 @@ initialize dfilter mprofiling mflags = do
     installed <- firstT InitInstallError $ installDependencies flavours flags sdeps constraints
 
     let
+      allPkgs =
+        Set.toList installed
+
       -- Note that we filter out source packages. Storing their version in the
       -- constraints file is redundant, as the accessible source code is the only
       -- version of that package which is ever available for installation.
       hackagePkgs =
-        filter (isNothing . refSrcPkg . pkgRef) $
-        Set.toList installed
+        filter (isNothing . refSrcPkg . pkgRef) allPkgs
 
-    writeInstallConstraints $ concatMap (packageRefConstraints . pkgRef) hackagePkgs
-    writePackageKeys $ fmap pkgKey hackagePkgs
+    writePackageKeys $
+      fmap pkgKey allPkgs
+
+    writeInstallConstraints $
+      concatMap (packageRefConstraints . pkgRef) hackagePkgs
 
   let needConfigure = needInstall || not hasSetupConfig
 
