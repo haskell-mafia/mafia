@@ -22,12 +22,13 @@ import           GHC.Conc (getNumProcessors)
 
 import           Mafia.Bin
 import           Mafia.Cabal
+import           Mafia.Cache
 import           Mafia.Error
 import           Mafia.Ghc
 import           Mafia.Hoogle
 import           Mafia.IO
-import           Mafia.Init
 import           Mafia.Include
+import           Mafia.Init
 import           Mafia.Install
 import           Mafia.Lock
 import           Mafia.Makefile
@@ -90,6 +91,8 @@ data MafiaCommand =
   | MafiaWatch [Flag] [GhciInclude] File [Argument]
   | MafiaHoogle [Argument]
   | MafiaInstall [Constraint] InstallPackage
+  | MafiaExport Profiling [Flag] Directory
+  | MafiaImport Directory
   | MafiaScript Path [Argument]
   | MafiaExec [Argument]
   | MafiaCFlags
@@ -148,6 +151,10 @@ run = \case
     mafiaHoogle args
   MafiaInstall constraints ipkg ->
     mafiaInstall ipkg constraints
+  MafiaExport p flags dir ->
+    mafiaExport p flags dir
+  MafiaImport dir ->
+    mafiaImport dir
   MafiaScript path args ->
     mafiaScript path args
   MafiaExec args ->
@@ -226,6 +233,12 @@ commands =
                      <> "The general usage is as follows:  $(mafia install pretty-show)/ppsh" )
             (MafiaInstall <$> many pConstraint <*> pInstallPackage)
 
+ , command' "export" "Export binary substitutes of the current package's dependencies."
+            (MafiaExport <$> pProfiling <*> many pFlag <*> pExportDirectory)
+
+ , command' "import" "Import binary substitutes from a directory."
+            (MafiaImport <$> pImportDirectory)
+
  , command' "exec" "Exec the provided command line in the local cabal sandbox."
             (MafiaExec <$> many pCabalArgs)
 
@@ -237,6 +250,18 @@ commands =
     ghciText = "Start the repl directly skipping cabal, this is useful "
                 <> "developing across multiple source trees at once or loading "
                 <> "a not-yet-compiling package."
+
+pExportDirectory :: Parser Directory
+pExportDirectory =
+  argument textRead $
+       metavar "EXPORT_DIRECTORY"
+    <> help "The location to write binary substitute tarballs containing the current package's dependencies."
+
+pImportDirectory :: Parser Directory
+pImportDirectory =
+  argument textRead $
+       metavar "IMPORT_DIRECTORY"
+    <> help "The location to import binary substitute tarballs from."
 
 pProfiling :: Parser Profiling
 pProfiling =
@@ -528,6 +553,27 @@ mafiaHoogle args = do
 mafiaInstall :: InstallPackage -> [Constraint] -> EitherT MafiaError IO ()
 mafiaInstall ipkg constraints = do
   liftIO . T.putStrLn =<< firstT MafiaBinError (installBinary ipkg constraints)
+
+mafiaExport :: Profiling -> [Flag] -> Directory -> EitherT MafiaError IO ()
+mafiaExport p flags dir = do
+  initMafia LatestSources p flags
+  mkeys <- firstT MafiaInitError readPackageKeys
+  case mkeys of
+    Nothing ->
+      left MafiaNoPackageKeys
+    Just keys -> do
+      env <- firstT MafiaCacheError getCacheEnv
+      for_ keys $ \key -> do
+        result <- firstT MafiaCacheError $ exportPackage env key dir
+        liftIO . T.putStrLn $ renderExportResult result
+
+mafiaImport :: Directory -> EitherT MafiaError IO ()
+mafiaImport dir = do
+  env <- firstT MafiaCacheError getCacheEnv
+  keys <- firstT MafiaCacheError $ listPackages env dir
+  for_ keys $ \key -> do
+    result <- firstT MafiaCacheError $ importPackage env key dir
+    liftIO . T.putStrLn $ renderImportResult result
 
 mafiaScript :: File -> [Argument] -> EitherT MafiaError IO ()
 mafiaScript file args =

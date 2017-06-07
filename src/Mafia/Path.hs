@@ -9,6 +9,7 @@ module Mafia.Path
     -- * Filename/directory functions
   , (</>)
   , takeFileName
+  , takeBaseName
   , takeDirectory
   , dropTrailingPathSeparator
   , normalise
@@ -43,6 +44,9 @@ type Directory = Path
 
 takeFileName :: Path -> File
 takeFileName = T.pack . FilePath.takeFileName . T.unpack
+
+takeBaseName :: Path -> File
+takeBaseName = T.pack . FilePath.takeBaseName . T.unpack
 
 takeDirectory :: Path -> Directory
 takeDirectory = T.pack . FilePath.takeDirectory . T.unpack

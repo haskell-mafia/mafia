@@ -19,6 +19,7 @@ module Mafia.Bin
 import           Mafia.Cabal.Constraint
 import           Mafia.Cabal.Sandbox
 import           Mafia.Cabal.Types
+import           Mafia.Cache
 import           Mafia.Hash
 import           Mafia.Home
 import           Mafia.Install
@@ -35,6 +36,7 @@ import           X.Control.Monad.Trans.Either (EitherT, left)
 
 data BinError =
     BinInstallError InstallError
+  | BinCacheError CacheError
   | BinCabalError CabalError
   | BinNotExecutable PackageId
   | BinFailedToCreateSymbolicLink Path File
@@ -44,6 +46,8 @@ renderBinError :: BinError -> Text
 renderBinError = \case
   BinInstallError err ->
     renderInstallError err
+  BinCacheError err ->
+    renderCacheError err
   BinCabalError err ->
     renderCabalError err
   BinNotExecutable pid ->
@@ -122,9 +126,9 @@ installInDirectory bin ipkg constraints = do
       installPackage (ipkgName ipkg) (ipkgConstraints ipkg <> constraints)
 
     gdir <-
-      fmap (flip packageSandboxDir pkg) .
-      firstT BinInstallError $
-      getPackageEnv
+      fmap (flip packageSandboxDir $ pkgKey pkg) .
+      firstT BinCacheError $
+      getCacheEnv
 
     unlessM (doesDirectoryExist $ gdir </> "bin") $
       left (BinNotExecutable . refId $ pkgRef pkg)
