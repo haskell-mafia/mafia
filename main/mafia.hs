@@ -91,7 +91,7 @@ data MafiaCommand =
   | MafiaWatch [Flag] [GhciInclude] File [Argument]
   | MafiaHoogle [Argument]
   | MafiaInstall [Constraint] InstallPackage
-  | MafiaExport Profiling [Flag] Directory
+  | MafiaExport [Flag] Directory
   | MafiaImport Directory
   | MafiaScript Path [Argument]
   | MafiaExec [Argument]
@@ -151,8 +151,8 @@ run = \case
     mafiaHoogle args
   MafiaInstall constraints ipkg ->
     mafiaInstall ipkg constraints
-  MafiaExport p flags dir ->
-    mafiaExport p flags dir
+  MafiaExport flags dir ->
+    mafiaExport flags dir
   MafiaImport dir ->
     mafiaImport dir
   MafiaScript path args ->
@@ -234,7 +234,7 @@ commands =
             (MafiaInstall <$> many pConstraint <*> pInstallPackage)
 
  , command' "export" "Export binary substitutes of the current package's dependencies."
-            (MafiaExport <$> pProfiling <*> many pFlag <*> pExportDirectory)
+            (MafiaExport <$> many pFlag <*> pExportDirectory)
 
  , command' "import" "Import binary substitutes from a directory."
             (MafiaImport <$> pImportDirectory)
@@ -554,9 +554,9 @@ mafiaInstall :: InstallPackage -> [Constraint] -> EitherT MafiaError IO ()
 mafiaInstall ipkg constraints = do
   liftIO . T.putStrLn =<< firstT MafiaBinError (installBinary ipkg constraints)
 
-mafiaExport :: Profiling -> [Flag] -> Directory -> EitherT MafiaError IO ()
-mafiaExport p flags dir = do
-  initMafia LatestSources p flags
+mafiaExport :: [Flag] -> Directory -> EitherT MafiaError IO ()
+mafiaExport flags dir = do
+  initMafia LatestSources DisableProfiling flags
   mkeys <- firstT MafiaInitError readPackageKeys
   case mkeys of
     Nothing ->
