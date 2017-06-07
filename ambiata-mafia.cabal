@@ -64,6 +64,7 @@ library
                     Mafia.Cabal.Sandbox
                     Mafia.Cabal.Types
                     Mafia.Cabal.Version
+                    Mafia.Cache
                     Mafia.Error
                     Mafia.Flock
                     Mafia.Ghc

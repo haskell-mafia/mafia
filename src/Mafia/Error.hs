@@ -9,6 +9,7 @@ module Mafia.Error
 
 import           Mafia.Bin
 import           Mafia.Cabal.Types
+import           Mafia.Cache
 import           Mafia.Ghc
 import           Mafia.Git
 import           Mafia.Hash
@@ -30,6 +31,7 @@ data MafiaError =
     MafiaProcessError ProcessError
   | MafiaGitError GitError
   | MafiaGhcError GhcError
+  | MafiaCacheError CacheError
   | MafiaCabalError CabalError
   | MafiaSubmoduleError SubmoduleError
   | MafiaInstallError InstallError
@@ -39,6 +41,7 @@ data MafiaError =
   | MafiaLockError LockError
   | MafiaScriptError ScriptError
   | MafiaNoInstallConstraints
+  | MafiaNoPackageKeys
   | MafiaParseError Text
   | MafiaEntryPointNotFound File
   deriving (Show)
@@ -54,6 +57,9 @@ renderMafiaError = \case
 
   MafiaGhcError e ->
     renderGhcError e
+
+  MafiaCacheError e ->
+    renderCacheError e
 
   MafiaCabalError e ->
     renderCabalError e
@@ -81,6 +87,9 @@ renderMafiaError = \case
 
   MafiaNoInstallConstraints ->
     "Could not find the dependency constraints calculated during the last install."
+
+  MafiaNoPackageKeys ->
+    "Could not find the keys of the packages installed during the last build."
 
   MafiaParseError msg ->
     "Parse failed: " <> msg

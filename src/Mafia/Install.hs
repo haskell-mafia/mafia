@@ -8,10 +8,6 @@ module Mafia.Install
   , installPackage
   , transitiveOfPackages
 
-  , PackageEnv(..)
-  , getPackageEnv
-  , packageSandboxDir
-
   , InstallError(..)
   , renderInstallError
   ) where
@@ -41,9 +37,7 @@ import           Mafia.Cabal.Package
 import           Mafia.Cabal.Process
 import           Mafia.Cabal.Sandbox
 import           Mafia.Cabal.Types
-import           Mafia.Flock
-import           Mafia.Ghc
-import           Mafia.Home
+import           Mafia.Cache
 import           Mafia.IO
 import           Mafia.Package
 import           Mafia.Path
@@ -64,7 +58,7 @@ import           X.Control.Monad.Trans.Either
 ------------------------------------------------------------------------
 
 data InstallError =
-    InstallGhcError GhcError
+    InstallCacheError CacheError
   | InstallCabalError CabalError
   | InstallPackageError PackageId (Set Package) CabalError
   | InstallLinkError Package File
@@ -78,8 +72,8 @@ data InstallError =
 
 renderInstallError :: InstallError -> Text
 renderInstallError = \case
-  InstallGhcError e ->
-    renderGhcError e
+  InstallCacheError e ->
+    renderCacheError e
 
   InstallCabalError e ->
     renderCabalError e
@@ -149,7 +143,7 @@ installDependencies flavour flags spkgs constraints = do
 
   -- create symlinks to the relevant package .conf files in the
   -- package-db, then call recache so that ghc is aware of them.
-  env <- getPackageEnv
+  env <- firstT InstallCacheError getCacheEnv
   mapM_ (link packageDB env) tdeps
   Hush <- firstT InstallCabalError $ cabal "sandbox" ["hc-pkg", "recache"]
 
@@ -167,7 +161,7 @@ installGlobalPackages flavour deps = do
 
   mw  <- getMafiaWorkers
   gw  <- getGhcWorkers
-  env <- getPackageEnv
+  env <- firstT InstallCacheError getCacheEnv
   firstT (squashRunError deps) $ consume_ producer mw (install gw env flavour)
 
 ------------------------------------------------------------------------
@@ -205,26 +199,6 @@ lookupPositive key = do
 
 ------------------------------------------------------------------------
 
-data Flavour =
-    Vanilla
-  | Profiling
-  | Documentation
-    deriving (Eq, Ord, Show)
-
-renderFlavour :: Flavour -> Text
-renderFlavour = \case
-  Vanilla       -> "vanilla"
-  Profiling     -> "profiling"
-  Documentation -> "documentation"
-
-renderFlavourSuffix :: Flavour -> Text
-renderFlavourSuffix = \case
-  Vanilla       -> ""
-  Profiling     -> " [profiling]"
-  Documentation -> " [documentation]"
-
-------------------------------------------------------------------------
-
 -- | Installs a package and its dependencies in to the mafia global package
 --   cache in $MAFIA_HOME by taking the following steps:
 --
@@ -245,16 +219,16 @@ renderFlavourSuffix = \case
 --
 --   7. Create a package.conf file which can be symlinked in to other package db's.
 --
-install :: NumWorkers -> PackageEnv -> Flavour -> Package -> EitherT InstallError IO ()
-install w penv flavour p@(Package (PackageRef pid _ _) deps _) = do
+install :: NumWorkers -> CacheEnv -> Flavour -> Package -> EitherT InstallError IO ()
+install w env flavour p@(Package (PackageRef pid _ _) deps _) = do
   -- only try to install this package/flavour if we haven't done it already.
   -- it's important to do this before we do the same for any dependencies
   -- otherwise we end up doing an exponential number of checks.
-  let fmark = packageFlavourMarker penv p flavour
+  let fmark = packageFlavourMarker env (pkgKey p) flavour
   unlessM (doesFileExist fmark) $ do
 
     -- install package dependencies
-    mapM_ (install w penv flavour) (transitiveOfPackages deps)
+    mapM_ (install w env flavour) (transitiveOfPackages deps)
 
     -- detect and install build tools
     tools <- detectBuildTools p
@@ -264,31 +238,31 @@ install w penv flavour p@(Package (PackageRef pid _ _) deps _) = do
         "Detected '" <> unPackageName (toolName tool) <> "' " <>
         "was required to build " <> renderPackageId pid
 
-    paths <- installBuildTools penv tools
+    paths <- installBuildTools env tools
 
     -- the vanilla flavour must always be installed first:
     --  + it creates and sets up the package's sandbox
     --  + profiling builds need the vanilla build for template haskell to run
     --  + documentation builds need the vanilla build to harvest the .hi files
     when (flavour /= Vanilla) $
-      install w penv Vanilla p
+      install w env Vanilla p
 
     -- we take this lock *after* all the package dependencies have been
     -- installed, otherwise we can prevent some parallelism from occurring
     unlessM (doesFileExist fmark) $
-      withPackageLock penv p flavour $
+      withPackageLock env (pkgKey p) flavour $
         unlessM (doesFileExist fmark) $ do
           -- when we create the package sandbox it determines whether the
           -- package contains only executables, or is also available as a
           -- library, this is the package type.
           ptype <-
             if (flavour == Vanilla) then
-              Just <$> createPackageSandbox penv p
+              Just <$> createPackageSandbox env p
             else
               pure Nothing
 
-          let sbdir = packageSandboxDir penv p
-              sbcfg = packageSandboxConfig penv p
+          let sbdir = packageSandboxDir env (pkgKey p)
+              sbcfg = packageSandboxConfig env (pkgKey p)
 
           let sbcabal x xs =
                 firstT (InstallPackageError pid Set.empty) $ cabalFrom sbdir sbcfg paths x xs
@@ -307,10 +281,10 @@ install w penv flavour p@(Package (PackageRef pid _ _) deps _) = do
               -- only library packages can be described
               Just Library -> do
                 Out out <- sbcabal "sandbox" ["hc-pkg", "--", "describe", renderPackageId pid]
-                writeUtf8 (packageConfig penv p) out
+                writeUtf8 (packageConfig env $ pkgKey p) out
               -- for executable only packages we just leave an empty marker
               Just ExecutablesOnly ->
-                writeUtf8 (packageConfig penv p) T.empty
+                writeUtf8 (packageConfig env $ pkgKey p) T.empty
               -- this can't really happen, we're only supposed to assign
               -- 'ptype' to Nothing if we're not installing the vanilla flavour
               Nothing ->
@@ -334,13 +308,13 @@ flavourArgs = \case
 
 -- | Creates and installs/links the dependencies for a package in to its well
 --   known global sandbox.
-createPackageSandbox :: PackageEnv -> Package -> EitherT InstallError IO PackageType
-createPackageSandbox penv p@(Package (PackageRef pid _ msrc) deps _) = do
+createPackageSandbox :: CacheEnv -> Package -> EitherT InstallError IO PackageType
+createPackageSandbox env p@(Package (PackageRef pid _ msrc) deps _) = do
   liftIO . T.hPutStrLn stderr $ "Creating sandbox for " <> renderHashId p
 
-  let sbdir = packageSandboxDir penv p
-      sbcfg = packageSandboxConfig penv p
-      sbsrc = packageSourceDir penv p
+  let sbdir = packageSandboxDir env $ pkgKey p
+      sbcfg = packageSandboxConfig env $ pkgKey p
+      sbsrc = packageSourceDir env $ pkgKey p
 
   let sbcabal x xs =
         firstT InstallCabalError $ cabalFrom sbdir sbcfg [] x xs
@@ -398,21 +372,22 @@ createPackageSandbox penv p@(Package (PackageRef pid _ msrc) deps _) = do
 
   -- create symlinks to the relevant package .conf files in the
   -- package-db, then call recache so that ghc is aware of them.
-  mapM_ (link db penv) (transitiveOfPackages deps)
+  mapM_ (link db env) (transitiveOfPackages deps)
   Hush <- sbcabal "sandbox" ["hc-pkg", "recache"]
 
   return ty
 
 -- | Install the specified build tools and return the paths to the 'bin' directories.
-installBuildTools :: PackageEnv -> Set BuildTool -> EitherT InstallError IO [Directory]
+installBuildTools :: CacheEnv -> Set BuildTool -> EitherT InstallError IO [Directory]
 installBuildTools env tools = do
   pkgs <-
     for (Set.toList tools) $ \(BuildTool name constraints) ->
       installPackage name constraints
 
   pure .
-    fmap (</> "bin") $
-    fmap (packageSandboxDir env) pkgs
+    fmap (</> "bin") .
+    fmap (packageSandboxDir env) $
+    fmap pkgKey pkgs
 
 -- | Detect the build tools required by a package.
 detectBuildTools :: Package -> EitherT InstallError IO (Set BuildTool)
@@ -459,9 +434,9 @@ retryOnLeft msg io =
         T.hPutStrLn stderr msg
       runEitherT io
 
-link :: Directory -> PackageEnv -> Package -> EitherT InstallError IO ()
+link :: Directory -> CacheEnv -> Package -> EitherT InstallError IO ()
 link db env p@(Package (PackageRef pid _ _) _ _) = do
-  let pcfg = packageConfig env p
+  let pcfg = packageConfig env $ pkgKey p
   unlessM (doesFileExist pcfg) $
     left (InstallLinkError p pcfg)
 
@@ -488,65 +463,6 @@ transitiveOfPackages :: Set Package -> Set Package
 transitiveOfPackages deps =
   Set.unions (deps : parMap rpar (transitiveOfPackages . pkgDeps) (Set.toList deps))
 
-------------------------------------------------------------------------
-
-data PackageEnv =
-  PackageEnv {
-      envGhcTarget :: !GhcTarget
-    , envGhcVersion :: !GhcVersion
-    , envMafiaHome :: !Directory
-    } deriving (Eq, Ord, Show)
-
--- the package cache path includes a version number in case the contents or
--- layout of the cache changes in subsequent mafia versions.
-envPackageCacheVersion :: Int
-envPackageCacheVersion =
-  2
-
-envPackageCache :: PackageEnv -> Directory
-envPackageCache env =
-  envMafiaHome env
-    </> "packages"
-    </> T.pack (show envPackageCacheVersion)
-    </> unGhcTarget (envGhcTarget env)
-    </> renderGhcVersion (envGhcVersion env)
-
-getPackageEnv :: EitherT InstallError IO PackageEnv
-getPackageEnv = do
-  target <- firstT InstallGhcError getGhcTarget
-  version <- firstT InstallGhcError getGhcVersion
-  home <- getMafiaHome
-  return (PackageEnv target version home)
-
-withPackageLock :: PackageEnv -> Package -> Flavour -> EitherT InstallError IO a -> EitherT InstallError IO a
-withPackageLock env p f =
-  withFileLock (packageLockPath env p) $ do
-    liftIO . T.hPutStrLn stderr $
-      "Waiting for " <> renderHashId p <> renderFlavourSuffix f
-
-packageConfig :: PackageEnv -> Package -> File
-packageConfig env p =
-  packageSandboxDir env p </> "package.conf"
-
-packageFlavourMarker :: PackageEnv -> Package -> Flavour -> File
-packageFlavourMarker env p flav =
-  packageSandboxDir env p </> "package." <> renderFlavour flav
-
-packageLockPath :: PackageEnv -> Package -> File
-packageLockPath env p =
-  envPackageCache env </> ".locks" </> renderHashId p
-
-packageSandboxDir :: PackageEnv -> Package -> SandboxDir
-packageSandboxDir env p = do
-  envPackageCache env </> renderHashId p
-
-packageSandboxConfig :: PackageEnv -> Package -> SandboxConfigFile
-packageSandboxConfig env p = do
-  packageSandboxDir env p </> "sandbox.config"
-
-packageSourceDir :: PackageEnv -> Package -> Directory
-packageSourceDir env p = do
-  packageSandboxDir env p </> "src"
 
 ------------------------------------------------------------------------
 --

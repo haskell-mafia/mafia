@@ -11,6 +11,7 @@ module Mafia.Init (
   , getSourceDependencies
 
   , readInstallConstraints
+  , readPackageKeys
 
   , InitError(..)
   , renderInitError
@@ -28,6 +29,7 @@ import qualified Data.Text as T
 import qualified Data.Text.IO as T
 
 import           Mafia.Cabal
+import           Mafia.Cache
 import           Mafia.Git
 import           Mafia.Hash
 import           Mafia.IO
@@ -47,6 +49,7 @@ import           X.Control.Monad.Trans.Either (EitherT, runEitherT, hoistEither)
 data InitError =
     InitHashError HashError
   | InitGitError GitError
+  | InitCacheError CacheError
   | InitCabalError CabalError
   | InitSubmoduleError SubmoduleError
   | InitInstallError InstallError
@@ -61,6 +64,9 @@ renderInitError = \case
 
   InitGitError e ->
     renderGitError e
+
+  InitCacheError e ->
+    renderCacheError e
 
   InitCabalError e ->
     renderCabalError e
@@ -135,14 +141,16 @@ initialize dfilter mprofiling mflags = do
 
     installed <- firstT InitInstallError $ installDependencies flavours flags sdeps constraints
 
-    -- Note that we filter out source packages. Storing their version in the
-    -- constraints file is redundant, as the accessible source code is the only
-    -- version of that package which is ever available for installation.
-    writeInstallConstraints .
-      concatMap packageRefConstraints .
-      filter (isNothing . refSrcPkg) .
-      fmap pkgRef $
-      Set.toList installed
+    let
+      -- Note that we filter out source packages. Storing their version in the
+      -- constraints file is redundant, as the accessible source code is the only
+      -- version of that package which is ever available for installation.
+      hackagePkgs =
+        filter (isNothing . refSrcPkg . pkgRef) $
+        Set.toList installed
+
+    writeInstallConstraints $ concatMap (packageRefConstraints . pkgRef) hackagePkgs
+    writePackageKeys $ fmap pkgKey hackagePkgs
 
   let needConfigure = needInstall || not hasSetupConfig
 
@@ -227,6 +235,31 @@ writeInstallConstraints xs = do
   file <- getInstallConstraintsFile
   createDirectoryIfMissing True (takeDirectory file)
   writeUtf8 file . T.unlines $ fmap renderConstraint xs
+
+------------------------------------------------------------------------
+
+getPackageKeysFile :: EitherT InitError IO File
+getPackageKeysFile = do
+  sandboxDir <- firstT InitCabalError initSandbox
+  pure $ sandboxDir </> "mafia/package.keys"
+
+readPackageKeys :: EitherT InitError IO (Maybe [PackageKey])
+readPackageKeys = do
+  file <- getPackageKeysFile
+  mtxt <- readUtf8 file
+  case mtxt of
+    Nothing ->
+      pure Nothing
+    Just txt ->
+      fmap Just .
+      traverse (hoistEither . first InitCacheError . parsePackageKey) $
+      T.lines txt
+
+writePackageKeys :: [PackageKey] -> EitherT InitError IO ()
+writePackageKeys xs = do
+  file <- getPackageKeysFile
+  createDirectoryIfMissing True (takeDirectory file)
+  writeUtf8 file . T.unlines $ fmap renderPackageKey xs
 
 ------------------------------------------------------------------------
 
