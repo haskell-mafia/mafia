@@ -340,6 +340,9 @@ createPackageSandbox env p@(Package (PackageRef pid _ msrc) deps _) = do
       retryOnLeft (unpackRetryMessage pid) . capture (InstallUnpackFailed pid sbsrc) $
         sbcabal "unpack" ["--destdir=" <> sbsrc, renderPackageId pid]
 
+      -- Presumably we don't need to do this for local packages ever.
+      exposePackageModules srcdir
+
       Hush <- sbcabal "sandbox" ["add-source", srcdir]
 
       -- We need to shuffle anything which was unpacked to 'dist' in to
@@ -376,6 +379,44 @@ createPackageSandbox env p@(Package (PackageRef pid _ msrc) deps _) = do
   Hush <- sbcabal "sandbox" ["hc-pkg", "recache"]
 
   return ty
+
+exposePackageModules :: Directory -> EitherT InstallError IO ()
+exposePackageModules dir = do
+  cabalFile <- firstT InstallCabalError $ getCabalFile dir
+  contents  <- readUtf8 cabalFile
+  case contents of
+    Nothing ->
+      return ()
+    Just str -> do
+      let
+        -- sections that can have other-modules but not exposed-modules
+        sections =
+          [ "executable"
+          , "test-suite"
+          , "benchmark" ]
+
+        isLibrary s =
+          let
+            (_, x) = T.breakOnEnd "library" s
+          in not (T.null x) && not (any (flip T.isInfixOf x) sections)
+
+        replace [x]
+          = [x]
+        replace []
+          = []
+        replace (x:xs)
+          | isLibrary x
+          = [x, "exposed-modules"] <> replace xs
+          | otherwise
+          = [x, "other-modules"] <> replace xs
+
+        ss =
+          T.splitOn "other-modules" str
+
+        str' =
+          T.concat (replace ss)
+
+      writeUtf8 cabalFile str'
 
 -- | Install the specified build tools and return the paths to the 'bin' directories.
 installBuildTools :: CacheEnv -> Set BuildTool -> EitherT InstallError IO [Directory]
