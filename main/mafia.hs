@@ -420,7 +420,7 @@ mafiaDepends :: DependsUI -> Maybe PackageName -> [Flag] -> EitherT MafiaError I
 mafiaDepends ui mpkg flags = do
   lockFile <- firstT MafiaLockError $ getLockFile =<< getCurrentDirectory
   constraints <- fmap (fromMaybe []) . firstT MafiaLockError $ readLockFile lockFile
-  sdeps <- Set.toList <$> firstT MafiaInitError getSourceDependencies
+  sdeps <- fmap Set.toList . firstT MafiaInitError $ getSourceDependencies
   local <- firstT MafiaCabalError (findDependenciesForCurrentDirectory flags sdeps constraints)
   let
     deps = maybe id filterPackages mpkg $ pkgDeps local
@@ -439,7 +439,7 @@ mafiaClean = do
 
 mafiaBuild :: Profiling -> Warnings -> CoreDump -> [Flag] -> [Argument] -> EitherT MafiaError IO ()
 mafiaBuild p w dump flags args = do
-  initMafia p flags
+  initMafia LatestSources p flags
 
   let
     wargs =
@@ -469,28 +469,28 @@ mafiaBuild p w dump flags args = do
 
 mafiaTest :: [Flag] -> [Argument] -> EitherT MafiaError IO ()
 mafiaTest flags args = do
-  initMafia DisableProfiling flags
+  initMafia LatestSources DisableProfiling flags
   liftCabal . cabalAnnihilate "test" $ ["-j", "--show-details=streaming"] <> args
 
 mafiaTestCI :: [Flag] -> [Argument] -> EitherT MafiaError IO ()
 mafiaTestCI flags args = do
-  initMafia DisableProfiling flags
+  initMafia LatestSources DisableProfiling flags
   Clean <- liftCabal . cabal "test" $ ["-j", "--show-details=streaming"] <> args
   return ()
 
 mafiaRepl :: [Flag] -> [Argument] -> EitherT MafiaError IO ()
 mafiaRepl flags args = do
-  initMafia DisableProfiling flags
+  initMafia LatestSources DisableProfiling flags
   liftCabal $ cabal_ "repl" args
 
 mafiaBench :: [Flag] -> [Argument] -> EitherT MafiaError IO ()
 mafiaBench flags args = do
-  initMafia DisableProfiling flags
+  initMafia LatestSources DisableProfiling flags
   liftCabal $ cabalAnnihilate "bench" args
 
 mafiaLock :: [Flag] -> EitherT MafiaError IO ()
 mafiaLock flags = do
-  initMafia DisableProfiling flags
+  initMafia LatestSources DisableProfiling flags
   mconstraints <- firstT MafiaInitError readInstallConstraints
   case mconstraints of
     Nothing ->
@@ -508,7 +508,7 @@ mafiaQuick :: [Flag] -> [GhciInclude] -> [File] -> EitherT MafiaError IO ()
 mafiaQuick flags extraIncludes paths = do
   dir <- getWorkingDirectory $ listToMaybe paths
   args <- ghciArgs dir extraIncludes paths
-  withDirectory dir $ initMafia DisableProfiling flags
+  withDirectory dir $ initMafia (vintageOfIncludes extraIncludes) DisableProfiling flags
   exec MafiaProcessError "ghci" args
 
 mafiaWatch :: [Flag] -> [GhciInclude] -> File -> [Argument] -> EitherT MafiaError IO ()
@@ -516,13 +516,13 @@ mafiaWatch flags extraIncludes path extraArgs = do
   ghcidExe <- bimapT MafiaBinError (</> "ghcid") $ installBinary (ipackageId "ghcid" [0, 5]) []
   dir <- getWorkingDirectory $ Just path
   args <- ghciArgs dir extraIncludes [path]
-  withDirectory dir $ initMafia DisableProfiling flags
+  withDirectory dir $ initMafia (vintageOfIncludes extraIncludes) DisableProfiling flags
   exec MafiaProcessError ghcidExe $ [ "-c", T.unwords ("ghci" : args) ] <> extraArgs
 
 mafiaHoogle :: [Argument] -> EitherT MafiaError IO ()
 mafiaHoogle args = do
   hkg <- fromMaybe "https://hackage.haskell.org/package" <$> lookupEnv "HACKAGE"
-  firstT MafiaInitError (initialize Nothing Nothing)
+  firstT MafiaInitError (initialize LatestSources Nothing Nothing)
   hoogle hkg args
 
 mafiaInstall :: InstallPackage -> [Constraint] -> EitherT MafiaError IO ()
@@ -573,6 +573,22 @@ withDirectory dir io = do
   x <- io
   setCurrentDirectory old
   return x
+
+vintageOfIncludes :: [GhciInclude] -> SourceVintage
+vintageOfIncludes xs =
+  if any isProjectLibraries xs then
+    PermitStaleProjectSources
+  else
+    LatestSources
+
+isProjectLibraries :: GhciInclude -> Bool
+isProjectLibraries = \case
+  ProjectLibraries ->
+    True
+  Directory _ ->
+    False
+  AllLibraries ->
+    False
 
 ghciArgs :: Directory -> [GhciInclude] -> [File] -> EitherT MafiaError IO [Argument]
 ghciArgs wdir extraIncludes paths = do
@@ -662,15 +678,30 @@ ensureDirectory dir = do
     False -> return Nothing
     True  -> return (Just dir)
 
-initMafia :: Profiling -> [Flag] -> EitherT MafiaError IO ()
-initMafia prof flags = do
+resolveVintage :: MonadIO m => SourceVintage -> m SourceVintage
+resolveVintage x0 = do
+  mx <- liftIO $ lookupEnv "MAFIA_FORCE_LATEST_SOURCES"
+  case mx of
+    Just "1" ->
+      return LatestSources
+    Just "true" ->
+      return LatestSources
+    Just _ ->
+      return x0
+    Nothing ->
+      return x0
+
+initMafia :: SourceVintage -> Profiling -> [Flag] -> EitherT MafiaError IO ()
+initMafia vintage0 prof flags = do
+  vintage <- resolveVintage vintage0
+
   -- we just call this for the side-effect, if we can't find a .cabal file then
   -- mafia should fail fast and not polute the directory with a sandbox.
   (_ :: File) <- firstT MafiaCabalError $ getCabalFile =<< getCurrentDirectory
 
   ensureBuildTools
 
-  firstT MafiaInitError $ initialize (Just prof) (Just flags)
+  firstT MafiaInitError $ initialize vintage (Just prof) (Just flags)
 
   directory <- firstT MafiaCabalError $ getCurrentDirectory
   buildMakefile directory
