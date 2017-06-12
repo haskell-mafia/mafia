@@ -1,5 +1,7 @@
 #!/bin/sh -eu
 
+: ${GIT_WORKERS:="32"}
+
 #
 # Run 'cabal update' if the cache is older than a day.
 #
@@ -7,7 +9,7 @@
 CACHE="$HOME/.cabal/packages/hackage.haskell.org/00-index.cache"
 
 if ! test -f "$CACHE" || find "$CACHE" -type f -mtime +1 | grep -q 00-index; then
-  cabal update
+    cabal update
 fi
 
 
@@ -15,13 +17,21 @@ fi
 # Install dependencies and build mafia in a sandbox.
 #
 
-git submodule update --init
+git submodule init
+
+if [ "$GIT_WORKERS" = "1" ]; then
+    git submodule update
+else
+    git submodule \
+        | awk '{ print $2 }' \
+        | xargs -L 1 -P $GIT_WORKERS git submodule update 2>/dev/null
+fi
 
 cabal sandbox init
 
 CABAL_SOURCES=$(find lib -maxdepth 4 ! -path lib/\*/bin/\* ! -path lib/\*/lib/\* -name \*.cabal | xargs -L 1 dirname)
 for CABAL_SOURCE in $CABAL_SOURCES; do
-  cabal sandbox add-source -- $CABAL_SOURCE
+    cabal sandbox add-source -- $CABAL_SOURCE
 done
 
 cabal install --reorder-goals --max-backjumps=-1
