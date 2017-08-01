@@ -11,11 +11,11 @@ to think about it.
 Builds a package, including all executables, test suites and benchmarks.
 
 Mafia uses whichever version of
-[GHC](doc/installing-ghc.md) and
-[Cabal](doc/installing-cabal.md) it
+[GHC](installing-ghc.md) and
+[Cabal](installing-cabal.md) it
 finds on the `PATH` to build a project. It keeps cabal sandboxes in
 version specific directories, so that it is easy to
-[switch](doc/installing-ghc.md#advanced-multiple-ghc-versions)
+[switch](installing-ghc.md#advanced-multiple-ghc-versions)
 between versions of GHC while developing a package.
 
 Using the switching setup linked above, a typical multi-GHC session
@@ -334,5 +334,5 @@ Mafia expects both GHC and Cabal to be installed and on the `PATH`.
 
 Follow the guides below to configure your system correctly:
 
-- [Installing GHC](doc/installing-ghc.md)
-- [Installing Cabal](doc/installing-cabal.md)
+- [Installing GHC](installing-ghc.md)
+- [Installing Cabal](installing-cabal.md)
