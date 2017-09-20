@@ -80,7 +80,7 @@ data MafiaCommand =
   | MafiaHash
   | MafiaDepends DependsUI (Maybe PackageName) [Flag]
   | MafiaClean
-  | MafiaBuild Profiling Warnings CoreDump [Flag] [Argument]
+  | MafiaBuild Profiling Warnings CoreDump AsmDump [Flag] [Argument]
   | MafiaTest [Flag] [Argument]
   | MafiaTestCI [Flag] [Argument]
   | MafiaRepl [Flag] [Argument]
@@ -108,6 +108,11 @@ data CoreDump =
   | EnableCoreDump
     deriving (Eq, Show)
 
+data AsmDump =
+    DisableAsmDump
+  | EnableAsmDump
+    deriving (Eq, Show)
+
 data GhciInclude =
     Directory Directory
   | ProjectLibraries
@@ -129,8 +134,8 @@ run = \case
     mafiaDepends tree pkg flags
   MafiaClean ->
     mafiaClean
-  MafiaBuild p w dump flags args ->
-    mafiaBuild p w dump flags args
+  MafiaBuild p w dumpc dumpa flags args ->
+    mafiaBuild p w dumpc dumpa flags args
   MafiaTest flags args ->
     mafiaTest flags args
   MafiaTestCI flags args ->
@@ -192,7 +197,7 @@ commands =
             (pure MafiaClean)
 
  , command' "build" "Build this package, including all executables and test suites."
-            (MafiaBuild <$> pProfiling <*> pWarnings <*> pCoreDump <*> many pFlag <*> many pCabalArgs)
+            (MafiaBuild <$> pProfiling <*> pWarnings <*> pCoreDump <*> pAsmDump <*> many pFlag <*> many pCabalArgs)
 
  , command' "test" "Test this package, by default this runs all test suites."
             (MafiaTest <$> many pFlag <*> many pCabalArgs)
@@ -282,6 +287,12 @@ pCoreDump =
   flag DisableCoreDump EnableCoreDump $
        long "dump-core"
     <> help "Dump the optimised Core output to dist/build/*. This is simply a shorthand for other GHC options."
+
+pAsmDump :: Parser AsmDump
+pAsmDump =
+  flag DisableAsmDump EnableAsmDump $
+       long "dump-asm"
+    <> help "Dump the assembly-language output to dist/build/*. This is simply a shorthand for other GHC options."
 
 pDependsUI :: Parser DependsUI
 pDependsUI =
@@ -462,8 +473,8 @@ mafiaClean = do
   Out (_ :: ByteString) <- liftCabal $ cabal "clean" []
   liftCabal removeSandbox
 
-mafiaBuild :: Profiling -> Warnings -> CoreDump -> [Flag] -> [Argument] -> EitherT MafiaError IO ()
-mafiaBuild p w dump flags args = do
+mafiaBuild :: Profiling -> Warnings -> CoreDump -> AsmDump -> [Flag] -> [Argument] -> EitherT MafiaError IO ()
+mafiaBuild p w dumpc dumpa flags args = do
   initMafia LatestSources p flags
 
   let
@@ -475,7 +486,10 @@ mafiaBuild p w dump flags args = do
           ["--ghc-options=-Werror"]
 
     dumpargs =
-      case dump of
+      ordNub $ coredump <> asmdump
+
+    coredump =
+      case dumpc of
         DisableCoreDump ->
           []
         EnableCoreDump -> fmap ("--ghc-options="<>)
@@ -489,6 +503,14 @@ mafiaBuild p w dump flags args = do
           ,"-dsuppress-module-prefixes"
           ]
 
+    asmdump =
+      case dumpa of
+        DisableAsmDump ->
+          []
+        EnableAsmDump -> fmap ("--ghc-options="<>)
+          ["-ddump-asm"
+          ,"-ddump-to-file"
+          ]
 
   liftCabal . cabal_ "build" $ ["-j"] <> wargs <> dumpargs <> args
 
