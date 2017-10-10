@@ -560,7 +560,7 @@ mafiaQuick flags extraIncludes paths = do
 
 mafiaWatch :: [Flag] -> [GhciInclude] -> File -> [Argument] -> EitherT MafiaError IO ()
 mafiaWatch flags extraIncludes path extraArgs = do
-  ghcidExe <- bimapT MafiaBinError (</> "ghcid") $ installBinary (ipackageId "ghcid" [0, 6, 7]) []
+  ghcidExe <- bimapT MafiaBinError (</> "ghcid") $ installBinary (ipackageId "ghcid" [0, 5]) []
   dir <- getWorkingDirectory $ Just path
   args <- ghciArgs dir extraIncludes [path]
   withDirectory dir $ initMafia (vintageOfIncludes extraIncludes) DisableProfiling flags
