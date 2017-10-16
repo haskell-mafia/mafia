@@ -15,6 +15,7 @@ module Mafia.Package
   , packageIdTuple
   , parsePackageId
   , parseVersion
+  , makeVersion
   ) where
 
 import           Data.Aeson (Value(..), ToJSON(..), FromJSON(..))
@@ -95,6 +96,10 @@ parseVersion =
 parseLongestMatch :: Parse.ReadP a -> Text -> Maybe a
 parseLongestMatch p =
   fmap fst . listToMaybe . reverse . Parse.readP_to_S p . T.unpack
+
+makeVersion :: [Int] -> Version
+makeVersion v =
+  Version v []
 
 ------------------------------------------------------------------------
 
