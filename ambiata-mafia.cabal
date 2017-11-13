@@ -106,7 +106,7 @@ executable mafia
                     , containers                      == 0.5.*
                     , directory                       >= 1.2        && < 1.4
                     , filepath                        == 1.4.*
-                    , optparse-applicative            >= 0.11       && < 0.13
+                    , optparse-applicative            >= 0.11       && < 0.15
                     , text                            == 1.2.*
                     , time                            >= 1.4        && < 1.9
                     , time-locale-compat              == 0.1.*
