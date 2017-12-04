@@ -62,7 +62,7 @@ renderGhcError = \case
 
 mkGhcVersion :: [Int] -> GhcVersion
 mkGhcVersion vs =
-  GhcVersion $ Version vs []
+  GhcVersion $ makeVersion vs
 
 renderGhcVersion :: GhcVersion -> Text
 renderGhcVersion =

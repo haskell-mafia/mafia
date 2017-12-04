@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -8,7 +9,7 @@ module Mafia.Package
   , unPackageName
 
   , PackageId(..)
-  , Version(..)
+  , Version
   , packageId
   , renderPackageId
   , renderVersion
@@ -16,6 +17,7 @@ module Mafia.Package
   , parsePackageId
   , parseVersion
   , makeVersion
+  , versionNumbers
   ) where
 
 import           Data.Aeson (Value(..), ToJSON(..), FromJSON(..))
@@ -23,12 +25,18 @@ import           Data.CaseInsensitive (CI)
 import qualified Data.CaseInsensitive as CI
 import qualified Data.Char as Char
 import qualified Data.Text as T
+
+#if MIN_VERSION_Cabal(2,0,0)
+import           Distribution.Version (Version, versionNumbers)
+import qualified Distribution.Version as DistVersion
+#else
 import           Data.Version (Version (..))
-import qualified Data.Version as Version
+import qualified Data.Version as DistVersion
+#endif
 
 import           P
 
-import qualified Text.ParserCombinators.ReadP as Parse
+import qualified Data.Attoparsec.Text as Parse
 
 
 -- Similar to Cabal's Distribution.Package
@@ -60,7 +68,7 @@ instance Ord PackageId where
 
 packageId :: Text -> [Int] -> PackageId
 packageId n v =
-  PackageId (mkPackageName n) (Version v [])
+  PackageId (mkPackageName n) (makeVersion v)
 
 renderPackageId :: PackageId -> Text
 renderPackageId (PackageId name version) =
@@ -68,7 +76,7 @@ renderPackageId (PackageId name version) =
 
 renderVersion :: Version -> Text
 renderVersion =
-  T.pack . Version.showVersion
+  T.pack . DistVersion.showVersion
 
 packageIdTuple :: PackageId -> (PackageName, Version)
 packageIdTuple (PackageId n v) =
@@ -79,27 +87,36 @@ parsePackageId :: Text -> Maybe PackageId
 parsePackageId =
   let parser =
         PackageId
-          <$> (PackageName . CI.mk . T.intercalate "-" . fmap T.pack <$> Parse.sepBy1 component (Parse.char '-'))
+          <$> (PackageName . CI.mk . T.intercalate "-" <$> Parse.sepBy1 component (Parse.char '-'))
           <* Parse.char '-'
-          <*> Version.parseVersion
-          <* Parse.eof
-  in parseLongestMatch parser
+          <*> pVersion
+          <* Parse.endOfInput
+  in rightToMaybe . Parse.parseOnly parser
   where
     component = do
-      cs <- Parse.munch1 Char.isAlphaNum
-      if all Char.isDigit cs then Parse.pfail else return cs
+      cs <- Parse.takeWhile1 Char.isAlphaNum
+      if T.all Char.isDigit cs then fail "" else return cs
 
 parseVersion :: Text -> Maybe Version
 parseVersion =
-  parseLongestMatch Version.parseVersion
+  rightToMaybe . Parse.parseOnly (pVersion <* Parse.endOfInput)
 
-parseLongestMatch :: Parse.ReadP a -> Text -> Maybe a
-parseLongestMatch p =
-  fmap fst . listToMaybe . reverse . Parse.readP_to_S p . T.unpack
+pVersion :: Parse.Parser Version
+pVersion = makeVersion <$> Parse.sepBy Parse.decimal (Parse.char '.')
 
 makeVersion :: [Int] -> Version
-makeVersion v =
-  Version v []
+makeVersion xs =
+#if MIN_VERSION_Cabal(2,0,0)
+  DistVersion.mkVersion xs
+#else
+  Version xs []
+#endif
+
+#if MIN_VERSION_Cabal(2,0,0)
+#else
+versionNumbers :: Version -> [Int]
+versionNumbers (Version xs _) = xs
+#endif
 
 ------------------------------------------------------------------------
 

@@ -22,7 +22,7 @@ library
                     , attoparsec                      >= 0.12       && < 0.14
                     , base16-bytestring               == 0.1.*
                     , bytestring                      == 0.10.*
-                    , Cabal                           >= 1.22       && < 1.25
+                    , Cabal                           >= 1.24       && < 1.26
                     , case-insensitive                == 1.2.*
                     , containers                      == 0.5.*
                     , cryptonite                      == 0.15.*
