@@ -136,7 +136,6 @@ getSourcesFrom dir = do
            . fmap   (takeDirectory)
            . filter (not . T.isInfixOf ".cabal-sandbox/")
            . filter (not . T.isPrefixOf "dist-newstyle/")
-           . filter (not . T.isPrefixOf "lib/")
            . filter (not . T.isPrefixOf "bin/")
            . filter (extension ".cabal")
            . fmap   (T.drop (T.length dir' + 1))
