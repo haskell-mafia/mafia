@@ -225,26 +225,38 @@ takeReinstall p =
 parseInstallPlan :: Text -> Either CabalError [PackagePlan]
 parseInstallPlan =
   first (CabalInstallPlanParseError . T.pack) .
-  traverse parsePackagePlan .
-  List.drop 1 .
-  List.dropWhile (/= "In order, the following would be installed:") .
-  T.lines
+  A.parseOnly pPackagePlans
 
 parsePackagePlan :: Text -> Either String PackagePlan
 parsePackagePlan txt =
-  let go err = "Invalid package plan: " <> T.unpack txt <> "\nExpected: " <> err
+  let go err = "Invalid package plan: '" <> T.unpack txt <> "'\nExpected: " <> err
   in first go (A.parseOnly pPackagePlan txt)
+
+pPackagePlans :: Parser [PackagePlan]
+pPackagePlans = do
+  pDropLines "In order, the following would be installed:"
+  A.manyTill (pPackagePlan <* A.char '\n') (A.takeWhile (== '\n') *> A.endOfInput)
+
+-- Drop all lines up to and including the provided target line.
+pDropLines :: Text -> Parser ()
+pDropLines target =
+  let go = do
+      l <- A.takeWhile (/= '\n') <* A.char '\n'
+      unless (l == target) go
+  in go
 
 pPackagePlan :: Parser PackagePlan
 pPackagePlan = do
-  pid    <- pPackageId (== ' ')
+  pid    <- pPackageId
   latest <- optional pLatest
   flags  <- many pFlag
   _      <- many pStanza
   deps   <- fromMaybe [] <$> optional pVia
-  status <- pNewPackage <|> pNewVersion <|> pReinstall
-  ()     <- A.endOfInput
+  status <- pSpaceSep *> (pNewPackage <|> pNewVersion <|> pReinstall)
   pure (PackagePlan (PackageRef pid flags Nothing) latest deps status)
+
+pSpaceSep :: Parser Char
+pSpaceSep = A.char '\n' <|> A.char ' '
 
 pFlag :: Parser Flag
 pFlag =
@@ -259,31 +271,30 @@ pStanza =
 
 pLatest :: Parser Version
 pLatest =
-  A.string " (latest: " *> pVersion (== ')') <* A.char ')'
+  A.string " (latest:" *> pSpaceSep *> pVersion (== ')') <* A.char ')'
 
 pVia :: Parser [PackageId]
-pVia = do
-  let pkg = pPackageId (\x -> x == ' ' || x == ')')
-  A.string " (via: " *> pkg `A.sepBy1` A.char ' ' <* A.char ')'
+pVia =
+  pSpaceSep *> A.string "(via:" *> pSpaceSep *> pPackageId `A.sepBy1` pSpaceSep <* A.char ')'
 
 pNewPackage :: Parser PackageStatus
 pNewPackage =
-  A.string " (new package)" *> pure NewPackage
+  A.string "(new" *> pSpaceSep *> A.string "package)" *> pure NewPackage
 
 pNewVersion :: Parser PackageStatus
 pNewVersion =
-  A.string " (new version)" *> pure NewVersion
+  A.string "(new" *> pSpaceSep *> A.string "version)" *> pure NewVersion
 
 pReinstall :: Parser PackageStatus
 pReinstall = do
-  _  <- A.string " (reinstall) (changes: "
-  cs <- pPackageChange `A.sepBy1` A.string ", "
+  _  <- A.string "(reinstall)" *> pSpaceSep *> A.string "(changes:" *> pSpaceSep
+  cs <- pPackageChange `A.sepBy1` (A.string "," *> pSpaceSep)
   _  <- A.char ')'
   pure (Reinstall cs)
 
 pPackageChange :: Parser PackageChange
 pPackageChange =
-  let pkg = pPackageId (== ' ')
+  let pkg = pPackageId
       arr = A.string " -> "
       ver = pVersion (\x -> x == ',' || x == ')')
   in PackageChange <$> pkg <*> (arr *> ver)
@@ -293,9 +304,18 @@ pPackageChange =
 -- TODO instead of `Text -> Maybe a` so we didn't need these two clunky
 -- TODO wrappers below:
 
-pPackageId :: (Char -> Bool) -> Parser PackageId
-pPackageId p = do
-  txt <- A.takeTill p
+pPackageId :: Parser PackageId
+pPackageId = do
+  let
+    isPkgIdChar c
+        | c >= 'a' && c <= 'z' = True
+        | c >= 'A' && c <= 'Z' = True
+        | c >= '0' && c <= '9' = True
+        | c == '-' = True
+        | c == '.' = True
+        | otherwise = False
+
+  txt <- A.takeWhile1 isPkgIdChar
   case parsePackageId txt of
     Nothing  -> fail ("not a package-id: " <> T.unpack txt)
     Just pid -> pure pid
