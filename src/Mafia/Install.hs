@@ -43,15 +43,13 @@ import           Mafia.Package
 import           Mafia.Path
 import           Mafia.Process
 import           Mafia.Tree
+import           Mafia.Twine
 
 import           Numeric (showHex)
 
 import           P
 
 import           System.IO (IO, stderr)
-
-import           Twine.Parallel (RunError(..), consume_)
-import           Twine.Data.Queue  (writeQueue)
 
 import           X.Control.Monad.Trans.Either
 

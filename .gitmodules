@@ -7,6 +7,4 @@
 [submodule "lib/x"]
 	path = lib/x
 	url = https://github.com/haskell-mafia/x
-[submodule "lib/twine"]
-	path = lib/twine
-	url = https://github.com/haskell-mafia/twine
+

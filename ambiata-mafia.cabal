@@ -16,7 +16,6 @@ library
                       base                            >= 3          && < 5
                     , ambiata-p
                     , ambiata-x-eithert
-                    , ambiata-twine
                     , aeson                           >= 0.8        && < 0.12
                     , async                           >= 2.0        && < 2.2
                     , attoparsec                      >= 0.12       && < 0.14
@@ -30,10 +29,12 @@ library
                     , exceptions                      == 0.8.*
                     , filelock                        == 0.1.*
                     , filepath                        == 1.4.*
+                    , monad-loops                     == 0.4.*
                     , memory                          >= 0.12       && < 0.15
                     , parallel                        == 3.2.*
                     , process                         >= 1.4        && < 1.5
                     , retry                           == 0.7.*
+                    , SafeSemaphore                   == 0.10.*
                     , stm                             == 2.4.*
                     , tar                             == 0.4.*
                     , temporary                       == 1.2.*
@@ -84,6 +85,11 @@ library
                     Mafia.Script
                     Mafia.Submodule
                     Mafia.Tree
+                    Mafia.Twine
+                    Mafia.Twine.Async
+                    Mafia.Twine.Parallel
+                    Mafia.Twine.Queue
+                    Mafia.Twine.Snooze
                     Paths_ambiata_mafia
 
 executable mafia
