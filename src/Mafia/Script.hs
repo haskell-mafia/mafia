@@ -136,7 +136,7 @@ parseScript path source =
 
 renderSubmoduleUrl :: Submodule -> Text
 renderSubmoduleUrl s =
-  "git@github.com:" <> submoduleUser s <> "/" <> submoduleRepo s
+  "https://github.com/" <> submoduleUser s <> "/" <> submoduleRepo s
 
 submoduleName :: Submodule -> Text
 submoduleName s =
