@@ -22,7 +22,7 @@ check() {
 
   cd ${MAFIA_TEMP}
   if [ ! -d "${MAFIA_REPO}" ]; then
-    git clone https://github.com/ambiata/${MAFIA_REPO}
+    git clone https://github.com/haskell-mafia/${MAFIA_REPO}
   fi
 
   cd ${MAFIA_DIR}
@@ -33,5 +33,5 @@ check() {
 EOF
 }
 
-check p p           src/P.hs
-check x x/x-eithert src/X/Control/Monad/Trans/Either.hs
+check mafia-test-one    mafia-test-one                         src/Test/Mafia/One.hs
+check mafia-test-multi  mafia-test-multi/mafia-test-multi-two  src/Test/Mafia/Multi/Two.hs

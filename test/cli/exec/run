@@ -22,8 +22,8 @@ git init
 git add *
 git commit -m "Initial commit"
 
-# Sets up sandbox, nstalls packages and builds project.
-mafia build
+# Sets up sandbox, installs packages and builds project.
+MAFIA_HOME=${MAFIA_TEMP} ${MAFIA} build
 
 # Create a new Haskell file not in the cabal file so we can build it.
 cp trivial.hs xxx.hs
