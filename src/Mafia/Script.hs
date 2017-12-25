@@ -84,7 +84,7 @@ pPackage =
 
 pAlphaNum :: Atto.Parser Text
 pAlphaNum =
-  Atto.takeWhile1 (Atto.inClass "a-zA-Z0-9")
+  Atto.takeWhile1 (Atto.inClass "a-zA-Z0-9-")
 
 pHash :: Atto.Parser Text
 pHash =
@@ -310,7 +310,6 @@ setupSandbox script = do
   writeChanged cabal $
     cabalText (scriptPackages script)
 
-  pure ()
 
 execScript :: Script -> [Argument] -> EitherT ScriptError IO ()
 execScript script args = do
