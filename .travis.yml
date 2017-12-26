@@ -5,10 +5,10 @@ sudo: required
 env:
  - GHCVER=7.10.3 CABALVER=1.24
  - GHCVER=8.0.2 CABALVER=1.24
+ - GHCVER=8.2.2 CABALVER=1.24
  - GHCVER=7.10.3 CABALVER=2.0
  - GHCVER=8.0.2 CABALVER=2.0
- # Disable 8.2 for now.
- # - GHCVER=8.2.2 CABALVER=1.24
+ - GHCVER=8.2.2 CABALVER=2.0
 
 before_install:
  - sudo add-apt-repository -y ppa:hvr/ghc
