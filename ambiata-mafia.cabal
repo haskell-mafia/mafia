@@ -11,6 +11,11 @@ cabal-version:         >= 1.8
 build-type:            Custom
 description:           mafia
 
+custom-setup
+  setup-depends:
+                      base
+                    , Cabal == 1.24.*
+
 library
   build-depends:
                       base                            >= 3          && < 5
