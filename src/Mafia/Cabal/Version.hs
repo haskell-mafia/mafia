@@ -15,7 +15,7 @@ import           Mafia.Cabal.Types
 import           Mafia.Package
 import           Mafia.Process
 
-import           P
+import           Mafia.P
 
 import           System.IO (IO)
 

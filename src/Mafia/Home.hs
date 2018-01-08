@@ -15,8 +15,7 @@ import qualified Data.Text as T
 import           Mafia.IO
 import           Mafia.Path
 
-import           P
-
+import           Mafia.P
 
 getMafiaHome :: MonadIO m => m Directory
 getMafiaHome = do

@@ -19,7 +19,7 @@ import qualified Data.Text as T
 import           Mafia.Package
 import           Mafia.Process
 
-import           P
+import           Mafia.P
 
 import           System.IO (IO)
 

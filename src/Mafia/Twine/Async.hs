@@ -19,7 +19,7 @@ import           Control.Monad.IO.Class (liftIO)
 import           Data.IORef (newIORef, readIORef, writeIORef)
 import qualified Data.Text as T
 
-import           P
+import           Mafia.P
 
 import           Mafia.Twine.Snooze
 

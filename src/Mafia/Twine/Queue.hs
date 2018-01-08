@@ -8,11 +8,12 @@ module Mafia.Twine.Queue (
   , isQueueEmpty
   ) where
 
-import           Control.Concurrent.STM.TBQueue (TBQueue, newTBQueue, tryReadTBQueue, readTBQueue, writeTBQueue, isEmptyTBQueue)
+import           Control.Concurrent.STM.TBQueue (TBQueue, newTBQueue, tryReadTBQueue
+                                                , readTBQueue, writeTBQueue, isEmptyTBQueue)
 
 import           GHC.Conc (atomically)
 
-import           P
+import           Mafia.P
 
 import           System.IO
 

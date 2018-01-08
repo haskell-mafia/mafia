@@ -20,10 +20,10 @@ import           Mafia.Process
 import           Mafia.Script
 import           Mafia.Submodule
 
-import           P
+import           Mafia.P
 
 import           X.Control.Monad.Trans.Either (EitherT)
-
+import           Control.Monad.Trans.Bifunctor (firstT)
 
 -- FIX Leaving this to make code cleanup easier, but ideally is a union of
 -- sub-exceptions rather than this module being the root of most dependencies

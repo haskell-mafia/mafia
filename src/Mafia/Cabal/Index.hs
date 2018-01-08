@@ -22,7 +22,7 @@ import           Mafia.Cabal.Types
 import           Mafia.IO
 import           Mafia.Path
 
-import           P
+import           Mafia.P
 
 import qualified Prelude as Prelude
 

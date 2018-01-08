@@ -9,7 +9,7 @@ module Mafia.Twine.Snooze (
 
 import           Control.Concurrent
 
-import           P
+import           Mafia.P
 
 import           System.IO
 

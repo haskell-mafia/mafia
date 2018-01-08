@@ -41,12 +41,12 @@ import           Mafia.Package
 import           Mafia.Path
 import           Mafia.Process
 
-import           P
+import           Mafia.P
 
 import           System.IO (IO)
 
 import           X.Control.Monad.Trans.Either
-
+import           Control.Monad.Trans.Bifunctor
 
 ------------------------------------------------------------------------
 

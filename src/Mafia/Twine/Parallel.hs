@@ -3,7 +3,6 @@
 {-# LANGUAGE ExplicitForAll #-}
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-
 module Mafia.Twine.Parallel (
     RunError (..)
   , renderRunError
@@ -38,7 +37,7 @@ import           Control.Monad.Loops (untilM_)
 import qualified Data.Text as T
 import           Data.Typeable
 
-import           P
+import           Mafia.P
 
 import           Mafia.Twine.Async (waitEitherBoth)
 import           Mafia.Twine.Queue

@@ -17,12 +17,12 @@ import           Mafia.Cabal.Types
 import           Mafia.Process
 import           Mafia.IO (getEnvironment)
 
-import           P
+import           Mafia.P
 
 import           System.IO (IO)
 
 import           X.Control.Monad.Trans.Either (EitherT)
-
+import           Control.Monad.Trans.Bifunctor (firstT)
 
 cabal :: ProcessResult a => Argument -> [Argument] -> EitherT CabalError IO a
 cabal cmd args = call CabalProcessError "cabal" (cmd : args)

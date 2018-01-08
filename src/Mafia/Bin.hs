@@ -27,12 +27,12 @@ import           Mafia.IO
 import           Mafia.Package
 import           Mafia.Path
 
-import           P
+import           Mafia.P
 
 import           System.IO (IO)
 
 import           X.Control.Monad.Trans.Either (EitherT, left)
-
+import           Control.Monad.Trans.Bifunctor
 
 data BinError =
     BinInstallError InstallError

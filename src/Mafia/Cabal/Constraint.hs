@@ -18,8 +18,7 @@ import           Mafia.Cabal.Types
 import           Mafia.Package
 import           Mafia.Process
 
-import           P
-
+import           Mafia.P
 
 data Constraint =
     ConstraintPackage !PackageName !Version

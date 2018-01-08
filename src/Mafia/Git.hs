@@ -21,7 +21,7 @@ import qualified Data.Text.IO as T
 import           Mafia.Path
 import           Mafia.Process
 
-import           P
+import           Mafia.P
 
 import           System.IO (IO, stderr)
 

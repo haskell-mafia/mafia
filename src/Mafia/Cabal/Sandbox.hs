@@ -24,12 +24,12 @@ import           Mafia.IO
 import           Mafia.Path
 import           Mafia.Process
 
-import           P
+import           Mafia.P
 
 import           System.IO (IO)
 
 import           X.Control.Monad.Trans.Either (EitherT, runEitherT, left)
-
+import           Control.Monad.Trans.Bifunctor (firstT)
 
 sandbox :: ProcessResult a => Argument -> [Argument] -> EitherT CabalError IO a
 sandbox cmd args = do

@@ -45,7 +45,7 @@ import           Mafia.Package
 import           Mafia.Path
 import           Mafia.Process
 
-import           P
+import           Mafia.P
 
 ------------------------------------------------------------------------
 

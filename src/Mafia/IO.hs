@@ -72,7 +72,7 @@ import           Data.Time (UTCTime)
 
 import           Mafia.Path
 
-import           P
+import           Mafia.P
 
 import qualified System.Directory as Directory
 import qualified System.Environment as Environment

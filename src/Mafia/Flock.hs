@@ -17,7 +17,7 @@ import qualified Data.Text as T
 import           Mafia.IO
 import           Mafia.Path
 
-import           P
+import           Mafia.P
 
 import           System.FileLock (SharedExclusive(..), FileLock)
 import qualified System.FileLock as FileLock
@@ -25,7 +25,6 @@ import           System.IO (IO)
 import           System.IO.Unsafe (unsafePerformIO)
 
 import           X.Control.Monad.Trans.Either (EitherT, bracketEitherT')
-
 
 -- | Take a system-wide lock on a file, process safe and thread safe.
 withFileLock :: (MonadIO m, MonadMask m) => File -> EitherT x m () -> EitherT x m a -> EitherT x m a

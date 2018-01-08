@@ -33,7 +33,7 @@ import qualified Data.Text.Encoding as T
 import           Mafia.IO
 import           Mafia.Path
 
-import           P
+import           Mafia.P
 
 import           System.IO (IO)
 
