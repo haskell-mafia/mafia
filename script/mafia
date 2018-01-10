@@ -14,7 +14,7 @@ build_version() {
     MAFIA_PATH=$MAFIA_VERSIONS/$MAFIA_FILE
     mkdir -p $MAFIA_VERSIONS
     echo "Building $MAFIA_FILE in $MAFIA_TEMP"
-    git clone https://github.com/ambiata/mafia $MAFIA_TEMP
+    git clone https://github.com/haskell-mafia/mafia $MAFIA_TEMP
     git --git-dir="$MAFIA_TEMP/.git" --work-tree="$MAFIA_TEMP" reset --hard $MAFIA_VERSION || {
         echo "mafia version ($MAFIA_VERSION) could not be found." >&2
         exit 1

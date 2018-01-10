@@ -3,10 +3,10 @@
 	url = https://github.com/ambiata/p
 [submodule "lib/disorder"]
 	path = lib/disorder
-	url = https://github.com/ambiata/disorder.hs
+	url = https://github.com/haskell-mafia/disorder.hs
 [submodule "lib/x"]
 	path = lib/x
-	url = https://github.com/ambiata/x
+	url = https://github.com/haskell-mafia/x
 [submodule "lib/twine"]
 	path = lib/twine
-	url = https://github.com/ambiata/twine
+	url = https://github.com/haskell-mafia/twine

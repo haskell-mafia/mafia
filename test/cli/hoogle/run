@@ -10,8 +10,8 @@ MAFIA_TEMP=$(mktemp -d 2>/dev/null || mktemp -d -t 'mafia')
 trap "rm -rf \"${MAFIA_TEMP}\"" EXIT
 
 cd ${MAFIA_TEMP}
-git clone https://github.com/ambiata/p.git
-cd p
+git clone https://github.com/haskell-mafia/mafia-test-one.git
+cd mafia-test-one
 
 MAFIA_HOME=${MAFIA_TEMP} ${MAFIA} hoogle "fst" | grep -F "Prelude fst :: (a, b) -> a"
 MAFIA_HOME=${MAFIA_TEMP} ${MAFIA} hoogle "(Int -> Int) -> [Int] -> [Int]" | grep -F "Prelude fmap :: Functor f => (a -> b) -> f a -> f b"

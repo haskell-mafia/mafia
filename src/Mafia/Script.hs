@@ -5,11 +5,20 @@ module Mafia.Script (
     ScriptError(..)
   , renderScriptError
   , runScript
+
+  -- For testing.
+  , Pragma (..)
+  , Submodule (..)
+  , SubmoduleLocation (..)
+  , SubmoduleProtocol (..)
+  , pSubmodule
+  , renderPragmaSubmodule
   ) where
 
 import           Control.Monad.IO.Class (MonadIO(..))
 
 import qualified Data.Attoparsec.Text as Atto
+import           Data.Char (isSpace)
 import qualified Data.Map as Map
 import qualified Data.Text as T
 
@@ -41,11 +50,23 @@ newtype Package =
       unPackage :: Text
     } deriving (Eq, Ord, Show)
 
+data SubmoduleProtocol =
+    Https
+  | Git
+    deriving (Eq, Ord, Show)
+
 data Submodule =
   Submodule {
-      submoduleUser :: !Text
+      submoduleLocation :: !(Maybe SubmoduleLocation)
+    , submoduleUser :: !Text
     , submoduleRepo :: !Text
     , submoduleCommit :: !(Maybe Text)
+    } deriving (Eq, Ord, Show)
+
+data SubmoduleLocation =
+  SubmoduleLocation {
+      submoduleProtocol :: !SubmoduleProtocol
+    , submoduleService :: !Text
     } deriving (Eq, Ord, Show)
 
 data Pragma =
@@ -82,9 +103,9 @@ pPackage =
   fmap PragmaPackage . pPragma "PACKAGE" $
     Package . T.strip <$> Atto.takeWhile (/= '#')
 
-pAlphaNum :: Atto.Parser Text
-pAlphaNum =
-  Atto.takeWhile1 (Atto.inClass "a-zA-Z0-9")
+pNameChar :: Atto.Parser Text
+pNameChar =
+  Atto.takeWhile1 (Atto.inClass "a-zA-Z0-9-")
 
 pHash :: Atto.Parser Text
 pHash =
@@ -94,9 +115,16 @@ pSubmodule :: Atto.Parser Pragma
 pSubmodule =
   fmap PragmaSubmodule . pPragma "SUBMODULE" $
     Submodule
-      <$> pAlphaNum <* Atto.char '/'
-      <*> pAlphaNum
+      <$> Atto.option Nothing (Just <$> Atto.try pSubmoduleLocation)
+      <*> pNameChar <* Atto.char '/'
+      <*> pNameChar
       <*> optional (Atto.char '@' *> pHash)
+
+pSubmoduleLocation :: Atto.Parser SubmoduleLocation
+pSubmoduleLocation =
+  SubmoduleLocation
+    <$> ((Atto.string "git@" *> pure Git) <|> (Atto.string "https://" *> pure Https))
+    <*> Atto.takeWhile1 (not . isSpace) <* Atto.takeWhile1 isSpace
 
 tryParsePragma :: Text -> Maybe Pragma
 tryParsePragma =
@@ -134,9 +162,38 @@ parseScript path source =
   in
     Script sid (hashText source) path packages submodules source
 
+-- | Render a full git url. If the SubmoduleLocation isn't given, it is assumed
+-- to be 'git@github.com:'
 renderSubmoduleUrl :: Submodule -> Text
 renderSubmoduleUrl s =
-  "git@github.com:" <> submoduleUser s <> "/" <> submoduleRepo s
+  let
+    url =
+      case submoduleLocation s of
+        Nothing -> "git@github.com:"
+        Just l ->
+          case submoduleProtocol l of
+            Https ->  "https://" <> submoduleService l <> "/"
+            Git ->  "git@" <> submoduleService l <> ":"
+  in
+    url <> submoduleUser s <> "/" <> submoduleRepo s
+
+-- | Render a mafia script 'SUBMODULE' line. This is mainly for testing.
+renderPragmaSubmodule :: Submodule -> Text
+renderPragmaSubmodule s =
+  let
+    location =
+      case submoduleLocation s of
+        Nothing -> ""
+        Just l ->
+          case submoduleProtocol l of
+            Https ->  "https://" <> submoduleService l
+            Git ->  "git@" <> submoduleService l
+    commit =
+      case submoduleCommit s of
+        Nothing -> ""
+        Just c -> "@" <> c
+  in
+    "{-# SUBMODULE " <> location <> " " <> submoduleUser s <> "/" <> submoduleRepo s <> commit <> " #-}"
 
 submoduleName :: Submodule -> Text
 submoduleName s =
@@ -191,10 +248,10 @@ pGitSubmodule = do
   _ <- Atto.char ' ' -- should never be '-' or '+' given we're managing the directory
   commit <- Atto.takeWhile (Atto.inClass "0-9a-f") <* Atto.char ' '
   _ <- Atto.string "lib/"
-  user <- pAlphaNum <* Atto.char '/'
-  repo <- pAlphaNum <* Atto.char ' '
+  user <- pNameChar <* Atto.char '/'
+  repo <- pNameChar <* Atto.char ' '
   _ <- Atto.char '(' *> Atto.takeWhile (/= ')') <* Atto.char ')' <* Atto.endOfLine
-  pure $ Submodule user repo (Just commit)
+  pure $ Submodule Nothing user repo (Just commit)
 
 parseGitSubmodules :: Text -> Either ScriptError [Submodule]
 parseGitSubmodules =
@@ -310,7 +367,6 @@ setupSandbox script = do
   writeChanged cabal $
     cabalText (scriptPackages script)
 
-  pure ()
 
 execScript :: Script -> [Argument] -> EitherT ScriptError IO ()
 execScript script args = do

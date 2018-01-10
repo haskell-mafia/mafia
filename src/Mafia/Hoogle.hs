@@ -48,7 +48,7 @@ hooglePackages :: Text -> EitherT MafiaError IO HooglePackagesSandbox
 hooglePackages hackageRoot = do
   firstT MafiaInitError $ initialize LatestSources Nothing Nothing
   db <- hoogleCacheDir
-  hoogleExe <- installHoogle
+  hoogleExe <- findHoogleExe
   Out pkgStr <- liftCabal $ cabal "exec" ["--", "ghc-pkg", "list", "--simple-output"]
   let pkgs = T.splitOn " " . T.strip $ pkgStr
   fmap (HooglePackagesSandbox . catMaybes) . for pkgs $ \pkg -> do
@@ -80,7 +80,7 @@ hoogleIndex args pkgs = do
   --    Unfortunately hoogle doesn't like the "-$version" part :(
   let hash = renderHash .  hashText .  mconcat .  fmap renderPackageId $ pkgs
   db <- hoogleCacheDir
-  hoogleExe <- installHoogle
+  hoogleExe <- findHoogleExe
   db' <- (\d -> d </> "hoogle" </> hash) <$> liftCabal initSandbox
   unlessM (doesFileExist $ db' </> "default.hoo") $ do
     createDirectoryIfMissing True db'
@@ -104,6 +104,14 @@ joinHooglePackages (HooglePackagesCached cached) (HooglePackagesSandbox current)
 hoogleCacheDir :: MonadIO m => m Directory
 hoogleCacheDir =
   ensureMafiaDir "hoogle"
+
+-- | Find the 'hoogle' executable on $PATH and it if isn't there, install it.
+findHoogleExe :: EitherT MafiaError IO File
+findHoogleExe = do
+  res <- runEitherT $ T.init . unOut <$> call MafiaProcessError "which" ["hoogle"]
+  case res of
+    Right path -> pure path
+    Left _ -> installHoogle
 
 installHoogle :: EitherT MafiaError IO File
 installHoogle =

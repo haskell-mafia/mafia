@@ -21,19 +21,17 @@ trap "rm -rf \"$MAFIA_TEMP\"" EXIT
 cat << EOF > $SCRIPT
 #!/usr/bin/env mafia
 
-{-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-{-# SUBMODULE ambiata/p@3ea83a82b058ba2e1dd216d9e7832fd49cf33dbd #-}
+{-# SUBMODULE https://github.com haskell-mafia/mafia-test-one@eb3541ff0ef45b5da47db3dac71abe97c5fcbd87 #-}
 
-{-# PACKAGE ambiata-p #-}
+{-# PACKAGE mafia-test-one #-}
 {-# PACKAGE pretty-show == 1.6.* #-}
 {-# PACKAGE text == 1.2.* #-}
 
+import           Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.Read as T
-
-import           P
 
 import           System.IO (IO, putStrLn)
 import           System.Environment (getArgs)
@@ -41,7 +39,7 @@ import           System.Environment (getArgs)
 import           Text.Show.Pretty (ppShow)
 
 data Argument =
-    Int !Int64
+    Int !Int
   | String !Text
     deriving (Show)
 
