@@ -22,7 +22,7 @@ import           Mafia.Submodule
 
 import           Mafia.P
 
-import           X.Control.Monad.Trans.Either (EitherT)
+import           Control.Monad.Trans.Either (EitherT)
 import           Control.Monad.Trans.Bifunctor (firstT)
 
 -- FIX Leaving this to make code cleanup easier, but ideally is a union of

@@ -14,17 +14,17 @@ import           Data.Map (Map)
 import qualified Data.Map as Map
 import qualified Data.Text as T
 
+import           Mafia.Catch
 import           Mafia.IO
-import           Mafia.Path
-
 import           Mafia.P
+import           Mafia.Path
 
 import           System.FileLock (SharedExclusive(..), FileLock)
 import qualified System.FileLock as FileLock
 import           System.IO (IO)
 import           System.IO.Unsafe (unsafePerformIO)
 
-import           X.Control.Monad.Trans.Either (EitherT, bracketEitherT')
+import           Control.Monad.Trans.Either
 
 -- | Take a system-wide lock on a file, process safe and thread safe.
 withFileLock :: (MonadIO m, MonadMask m) => File -> EitherT x m () -> EitherT x m a -> EitherT x m a

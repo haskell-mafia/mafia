@@ -25,7 +25,7 @@ module Mafia.Path
 import qualified Data.List as List
 import qualified Data.Text as T
 
-import           P
+import           Mafia.P
 
 import qualified System.FilePath as FilePath
 

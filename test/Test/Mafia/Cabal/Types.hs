@@ -7,7 +7,7 @@ import           Disorder.Core.Tripping (tripping)
 
 import           Mafia.Cabal.Types
 
-import           P
+import           Mafia.P
 
 import           System.IO (IO)
 

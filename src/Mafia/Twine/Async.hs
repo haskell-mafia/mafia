@@ -25,7 +25,7 @@ import           Mafia.Twine.Snooze
 
 import           System.IO (IO)
 
-import           X.Control.Monad.Trans.Either
+import           Control.Monad.Trans.Either
 
 data AsyncTimeout =
   AsyncTimeout Duration

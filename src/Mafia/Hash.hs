@@ -37,7 +37,7 @@ import           Mafia.P
 
 import           System.IO (IO)
 
-import           X.Control.Monad.Trans.Either (EitherT, left)
+import           Control.Monad.Trans.Either (EitherT, left)
 
 ------------------------------------------------------------------------
 

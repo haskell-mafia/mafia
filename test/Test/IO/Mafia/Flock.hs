@@ -16,7 +16,7 @@ import           Disorder.Core.IO
 import           Mafia.Flock
 import           Mafia.Path
 
-import           P
+import           Mafia.P
 
 import           System.IO (IO)
 import qualified System.IO.Temp as Temp
@@ -24,7 +24,7 @@ import qualified System.IO.Temp as Temp
 import           Test.QuickCheck
 import           Test.QuickCheck.Instances ()
 
-import           X.Control.Monad.Trans.Either (runEitherT)
+import           Control.Monad.Trans.Either (runEitherT)
 
 
 prop_flock :: Property

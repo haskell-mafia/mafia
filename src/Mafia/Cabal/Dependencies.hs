@@ -45,7 +45,7 @@ import           Mafia.P
 
 import           System.IO (IO)
 
-import           X.Control.Monad.Trans.Either
+import           Control.Monad.Trans.Either
 import           Control.Monad.Trans.Bifunctor
 
 ------------------------------------------------------------------------

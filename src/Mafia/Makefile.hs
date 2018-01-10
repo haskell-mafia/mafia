@@ -12,11 +12,12 @@ import           Mafia.Path
 import           Mafia.Process
 import           Mafia.Error
 
-import           P
+import           Mafia.P
 
 import           System.IO (IO)
 
-import           X.Control.Monad.Trans.Either (EitherT)
+import           Control.Monad.Trans.Bifunctor
+import           Control.Monad.Trans.Either (EitherT)
 
 buildMakefile :: Directory -> EitherT MafiaError IO ()
 buildMakefile directory = do
@@ -37,4 +38,3 @@ callMakefile makeFile = do
          , processDirectory   = Nothing
          , processEnvironment = Just (Map.insert "MAFIA" mafia env) }
   return ()
-

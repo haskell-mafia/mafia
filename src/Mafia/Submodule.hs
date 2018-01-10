@@ -28,12 +28,12 @@ import           Mafia.IO
 import           Mafia.Path
 import           Mafia.Process
 
-import           P
+import           Mafia.P
 
 import           System.IO (IO, stderr)
 
-import           X.Control.Monad.Trans.Either (EitherT)
-
+import           Control.Monad.Trans.Bifunctor
+import           Control.Monad.Trans.Either (EitherT)
 
 data SubmoduleError =
     SubmoduleCabalError CabalError

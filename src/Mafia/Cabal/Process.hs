@@ -21,7 +21,7 @@ import           Mafia.P
 
 import           System.IO (IO)
 
-import           X.Control.Monad.Trans.Either (EitherT)
+import           Control.Monad.Trans.Either (EitherT)
 import           Control.Monad.Trans.Bifunctor (firstT)
 
 cabal :: ProcessResult a => Argument -> [Argument] -> EitherT CabalError IO a

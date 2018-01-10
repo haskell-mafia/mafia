@@ -4,4 +4,6 @@
 [submodule "lib/x"]
 	path = lib/x
 	url = https://github.com/haskell-mafia/x
-
+[submodule "lib/p"]
+	path = lib/p
+	url = git@github.com:ambiata/p.git

@@ -81,9 +81,12 @@ module Mafia.P (
   , fromMaybe
   , maybe
   , isJust
+  , isNothing
   , mapMaybe
   , maybeToRight
   , catMaybes
+  , listToMaybe
+  , rightToMaybe
   -- ** Tuple
   , fst
   , snd
@@ -236,8 +239,10 @@ import           Data.Maybe as Maybe (
          , fromMaybe
          , maybe
          , isJust
+         , isNothing
          , mapMaybe
          , catMaybes
+         , listToMaybe
          )
 import           Data.Monoid as Monoid (
            Monoid (..)
@@ -272,6 +277,8 @@ import           Data.List as List (
                    , filter
                    , reverse
                    , any
+                   , and
+                   , notElem
 #if (__GLASGOW_HASKELL__ < 710)
                    , length
                    , null
@@ -392,3 +399,6 @@ infixl 8 `andA`, `orA`
 
 maybeToRight :: l -> Maybe r -> Either l r
 maybeToRight l = maybe (Left l) Right
+
+rightToMaybe :: Either l r -> Maybe r
+rightToMaybe = either (const Nothing) Just

@@ -7,7 +7,7 @@ import           Disorder.Core.Tripping (tripping)
 
 import           Mafia.Package
 
-import           P
+import           Mafia.P
 
 import           System.IO (IO)
 

@@ -28,7 +28,7 @@ import qualified Prelude as Prelude
 
 import           System.IO (IO)
 
-import           X.Control.Monad.Trans.Either (EitherT, hoistEither)
+import           Control.Monad.Trans.Either (EitherT, hoistEither)
 
 ------------------------------------------------------------------------
 

@@ -14,7 +14,6 @@ description:           mafia
 library
   build-depends:
                       base                            >= 3          && < 5
-                    , ambiata-p
                     , ambiata-x-eithert
                     , aeson                           >= 0.8        && < 0.12
                     , async                           >= 2.0        && < 2.2
@@ -44,6 +43,7 @@ library
                     , time-locale-compat              == 0.1.*
                     , transformers                    >= 0.4        && < 0.6
                     , transformers-bifunctors         == 0.1.*
+                    , transformers-either             == 0.0.1
                     , unix                            == 2.7.*
 
   ghc-options:
@@ -68,6 +68,7 @@ library
                     Mafia.Cabal.Types
                     Mafia.Cabal.Version
                     Mafia.Cache
+                    Mafia.Catch
                     Mafia.Error
                     Mafia.Flock
                     Mafia.Ghc
@@ -157,7 +158,6 @@ test-suite test
                     , ambiata-disorder-core
                     , ambiata-disorder-corpus
                     , ambiata-mafia
-                    , ambiata-p
                     , ambiata-x-eithert
                     , QuickCheck                      == 2.8.*
                     , quickcheck-instances            == 0.3.*
@@ -190,7 +190,6 @@ test-suite test-io
                     , ambiata-disorder-core
                     , ambiata-disorder-corpus
                     , ambiata-mafia
-                    , ambiata-p
                     , ambiata-x-eithert
                     , async                           >= 2.0        && < 2.2
                     , containers                      == 0.5.*
@@ -200,6 +199,8 @@ test-suite test-io
                     , temporary                       == 1.2.*
                     , text                            == 1.2.*
                     , transformers                    >= 0.4        && < 0.6
+                    , transformers-bifunctors
+                    , transformers-either
 
 test-suite test-cli
   type:

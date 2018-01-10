@@ -12,11 +12,12 @@ import           Mafia.IO
 import           Mafia.Path
 import           Mafia.Error
 
-import           P
+import           Mafia.P
 
 import           System.IO (IO)
 
-import           X.Control.Monad.Trans.Either (EitherT)
+import           Control.Monad.Trans.Bifunctor
+import           Control.Monad.Trans.Either (EitherT)
 
 getIncludeDirs :: EitherT MafiaError IO [Path]
 getIncludeDirs = do
@@ -40,4 +41,3 @@ parseLine line
  = is
  | otherwise
  = []
-

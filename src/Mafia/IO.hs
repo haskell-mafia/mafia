@@ -81,8 +81,8 @@ import           System.IO.Error (isDoesNotExistError)
 import qualified System.IO.Temp as Temp
 import qualified System.Posix.Files as Posix
 
-import           X.Control.Monad.Trans.Either (EitherT, pattern EitherT)
-import           X.Control.Monad.Trans.Either (runEitherT, hoistEither)
+import           Control.Monad.Trans.Either (EitherT, pattern EitherT)
+import           Control.Monad.Trans.Either (runEitherT, hoistEither)
 
 ------------------------------------------------------------------------
 -- Directory Operations

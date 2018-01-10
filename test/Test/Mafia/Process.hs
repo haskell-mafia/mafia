@@ -6,10 +6,9 @@ module Test.Mafia.Process where
 
 import           Mafia.Process
 
-import           P
+import           Mafia.P
 
 import           Test.QuickCheck
-
 
 prop_clean xs =
   counterexample "contained \\b or \\r" $

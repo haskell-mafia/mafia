@@ -39,11 +39,12 @@ import           Mafia.Path
 import           Mafia.Process
 import           Mafia.Submodule
 
-import           P
+import           Mafia.P
 
 import           System.IO (IO, stderr)
 
-import           X.Control.Monad.Trans.Either (EitherT, runEitherT, hoistEither)
+import           Control.Monad.Trans.Bifunctor
+import           Control.Monad.Trans.Either (EitherT, runEitherT, hoistEither)
 
 
 data InitError =

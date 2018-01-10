@@ -44,7 +44,7 @@ import           Mafia.Twine.Queue
 
 import           System.IO
 
-import           X.Control.Monad.Trans.Either
+import           Control.Monad.Trans.Either
 
 newtype Result a =
   Result (MVar a)

@@ -14,7 +14,7 @@ import           Mafia.Cabal.Constraint
 import           Mafia.Cabal.Types
 import           Mafia.Package
 
-import           P
+import           Mafia.P
 
 import           Test.QuickCheck
 import           Test.QuickCheck.Instances ()

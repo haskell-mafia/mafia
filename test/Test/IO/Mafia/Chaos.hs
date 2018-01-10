@@ -23,14 +23,14 @@ import qualified Data.Set as Set
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
 
+import           Mafia.Catch (bracketEitherT')
 import           Mafia.Git
 import           Mafia.IO
+import           Mafia.P
 import           Mafia.Path
-import           Mafia.Process (ProcessError, ProcessResult, Argument)
 import           Mafia.Process (Hush(..), Pass(..))
+import           Mafia.Process (ProcessError, ProcessResult, Argument)
 import           Mafia.Process (call_, callFrom)
-
-import           P
 
 import           System.IO (IO, print)
 
@@ -38,8 +38,9 @@ import           Test.QuickCheck (Arbitrary(..), Gen, Property, Testable(..))
 import           Test.QuickCheck (forAllProperties)
 import qualified Test.QuickCheck as QC
 
-import           X.Control.Monad.Trans.Either (EitherT, runEitherT)
-import           X.Control.Monad.Trans.Either (hoistEither, bracketEitherT')
+import           Control.Monad.Trans.Either (EitherT, runEitherT)
+import           Control.Monad.Trans.Either (hoistEither)
+import           Control.Monad.Trans.Bifunctor
 
 ------------------------------------------------------------------------
 

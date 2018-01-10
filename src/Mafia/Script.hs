@@ -28,11 +28,11 @@ import           Mafia.IO
 import           Mafia.Path
 import           Mafia.Process
 
-import           P
+import           Mafia.P
 
 import           System.IO (IO)
 
-import           X.Control.Monad.Trans.Either (EitherT, hoistMaybe, hoistEither)
+import           Control.Monad.Trans.Either (EitherT, hoistMaybe, hoistEither)
 
 
 data Script =
