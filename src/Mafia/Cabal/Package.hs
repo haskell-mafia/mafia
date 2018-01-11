@@ -59,7 +59,7 @@ import           Mafia.P
 
 import           System.IO (IO)
 
-import           X.Control.Monad.Trans.Either (EitherT, left, runEitherT)
+import           Control.Monad.Trans.Either (EitherT, left, runEitherT)
 import           Control.Monad.Trans.Bifunctor (firstT)
 ------------------------------------------------------------------------
 
