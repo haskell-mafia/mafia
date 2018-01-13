@@ -1,4 +1,3 @@
-{-# LANGUAGE CPP #-}
 {-# LANGUAGE DoAndIfThenElse #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NoImplicitPrelude #-}
@@ -41,14 +40,9 @@ import qualified Distribution.PackageDescription as Cabal (Library(..))
 import qualified Distribution.PackageDescription as Cabal (PackageDescription(..))
 import           Distribution.PackageDescription.Parse (ParseResult(..))
 
-#if MIN_VERSION_Cabal(2,0,0)
 import           Distribution.PackageDescription.Parse (parseGenericPackageDescription)
 import           Distribution.Types.CondTree (CondBranch (..))
 import           Distribution.Types.LegacyExeDependency (LegacyExeDependency(..))
-#else
-import           Distribution.Package (Dependency(..))
-import           Distribution.PackageDescription.Parse (parsePackageDescription)
-#endif
 
 import           Distribution.Version (VersionRange, anyVersion, asVersionIntervals)
 import qualified Distribution.Version as Cabal (LowerBound(..), UpperBound(..), Bound(..), Version)
@@ -124,15 +118,11 @@ getBuildTools :: Directory -> EitherT CabalError IO (Set BuildTool)
 getBuildTools dir =
   withCabalFile dir $ \file -> do
     msrc <- fmap T.unpack <$> readUtf8 file
-#if MIN_VERSION_Cabal(2,0,0)
-    let parsePackageDescription =
-          parseGenericPackageDescription
-#endif
     case msrc of
       Nothing ->
         left $ CabalCouldNotReadBuildTools file
       Just src ->
-        case parsePackageDescription src of
+        case parseGenericPackageDescription src of
           ParseFailed err ->
             left $ CabalFileParseError file err
           ParseOk _ gpd ->
@@ -152,11 +142,7 @@ takeTools gpd =
 toolsOfCondTree :: (a -> Set BuildTool) -> CondTree v c a -> Set BuildTool
 toolsOfCondTree f tree =
   let
-#if MIN_VERSION_Cabal(2,0,0)
     loop (CondBranch _ x my) =
-#else
-    loop (_, x, my) =
-#endif
       toolsOfCondTree f x
         <> maybe Set.empty (toolsOfCondTree f) my
   in
@@ -175,7 +161,6 @@ toolsOfBuildInfo :: BuildInfo -> Set BuildTool
 toolsOfBuildInfo =
   Set.fromList . fmap toolOfDependency . buildTools
 
-#if MIN_VERSION_Cabal(2,0,0)
 toolOfDependency :: LegacyExeDependency -> BuildTool
 toolOfDependency = \case
   LegacyExeDependency name v ->
@@ -184,16 +169,6 @@ toolOfDependency = \case
         mkPackageName $ T.pack name
     in
       BuildTool pname $ constraintsOfVersion pname v
-#else
-toolOfDependency :: Dependency -> BuildTool
-toolOfDependency = \case
-  Dependency name v ->
-    let
-      pname =
-        mkPackageName $ T.pack (Cabal.unPackageName name)
-    in
-      BuildTool pname $ constraintsOfVersion pname v
-#endif
 
 constraintsOfVersion :: PackageName -> VersionRange -> [Constraint]
 constraintsOfVersion name range =

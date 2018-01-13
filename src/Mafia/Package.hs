@@ -1,4 +1,3 @@
-{-# LANGUAGE CPP #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -26,13 +25,8 @@ import qualified Data.CaseInsensitive as CI
 import qualified Data.Char as Char
 import qualified Data.Text as T
 
-#if MIN_VERSION_Cabal(2,0,0)
 import           Distribution.Version (Version, versionNumbers)
 import qualified Distribution.Version as DistVersion
-#else
-import           Data.Version (Version (..))
-import qualified Data.Version as DistVersion
-#endif
 
 import           P
 
@@ -106,17 +100,7 @@ pVersion = makeVersion <$> Parse.sepBy Parse.decimal (Parse.char '.')
 
 makeVersion :: [Int] -> Version
 makeVersion xs =
-#if MIN_VERSION_Cabal(2,0,0)
   DistVersion.mkVersion xs
-#else
-  Version xs []
-#endif
-
-#if MIN_VERSION_Cabal(2,0,0)
-#else
-versionNumbers :: Version -> [Int]
-versionNumbers (Version xs _) = xs
-#endif
 
 ------------------------------------------------------------------------
 
