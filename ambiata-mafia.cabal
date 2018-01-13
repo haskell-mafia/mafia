@@ -96,6 +96,14 @@ executable mafia
   main-is:
                     ../main/mafia.hs
 
+  other-modules:
+                    BuildInfo_ambiata_mafia
+                    DependencyInfo_ambiata_mafia
+
+  autogen-modules:
+                    BuildInfo_ambiata_mafia
+                    DependencyInfo_ambiata_mafia
+
   build-depends:
                       base
                     , ambiata-mafia
@@ -126,6 +134,15 @@ test-suite test
   hs-source-dirs:
                     test
 
+  other-modules:
+                    Test.Mafia.Arbitrary
+                    Test.Mafia.Cabal.Constraint
+                    Test.Mafia.Cabal.Dependencies
+                    Test.Mafia.Cabal.Types
+                    Test.Mafia.Hoogle
+                    Test.Mafia.Package
+                    Test.Mafia.Process
+
   build-depends:
                       base                            >= 3          && < 5
                     , ambiata-disorder-core
@@ -154,6 +171,10 @@ test-suite test-io
 
   hs-source-dirs:
                     test
+
+  other-modules:
+                    Test.IO.Mafia.Chaos
+                    Test.IO.Mafia.Flock
 
   build-depends:
                       base                            >= 3          && < 5

@@ -37,4 +37,6 @@ script:
  - dist/build/test-io/test-io
  - dist/build/test-cli/test-cli
  - cabal haddock
- - cabal sdist
+ - 'if [ ${CABALVER} = "2.0" ]; then
+      cabal sdist ;
+    fi'
