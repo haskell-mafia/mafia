@@ -12,8 +12,8 @@ import           Control.Exception (IOException)
 import           Control.Monad.Catch (MonadCatch(..), MonadMask(..), bracket, handle)
 import           Control.Monad.IO.Class (MonadIO(..))
 
-import           Disorder.Corpus (muppets, viruses)
-import           Disorder.Core.IO (testIO)
+import           Test.Mafia.Corpus (muppets, viruses)
+import           Test.Mafia.IO (testIO)
 
 import           Data.Char (toUpper)
 import           Data.Map (Map)

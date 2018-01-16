@@ -1,4 +1,4 @@
-import           Disorder.Core.Main
+import           Test.Mafia.Main
 
 import qualified Test.IO.Mafia.Chaos
 import qualified Test.IO.Mafia.Flock

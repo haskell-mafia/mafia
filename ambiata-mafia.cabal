@@ -154,9 +154,9 @@ test-suite test
 
   build-depends:
                       base                            >= 3          && < 5
-                    , ambiata-disorder-core
-                    , ambiata-disorder-corpus
                     , ambiata-mafia
+                    , directory                       >= 1.2        && < 1.4
+                    , process                         >= 1.2        && < 1.5
                     , QuickCheck                      == 2.8.*
                     , quickcheck-instances            == 0.3.*
                     , text
@@ -185,12 +185,12 @@ test-suite test-io
 
   build-depends:
                       base                            >= 3          && < 5
-                    , ambiata-disorder-core
-                    , ambiata-disorder-corpus
                     , ambiata-mafia
                     , async                           >= 2.0        && < 2.2
                     , containers                      == 0.5.*
+                    , directory                       >= 1.2        && < 1.4
                     , exceptions                      == 0.8.*
+                    , process                         >= 1.2        && < 1.5
                     , QuickCheck                      == 2.8.*
                     , quickcheck-instances            == 0.3.*
                     , temporary                       == 1.2.*
@@ -214,5 +214,6 @@ test-suite test-cli
 
   build-depends:
                       base                            >= 3          && < 5
-                    , ambiata-disorder-core
                     , ambiata-mafia
+                    , directory                       >= 1.2        && < 1.4
+                    , process                         >= 1.2        && < 1.5

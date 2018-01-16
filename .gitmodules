@@ -1,3 +1,0 @@
-[submodule "lib/disorder"]
-	path = lib/disorder
-	url = https://github.com/ambiata/disorder.hs

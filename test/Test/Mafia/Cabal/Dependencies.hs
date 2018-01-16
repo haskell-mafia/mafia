@@ -3,7 +3,7 @@
 {-# LANGUAGE TemplateHaskell #-}
 module Test.Mafia.Cabal.Dependencies where
 
-import           Disorder.Core.Tripping (tripping)
+import           Test.Mafia.Tripping (tripping)
 
 import           Mafia.Cabal.Dependencies
 import           Mafia.Cabal.Types

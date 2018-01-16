@@ -11,7 +11,7 @@ import           Control.Monad.IO.Class (liftIO)
 import           Data.IORef (newIORef, modifyIORef', readIORef)
 import qualified Data.Text as T
 
-import           Disorder.Core.IO
+import           Test.Mafia.IO (testIO)
 
 import           Mafia.Flock
 import           Mafia.Path
