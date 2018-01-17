@@ -14,17 +14,15 @@ module Mafia.Ghc (
   , renderGhcError
   ) where
 
+import           Control.Monad.Trans.Either (EitherT, left, runEitherT)
+
 import qualified Data.Text as T
 
+import           Mafia.P
 import           Mafia.Package
 import           Mafia.Process
 
-import           Mafia.P
-
 import           System.IO (IO)
-
-import           Control.Monad.Trans.Either (EitherT, left, runEitherT)
-
 
 newtype GhcVersion =
   GhcVersion {

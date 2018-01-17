@@ -18,6 +18,8 @@ module Mafia.Hash
   , tryHashFile
   ) where
 
+import           Control.Monad.Trans.Either (EitherT, left)
+
 import           Crypto.Hash (Digest, SHA1)
 import qualified Crypto.Hash as Hash
 
@@ -31,13 +33,10 @@ import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 
 import           Mafia.IO
+import           Mafia.P
 import           Mafia.Path
 
-import           Mafia.P
-
 import           System.IO (IO)
-
-import           Control.Monad.Trans.Either (EitherT, left)
 
 ------------------------------------------------------------------------
 

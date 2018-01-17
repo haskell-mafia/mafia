@@ -10,7 +10,9 @@ module Test.IO.Mafia.Chaos where
 
 import           Control.Exception (IOException)
 import           Control.Monad.Catch (MonadCatch(..), MonadMask(..), bracket, handle)
-import           Control.Monad.IO.Class (MonadIO(..))
+import           Control.Monad.Trans.Bifunctor (firstT)
+import           Control.Monad.Trans.Either (EitherT, runEitherT)
+import           Control.Monad.Trans.Either (hoistEither)
 
 import           Test.Mafia.Corpus (muppets, viruses)
 import           Test.Mafia.IO (testIO)
@@ -37,10 +39,6 @@ import           System.IO (IO, print)
 import           Test.QuickCheck (Arbitrary(..), Gen, Property, Testable(..))
 import           Test.QuickCheck (forAllProperties)
 import qualified Test.QuickCheck as QC
-
-import           Control.Monad.Trans.Either (EitherT, runEitherT)
-import           Control.Monad.Trans.Either (hoistEither)
-import           Control.Monad.Trans.Bifunctor
 
 ------------------------------------------------------------------------
 

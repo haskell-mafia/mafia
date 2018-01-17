@@ -8,14 +8,11 @@ module Mafia.Home
   , ensureMafiaDir
   ) where
 
-import           Control.Monad.IO.Class (MonadIO(..))
-
 import qualified Data.Text as T
 
 import           Mafia.IO
-import           Mafia.Path
-
 import           Mafia.P
+import           Mafia.Path
 
 getMafiaHome :: MonadIO m => m Directory
 getMafiaHome = do

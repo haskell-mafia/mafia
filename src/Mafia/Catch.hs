@@ -1,6 +1,7 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE PatternSynonyms #-}
 module Mafia.Catch (
     Disaster(..)
   , bracketF
@@ -8,26 +9,18 @@ module Mafia.Catch (
   , bracketEitherT'
   ) where
 
-import           Control.Monad (return, liftM)
 import           Control.Monad.Catch (catchAll, throwM, handle)
 import           Control.Monad.Catch (Exception(..), SomeException(..))
 import           Control.Monad.Catch (MonadCatch(..), MonadMask(..))
+import           Control.Monad.Trans.Either (EitherT, runEitherT, pattern EitherT)
 
-import           Data.Bool (Bool(..))
-import           Data.Either (Either(..), either)
-import           Data.Eq (Eq(..))
-import           Data.Function (($), (.), const, id)
-import           Data.Maybe (Maybe(..))
-import           Data.Ord (Ord(..))
 import           Data.Typeable (typeOf)
 
 import           GHC.Show (appPrec)
 
 import           Mafia.P
 
-import           Text.Show (Show(..), showParen, showString, showChar)
-
-import           Control.Monad.Trans.Either
+import           Text.Show (showParen, showChar)
 
 -- | Newtype wrapper for 'SomeException' which provides an 'Eq' instance which
 --   says no two disasters are equal. It also provides a 'Show' instance

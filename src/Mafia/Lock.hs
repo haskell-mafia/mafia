@@ -11,6 +11,9 @@ module Mafia.Lock (
   , writeLockFile
   ) where
 
+import           Control.Monad.Trans.Bifunctor (firstT)
+import           Control.Monad.Trans.Either (EitherT, hoistEither, left)
+
 import qualified Data.Text as T
 
 import           Mafia.Cabal
@@ -21,9 +24,6 @@ import           Mafia.Path
 import           Mafia.P
 
 import           System.IO (IO)
-
-import           Control.Monad.Trans.Bifunctor
-import           Control.Monad.Trans.Either (EitherT, hoistEither, left)
 
 data LockError =
     LockCabalError CabalError

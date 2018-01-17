@@ -3,12 +3,12 @@ module Mafia.Flock (
     withFileLock
   ) where
 
-import           Control.Monad.Catch (MonadMask(..))
-import           Control.Monad.IO.Class (MonadIO(..))
-
 import           Control.Concurrent.STM (TMVar, newTMVar, tryTakeTMVar, takeTMVar, putTMVar)
 import           Control.Concurrent.STM (TVar, newTVarIO, readTVar, writeTVar)
 import           Control.Concurrent.STM (atomically)
+
+import           Control.Monad.Catch (MonadMask(..))
+import           Control.Monad.Trans.Either (EitherT)
 
 import           Data.Map (Map)
 import qualified Data.Map as Map
@@ -23,8 +23,6 @@ import           System.FileLock (SharedExclusive(..), FileLock)
 import qualified System.FileLock as FileLock
 import           System.IO (IO)
 import           System.IO.Unsafe (unsafePerformIO)
-
-import           Control.Monad.Trans.Either
 
 -- | Take a system-wide lock on a file, process safe and thread safe.
 withFileLock :: (MonadIO m, MonadMask m) => File -> EitherT x m () -> EitherT x m a -> EitherT x m a

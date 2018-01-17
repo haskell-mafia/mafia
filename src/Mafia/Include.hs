@@ -16,7 +16,7 @@ import           Mafia.P
 
 import           System.IO (IO)
 
-import           Control.Monad.Trans.Bifunctor
+import           Control.Monad.Trans.Bifunctor (firstT)
 import           Control.Monad.Trans.Either (EitherT)
 
 getIncludeDirs :: EitherT MafiaError IO [Path]

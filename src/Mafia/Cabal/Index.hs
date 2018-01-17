@@ -9,7 +9,7 @@ module Mafia.Cabal.Index
 
 import           Control.Exception (IOException)
 import           Control.Monad.Catch (catch)
-import           Control.Monad.IO.Class (MonadIO(..))
+import           Control.Monad.Trans.Either (EitherT, hoistEither)
 
 import           Data.ByteString (ByteString)
 import qualified Data.ByteString.Lazy as L
@@ -21,14 +21,11 @@ import qualified Codec.Archive.Tar.Entry as Tar
 import           Mafia.Cabal.Types
 import           Mafia.IO
 import           Mafia.Path
-
 import           Mafia.P
 
 import qualified Prelude as Prelude
 
 import           System.IO (IO)
-
-import           Control.Monad.Trans.Either (EitherT, hoistEither)
 
 ------------------------------------------------------------------------
 

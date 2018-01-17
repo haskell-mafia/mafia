@@ -15,8 +15,6 @@ module Mafia.Script (
   , renderPragmaSubmodule
   ) where
 
-import           Control.Monad.IO.Class (MonadIO(..))
-
 import qualified Data.Attoparsec.Text as Atto
 import           Data.Char (isSpace)
 import qualified Data.Map as Map

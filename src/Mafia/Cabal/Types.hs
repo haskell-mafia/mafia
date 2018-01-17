@@ -41,11 +41,10 @@ import           Distribution.ParseUtils (locatedErrorMsg)
 
 import           Mafia.Ghc
 import           Mafia.Hash
+import           Mafia.P
 import           Mafia.Package
 import           Mafia.Path
 import           Mafia.Process
-
-import           Mafia.P
 
 ------------------------------------------------------------------------
 

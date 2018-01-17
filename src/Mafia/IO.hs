@@ -59,7 +59,8 @@ module Mafia.IO
 import qualified Control.Concurrent.Async as Async
 import           Control.Exception (IOException)
 import           Control.Monad.Catch (MonadMask(..), MonadCatch(..), handle, throwM)
-import           Control.Monad.IO.Class (MonadIO(..))
+import           Control.Monad.Trans.Either (EitherT, pattern EitherT)
+import           Control.Monad.Trans.Either (runEitherT, hoistEither)
 import           Control.Monad.Trans.Maybe (MaybeT(..))
 
 import           Data.ByteString (ByteString)
@@ -70,9 +71,8 @@ import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import           Data.Time (UTCTime)
 
-import           Mafia.Path
-
 import           Mafia.P
+import           Mafia.Path
 
 import qualified System.Directory as Directory
 import qualified System.Environment as Environment
@@ -80,9 +80,6 @@ import           System.IO (IO)
 import           System.IO.Error (isDoesNotExistError)
 import qualified System.IO.Temp as Temp
 import qualified System.Posix.Files as Posix
-
-import           Control.Monad.Trans.Either (EitherT, pattern EitherT)
-import           Control.Monad.Trans.Either (runEitherT, hoistEither)
 
 ------------------------------------------------------------------------
 -- Directory Operations

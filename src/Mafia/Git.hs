@@ -13,7 +13,7 @@ module Mafia.Git
     , getSubmodules
     ) where
 
-import           Control.Monad.IO.Class (liftIO)
+import           Control.Monad.Trans.Either (EitherT, left)
 
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
@@ -25,7 +25,6 @@ import           Mafia.P
 
 import           System.IO (IO, stderr)
 
-import           Control.Monad.Trans.Either (EitherT, left)
 
 ------------------------------------------------------------------------
 

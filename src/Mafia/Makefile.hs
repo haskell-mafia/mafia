@@ -4,6 +4,9 @@ module Mafia.Makefile
   ( buildMakefile
   ) where
 
+import           Control.Monad.Trans.Bifunctor (firstT)
+import           Control.Monad.Trans.Either (EitherT)
+
 import qualified Data.Map as Map
 
 import           Mafia.Cabal
@@ -15,9 +18,6 @@ import           Mafia.Error
 import           Mafia.P
 
 import           System.IO (IO)
-
-import           Control.Monad.Trans.Bifunctor
-import           Control.Monad.Trans.Either (EitherT)
 
 buildMakefile :: Directory -> EitherT MafiaError IO ()
 buildMakefile directory = do

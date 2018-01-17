@@ -14,8 +14,6 @@ import           Control.Concurrent.STM (atomically, orElse, retry)
 import           Control.Exception.Base (AsyncException (..))
 import           Control.Monad.Catch (catch, throwM)
 
-import           Control.Monad.IO.Class (liftIO)
-
 import           Data.IORef (newIORef, readIORef, writeIORef)
 import qualified Data.Text as T
 

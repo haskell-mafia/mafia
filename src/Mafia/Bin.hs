@@ -16,6 +16,9 @@ module Mafia.Bin
   , installOnPath
   ) where
 
+import           Control.Monad.Trans.Either (EitherT, left)
+import           Control.Monad.Trans.Bifunctor (firstT)
+
 import           Mafia.Cabal.Constraint
 import           Mafia.Cabal.Sandbox
 import           Mafia.Cabal.Types
@@ -26,13 +29,9 @@ import           Mafia.Install
 import           Mafia.IO
 import           Mafia.Package
 import           Mafia.Path
-
 import           Mafia.P
 
 import           System.IO (IO)
-
-import           Control.Monad.Trans.Either (EitherT, left)
-import           Control.Monad.Trans.Bifunctor
 
 data BinError =
     BinInstallError InstallError

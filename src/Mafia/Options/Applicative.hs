@@ -20,6 +20,8 @@ module Mafia.Options.Applicative (
   , orDieWithCode
   ) where
 
+import           Control.Monad.Trans.Either (EitherT, runEitherT)
+
 import qualified Data.Attoparsec.Text as A
 import           Data.String (String)
 import qualified Data.Text as T
@@ -29,11 +31,9 @@ import           Options.Applicative.Types as X
 
 import           Mafia.P
 
-import           System.IO (IO, putStrLn, print, hPutStrLn, stderr)
 import           System.Environment (getArgs)
 import           System.Exit (exitSuccess, ExitCode(..), exitWith)
-
-import           Control.Monad.Trans.Either
+import           System.IO (IO, putStrLn, print, hPutStrLn, stderr)
 
 data RunType =
     DryRun

@@ -42,7 +42,8 @@ module Mafia.Cache (
   , listPackages
   ) where
 
-import           Control.Monad.IO.Class (MonadIO(..))
+import           Control.Monad.Trans.Bifunctor (firstT)
+import           Control.Monad.Trans.Either (EitherT, left, hoistEither)
 
 import qualified Data.Text as Text
 import qualified Data.Text.IO as Text
@@ -53,16 +54,12 @@ import           Mafia.Ghc
 import           Mafia.Hash
 import           Mafia.Home
 import           Mafia.IO
+import           Mafia.P
 import           Mafia.Package
 import           Mafia.Path
 import           Mafia.Process
 
-import           Mafia.P
-
 import           System.IO (IO, stderr)
-
-import           Control.Monad.Trans.Either (EitherT, left, hoistEither)
-import           Control.Monad.Trans.Bifunctor
 
 data CacheEnv =
   CacheEnv {

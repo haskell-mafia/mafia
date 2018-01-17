@@ -8,7 +8,6 @@ import           BuildInfo_ambiata_mafia
 import           DependencyInfo_ambiata_mafia
 
 import           Control.Concurrent (setNumCapabilities)
-import           Control.Monad.IO.Class (MonadIO(..))
 
 import           Data.ByteString (ByteString)
 import qualified Data.List as List

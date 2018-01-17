@@ -7,22 +7,19 @@ module Mafia.Cabal.Process
   , cabalFrom
   ) where
 
-import           Control.Monad.IO.Class (liftIO)
+import           Control.Monad.Trans.Bifunctor (firstT)
+import           Control.Monad.Trans.Either (EitherT)
 
 import           Data.Map (Map)
 import qualified Data.Map as Map
 import qualified Data.Text as T
 
 import           Mafia.Cabal.Types
-import           Mafia.Process
 import           Mafia.IO (getEnvironment)
-
 import           Mafia.P
+import           Mafia.Process
 
 import           System.IO (IO)
-
-import           Control.Monad.Trans.Either (EitherT)
-import           Control.Monad.Trans.Bifunctor (firstT)
 
 cabal :: ProcessResult a => Argument -> [Argument] -> EitherT CabalError IO a
 cabal cmd args = call CabalProcessError "cabal" (cmd : args)
@@ -36,7 +33,6 @@ cabalAnnihilate :: Argument -> [Argument] -> EitherT CabalError IO ()
 cabalAnnihilate cmd args = do
   PassErrAnnihilate <- cabal cmd args
   return ()
-
 
 cabalFrom ::
   ProcessResult a =>

@@ -49,7 +49,7 @@ module Mafia.Process
 import           Control.Concurrent.Async (Async, async, waitCatch)
 import           Control.Exception (SomeException, IOException, toException)
 import           Control.Monad.Catch (MonadCatch(..), handle, bracket_)
-import           Control.Monad.IO.Class (MonadIO(..))
+import           Control.Monad.Trans.Either (EitherT, firstEitherT, left, hoistEither, newEitherT)
 
 import           Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as B
@@ -61,7 +61,6 @@ import qualified Data.Text.Encoding as T
 
 import           Mafia.Path (File, Directory)
 import           Mafia.IO (setCurrentDirectory)
-
 import           Mafia.P
 
 import           System.Exit (ExitCode(..))
@@ -69,11 +68,9 @@ import           System.IO (IO, FilePath, Handle, BufferMode(..))
 import qualified System.IO as IO
 import qualified System.Process as Process
 import qualified System.Process.Internals as ProcessInternals
-import qualified System.Posix.Types   as Posix
+import qualified System.Posix.Types as Posix
 import qualified System.Posix.Process as Posix
 import qualified System.Posix.Signals as Signals
-
-import           Control.Monad.Trans.Either
 
 ------------------------------------------------------------------------
 
@@ -502,7 +499,7 @@ handleIO p =
   in handle (hoistEither . Left . ProcessException p . fromIO)
 
 waitCatchE :: (Functor m, MonadIO m) => Process -> Async a -> EitherT ProcessError m a
-waitCatchE p = firstEitherT (ProcessException p) . EitherT . liftIO . waitCatch
+waitCatchE p = firstEitherT (ProcessException p) . newEitherT . liftIO . waitCatch
 
 ------------------------------------------------------------------------
 
