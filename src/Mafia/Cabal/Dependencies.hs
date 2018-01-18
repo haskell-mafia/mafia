@@ -238,8 +238,8 @@ pPackagePlans = do
 pDropLines :: Text -> Parser ()
 pDropLines target =
   let go = do
-      l <- A.takeWhile (/= '\n') <* A.char '\n'
-      unless (l == target) go
+          l <- A.takeWhile (/= '\n') <* A.char '\n'
+          unless (l == target) go
   in go
 
 pPackagePlan :: Parser PackagePlan

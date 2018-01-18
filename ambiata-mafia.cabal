@@ -5,11 +5,26 @@ license-file:          LICENSE
 author:                Ambiata <info@ambiata.com>
 maintainer:            Ambiata <info@ambiata.com>
 copyright:             (c) 2015 Ambiata.
+homepage:              https://github.com/haskell-mafia/mafia
+Bug-reports:           https://github.com/haskell-mafia/mafia/issues
 synopsis:              mafia
 category:              Development
-cabal-version:         >= 1.8
+cabal-version:         >= 1.24
 build-type:            Custom
-description:           mafia
+description:           Mafia is a light weight but opinionated wrapper around Cabal that makes working
+                       on Haskell projects fun and easy.
+
+extra-source-files:
+  README.md
+
+source-repository head
+  type: git
+  location: https://github.com/haskell-mafia/mafia.git
+
+custom-setup
+  setup-depends:
+                      base  >= 4.5 && < 5
+                    , Cabal >= 1.24 && < 2.1
 
 library
   build-depends:
@@ -46,6 +61,8 @@ library
                     , transformers-either             == 0.0.1
                     , unix                            == 2.7.*
 
+  default-language:
+                    Haskell2010
   ghc-options:
                     -Wall
 
@@ -98,18 +115,17 @@ library
                     Paths_ambiata_mafia
 
 executable mafia
+  default-language:
+                    Haskell2010
+
   ghc-options:
-                    -Wall -threaded -O2
+                    -Wall
 
   hs-source-dirs:
                     gen
 
   main-is:
                     ../main/mafia.hs
-
-  other-modules:
-                    BuildInfo_ambiata_mafia
-                    DependencyInfo_ambiata_mafia
 
   build-depends:
                       base
@@ -133,8 +149,11 @@ test-suite test
   main-is:
                     test.hs
 
+  default-language:
+                    Haskell2010
+
   ghc-options:
-                    -Wall -threaded -O2
+                    -Wall
 
   hs-source-dirs:
                     test
@@ -168,8 +187,11 @@ test-suite test-io
   main-is:
                     test-io.hs
 
+  default-language:
+                    Haskell2010
+
   ghc-options:
-                    -Wall -threaded -O2
+                    -Wall
 
   if impl(ghc >= 8.0)
     ghc-options:
@@ -212,8 +234,11 @@ test-suite test-cli
                     Test.Mafia.IO
                     Test.Mafia.Main
 
+  default-language:
+                    Haskell2010
+
   ghc-options:
-                    -Wall -threaded -O2
+                    -Wall
 
   hs-source-dirs:
                     test
