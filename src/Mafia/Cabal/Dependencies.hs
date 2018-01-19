@@ -16,7 +16,8 @@ module Mafia.Cabal.Dependencies
   , renderPackagePlan
   ) where
 
-import           Control.Monad.IO.Class (liftIO)
+import           Control.Monad.Trans.Bifunctor (firstT)
+import           Control.Monad.Trans.Either (EitherT, hoistEither, runEitherT, left)
 
 import           Data.Attoparsec.Text (Parser)
 import qualified Data.Attoparsec.Text as A
@@ -37,16 +38,12 @@ import           Mafia.Cabal.Types
 import           Mafia.Cabal.Version
 import           Mafia.Ghc
 import           Mafia.IO
+import           Mafia.P
 import           Mafia.Package
 import           Mafia.Path
 import           Mafia.Process
 
-import           P
-
 import           System.IO (IO)
-
-import           X.Control.Monad.Trans.Either
-
 
 ------------------------------------------------------------------------
 
@@ -241,8 +238,8 @@ pPackagePlans = do
 pDropLines :: Text -> Parser ()
 pDropLines target =
   let go = do
-      l <- A.takeWhile (/= '\n') <* A.char '\n'
-      unless (l == target) go
+          l <- A.takeWhile (/= '\n') <* A.char '\n'
+          unless (l == target) go
   in go
 
 pPackagePlan :: Parser PackagePlan

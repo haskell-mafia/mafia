@@ -8,7 +8,8 @@ module Mafia.Hoogle
   , joinHooglePackages
   ) where
 
-import           Control.Monad.IO.Class (MonadIO(..))
+import           Control.Monad.Trans.Bifunctor (firstT, bimapT)
+import           Control.Monad.Trans.Either (EitherT, hoistEither, runEitherT)
 
 import qualified Data.List as L
 import           Data.Map (Map)
@@ -26,13 +27,9 @@ import           Mafia.Init
 import           Mafia.Package
 import           Mafia.Path
 import           Mafia.Process
-
-import           P
+import           Mafia.P
 
 import           System.IO (IO, stderr)
-
-import           X.Control.Monad.Trans.Either (EitherT, hoistEither, runEitherT)
-
 
 newtype HooglePackagesSandbox = HooglePackagesSandbox [PackageId]
 newtype HooglePackagesCached = HooglePackagesCached [PackageId]

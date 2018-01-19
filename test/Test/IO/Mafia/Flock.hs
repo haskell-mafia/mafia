@@ -6,26 +6,22 @@ module Test.IO.Mafia.Flock where
 import           Control.Concurrent (threadDelay)
 import           Control.Concurrent.MVar (newEmptyMVar, readMVar, putMVar)
 import           Control.Concurrent.Async (async, mapConcurrently, wait)
-import           Control.Monad.IO.Class (liftIO)
+import           Control.Monad.Trans.Either (runEitherT)
 
 import           Data.IORef (newIORef, modifyIORef', readIORef)
 import qualified Data.Text as T
 
-import           Disorder.Core.IO
+import           Test.Mafia.IO (testIO)
 
 import           Mafia.Flock
 import           Mafia.Path
-
-import           P
+import           Mafia.P
 
 import           System.IO (IO)
 import qualified System.IO.Temp as Temp
 
 import           Test.QuickCheck
 import           Test.QuickCheck.Instances ()
-
-import           X.Control.Monad.Trans.Either (runEitherT)
-
 
 prop_flock :: Property
 prop_flock =

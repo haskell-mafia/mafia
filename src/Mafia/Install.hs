@@ -2,6 +2,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE PatternSynonyms #-}
 module Mafia.Install
   ( Flavour(..)
   , installDependencies
@@ -13,7 +14,8 @@ module Mafia.Install
   ) where
 
 import           Control.Exception (SomeException)
-import           Control.Monad.IO.Class (MonadIO(..))
+import           Control.Monad.Trans.Bifunctor (firstT)
+import           Control.Monad.Trans.Either (EitherT, pattern EitherT, left, runEitherT)
 import           Control.Parallel.Strategies (rpar, parMap)
 import qualified Control.Retry as Retry
 
@@ -39,21 +41,16 @@ import           Mafia.Cabal.Sandbox
 import           Mafia.Cabal.Types
 import           Mafia.Cache
 import           Mafia.IO
+import           Mafia.P
 import           Mafia.Package
 import           Mafia.Path
 import           Mafia.Process
 import           Mafia.Tree
+import           Mafia.Twine
 
 import           Numeric (showHex)
 
-import           P
-
 import           System.IO (IO, stderr)
-
-import           Twine.Parallel (RunError(..), consume_)
-import           Twine.Data.Queue  (writeQueue)
-
-import           X.Control.Monad.Trans.Either
 
 ------------------------------------------------------------------------
 

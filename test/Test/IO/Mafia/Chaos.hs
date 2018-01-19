@@ -10,10 +10,12 @@ module Test.IO.Mafia.Chaos where
 
 import           Control.Exception (IOException)
 import           Control.Monad.Catch (MonadCatch(..), MonadMask(..), bracket, handle)
-import           Control.Monad.IO.Class (MonadIO(..))
+import           Control.Monad.Trans.Bifunctor (firstT)
+import           Control.Monad.Trans.Either (EitherT, runEitherT)
+import           Control.Monad.Trans.Either (hoistEither)
 
-import           Disorder.Corpus (muppets, viruses)
-import           Disorder.Core.IO (testIO)
+import           Test.Mafia.Corpus (muppets, viruses)
+import           Test.Mafia.IO (testIO)
 
 import           Data.Char (toUpper)
 import           Data.Map (Map)
@@ -23,23 +25,20 @@ import qualified Data.Set as Set
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
 
+import           Mafia.Catch (bracketEitherT')
 import           Mafia.Git
 import           Mafia.IO
+import           Mafia.P
 import           Mafia.Path
-import           Mafia.Process (ProcessError, ProcessResult, Argument)
 import           Mafia.Process (Hush(..), Pass(..))
+import           Mafia.Process (ProcessError, ProcessResult, Argument)
 import           Mafia.Process (call_, callFrom)
-
-import           P
 
 import           System.IO (IO, print)
 
 import           Test.QuickCheck (Arbitrary(..), Gen, Property, Testable(..))
 import           Test.QuickCheck (forAllProperties)
 import qualified Test.QuickCheck as QC
-
-import           X.Control.Monad.Trans.Either (EitherT, runEitherT)
-import           X.Control.Monad.Trans.Either (hoistEither, bracketEitherT')
 
 ------------------------------------------------------------------------
 

@@ -28,7 +28,7 @@ import qualified Data.Text as T
 import           Distribution.Version (Version, versionNumbers)
 import qualified Distribution.Version as DistVersion
 
-import           P
+import           Mafia.P
 
 import qualified Data.Attoparsec.Text as Parse
 

@@ -8,13 +8,13 @@ module Test.Mafia.Arbitrary where
 import qualified Data.List as DL
 import qualified Data.Text as T
 
-import           Disorder.Corpus (muppets, cooking)
+import           Test.Mafia.Corpus (muppets, cooking)
 
 import           Mafia.Cabal.Constraint
 import           Mafia.Cabal.Types
 import           Mafia.Package
 
-import           P
+import           Mafia.P
 
 import           Test.QuickCheck
 import           Test.QuickCheck.Instances ()

@@ -8,7 +8,6 @@ import           BuildInfo_ambiata_mafia
 import           DependencyInfo_ambiata_mafia
 
 import           Control.Concurrent (setNumCapabilities)
-import           Control.Monad.IO.Class (MonadIO(..))
 
 import           Data.ByteString (ByteString)
 import qualified Data.List as List
@@ -39,19 +38,20 @@ import           Mafia.Script
 import           Mafia.Submodule
 import           Mafia.Tree
 
-import           P hiding (Last)
+import           Mafia.P
 
 import           System.Environment (getArgs)
 import           System.IO (BufferMode(..), hSetBuffering)
 import           System.IO (IO, FilePath, stdout, stderr)
 
-import           X.Control.Monad.Trans.Either (EitherT, hoistEither, left)
-import           X.Control.Monad.Trans.Either.Exit (orDie)
-import           X.Options.Applicative (Parser, CommandFields, Mod, ReadM)
-import           X.Options.Applicative (action, argument, textRead, metavar, help, long, short)
-import           X.Options.Applicative (option, flag, flag', eitherTextReader, eitherReader)
-import           X.Options.Applicative (cli, subparser, command')
+import           Control.Monad.Trans.Either (EitherT, hoistEither, left)
+import           Control.Monad.Trans.Bifunctor (firstT, bimapT)
 
+import           Mafia.Options.Applicative (Parser, CommandFields, Mod, ReadM)
+import           Mafia.Options.Applicative (action, argument, textRead
+                                     , metavar, help, long, short)
+import           Mafia.Options.Applicative (option, flag, flag', eitherTextReader, eitherReader)
+import           Mafia.Options.Applicative (cli, subparser, command', orDie)
 
 ------------------------------------------------------------------------
 

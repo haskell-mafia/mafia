@@ -21,13 +21,6 @@ install:
 
  # These sandbox commands are doing manually what mafia would do when building itself.
  - cabal sandbox init
- - cabal sandbox add-source lib/disorder/disorder-core
- - cabal sandbox add-source lib/disorder/disorder-corpus
- - cabal sandbox add-source lib/p
- - cabal sandbox add-source lib/twine
- - cabal sandbox add-source lib/x/x-eithert
- - cabal sandbox add-source lib/x/x-exception
- - cabal sandbox add-source lib/x/x-optparse
 
 script:
  - cabal install --dependencies-only --enable-tests

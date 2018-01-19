@@ -15,8 +15,6 @@ module Mafia.Script (
   , renderPragmaSubmodule
   ) where
 
-import           Control.Monad.IO.Class (MonadIO(..))
-
 import qualified Data.Attoparsec.Text as Atto
 import           Data.Char (isSpace)
 import qualified Data.Map as Map
@@ -28,11 +26,11 @@ import           Mafia.IO
 import           Mafia.Path
 import           Mafia.Process
 
-import           P
+import           Mafia.P
 
 import           System.IO (IO)
 
-import           X.Control.Monad.Trans.Either (EitherT, hoistMaybe, hoistEither)
+import           Control.Monad.Trans.Either (EitherT, hoistMaybe, hoistEither)
 
 
 data Script =

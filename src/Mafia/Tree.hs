@@ -11,8 +11,7 @@ import qualified Data.Text.Lazy as Lazy
 
 import           Mafia.Cabal
 
-import           P hiding (Last)
-
+import           Mafia.P
 
 data Loc =
     Mid

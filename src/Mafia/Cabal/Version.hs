@@ -6,7 +6,7 @@ module Mafia.Cabal.Version
   , checkCabalVersion
   ) where
 
-import           Control.Monad.IO.Class (liftIO)
+import           Control.Monad.Trans.Either (EitherT, left, runEitherT)
 
 import qualified Data.Text as T
 
@@ -15,12 +15,9 @@ import           Mafia.Cabal.Types
 import           Mafia.Package
 import           Mafia.Process
 
-import           P
+import           Mafia.P
 
 import           System.IO (IO)
-
-import           X.Control.Monad.Trans.Either (EitherT, left, runEitherT)
-
 
 getCabalVersion :: EitherT CabalError IO Version
 getCabalVersion = do

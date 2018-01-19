@@ -15,8 +15,6 @@ module Mafia.Submodule (
   , getSourcesFrom
   ) where
 
-import           Control.Monad.IO.Class (MonadIO(..))
-
 import           Data.Set (Set)
 import qualified Data.Set as Set
 import qualified Data.Text as T
@@ -28,12 +26,12 @@ import           Mafia.IO
 import           Mafia.Path
 import           Mafia.Process
 
-import           P
+import           Mafia.P
 
 import           System.IO (IO, stderr)
 
-import           X.Control.Monad.Trans.Either (EitherT)
-
+import           Control.Monad.Trans.Bifunctor (firstT)
+import           Control.Monad.Trans.Either (EitherT)
 
 data SubmoduleError =
     SubmoduleCabalError CabalError
