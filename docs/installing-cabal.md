@@ -23,7 +23,7 @@ $ cp .cabal-sandbox/bin/cabal $HOME/bin/cabal
 #### Install Cabal 1.24.0.0
 
 *If you followed the advanced instructions
-[here](https://github.com/ambiata/mafia/blob/master/doc/ghc.md#advanced-multiple-ghc-versions)
+[here](https://github.com/haskell-mafia/mafia/blob/master/doc/ghc.md#advanced-multiple-ghc-versions)
 for installing multiple GHC versions, then you will need to repeat this
 step for each of the GHC versions that you have installed.*
 
