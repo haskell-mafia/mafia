@@ -4,7 +4,7 @@
 : ${MAFIA_VERSIONS:=$MAFIA_HOME/versions}
 
 latest_version () {
-    git ls-remote https://github.com/ambiata/mafia | grep refs/heads/master | cut -f 1
+    git ls-remote https://github.com/haskell-mafia/mafia | grep refs/heads/master | cut -f 1
 }
 
 build_version() {
@@ -14,7 +14,7 @@ build_version() {
     MAFIA_PATH=$MAFIA_VERSIONS/$MAFIA_FILE
     mkdir -p $MAFIA_VERSIONS
     echo "Building $MAFIA_FILE in $MAFIA_TEMP"
-    git clone https://github.com/ambiata/mafia $MAFIA_TEMP
+    git clone https://github.com/haskell-mafia/mafia $MAFIA_TEMP
     git --git-dir="$MAFIA_TEMP/.git" --work-tree="$MAFIA_TEMP" reset --hard $MAFIA_VERSION || {
         echo "mafia version ($MAFIA_VERSION) could not be found." >&2
         exit 1

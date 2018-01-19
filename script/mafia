@@ -4,7 +4,7 @@
 : ${MAFIA_VERSIONS:=$MAFIA_HOME/versions}
 
 latest_version () {
-    git ls-remote https://github.com/ambiata/mafia | grep refs/heads/master | cut -f 1
+    git ls-remote https://github.com/haskell-mafia/mafia | grep refs/heads/master | cut -f 1
 }
 
 build_version() {

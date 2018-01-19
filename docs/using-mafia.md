@@ -6,13 +6,13 @@ Mafia is designed to be run via a shell script which will bootstrap the
 `PATH` and use it like that as well.
 
 Place the
-[script](https://raw.githubusercontent.com/ambiata/mafia/master/script/mafia)
+[script](https://raw.githubusercontent.com/haskell-mafia/mafia/master/script/mafia)
 in the same directory as your `.cabal` package file and then run
 `./mafia upgrade`. This will ensure that you have the latest script and
 also bake the git hash of the Mafia version in to the script.
 
 ```
-curl -O https://raw.githubusercontent.com/ambiata/mafia/master/script/mafia && chmod +x mafia
+curl -O https://raw.githubusercontent.com/haskell-mafia/mafia/master/script/mafia && chmod +x mafia
 ```
 
 You can now run `./mafia build` for the first time. This will build the

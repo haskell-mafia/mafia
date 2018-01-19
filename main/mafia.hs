@@ -401,7 +401,7 @@ scriptRead =
       Left $
         "Something went wrong, '" <> path <> "' looks like a script, but script" <>
         " execution should have been handled in an earlier code path.\n" <>
-        "Please report this as a bug: https://github.com/ambiata/mafia/issues"
+        "Please report this as a bug: https://github.com/haskell-mafia/mafia/issues"
     else
       Left $
         "Invalid argument '" <> path <> "', not a valid command or a valid script path.\n" <>
