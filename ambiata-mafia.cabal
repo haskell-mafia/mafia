@@ -127,6 +127,14 @@ executable mafia
   main-is:
                     ../main/mafia.hs
 
+  other-modules:
+                    BuildInfo_ambiata_mafia
+                    DependencyInfo_ambiata_mafia
+
+  autogen-modules:
+                    BuildInfo_ambiata_mafia
+                    DependencyInfo_ambiata_mafia
+
   build-depends:
                       base
                     , ambiata-mafia
