@@ -1,4 +1,4 @@
-name:                  ambiata-mafia
+name:                  mafia
 version:               0.0.1
 license:               Apache-2.0
 license-file:          LICENSE
@@ -112,7 +112,7 @@ library
                     Mafia.Twine.Parallel
                     Mafia.Twine.Queue
                     Mafia.Twine.Snooze
-                    Paths_ambiata_mafia
+                    Paths_mafia
 
 executable mafia
   default-language:
@@ -128,16 +128,16 @@ executable mafia
                     ../main/mafia.hs
 
   other-modules:
-                    BuildInfo_ambiata_mafia
-                    DependencyInfo_ambiata_mafia
+                    BuildInfo_mafia
+                    DependencyInfo_mafia
 
   autogen-modules:
-                    BuildInfo_ambiata_mafia
-                    DependencyInfo_ambiata_mafia
+                    BuildInfo_mafia
+                    DependencyInfo_mafia
 
   build-depends:
                       base
-                    , ambiata-mafia
+                    , mafia
                     , bytestring                      == 0.10.*
                     , containers                      == 0.5.*
                     , directory                       >= 1.2        && < 1.4
@@ -180,7 +180,7 @@ test-suite test
 
   build-depends:
                       base                            >= 3          && < 5
-                    , ambiata-mafia
+                    , mafia
                     , directory                       >= 1.2        && < 1.4
                     , process                         >= 1.2        && < 1.5
                     , QuickCheck                      == 2.8.*
@@ -217,7 +217,7 @@ test-suite test-io
 
   build-depends:
                       base                            >= 3          && < 5
-                    , ambiata-mafia
+                    , mafia
                     , async                           >= 2.0        && < 2.2
                     , containers                      == 0.5.*
                     , directory                       >= 1.2        && < 1.4
@@ -253,7 +253,7 @@ test-suite test-cli
 
   build-depends:
                       base                            >= 3          && < 5
-                    , ambiata-mafia
+                    , mafia
                     , directory                       >= 1.2        && < 1.4
                     , process                         >= 1.2        && < 1.5
                     , QuickCheck                      == 2.8.*
