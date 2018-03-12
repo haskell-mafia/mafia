@@ -201,10 +201,6 @@ test-suite test-io
   ghc-options:
                     -Wall
 
-  if impl(ghc >= 8.0)
-    ghc-options:
-                    -fno-warn-redundant-constraints
-
   hs-source-dirs:
                     test
 
@@ -212,7 +208,6 @@ test-suite test-io
                     Test.IO.Mafia.Chaos
                     Test.IO.Mafia.Flock
                     Test.Mafia.IO
-                    Test.Mafia.Corpus
                     Test.Mafia.Main
 
   build-depends:
@@ -230,6 +225,7 @@ test-suite test-io
                     , transformers                    >= 0.4        && < 0.6
                     , transformers-bifunctors
                     , transformers-either
+                    , hedgehog-corpus                 >= 0.1        && < 0.2
 
 test-suite test-cli
   type:
