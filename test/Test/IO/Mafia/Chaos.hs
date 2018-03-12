@@ -14,7 +14,7 @@ import           Control.Monad.Trans.Bifunctor (firstT)
 import           Control.Monad.Trans.Either (EitherT, runEitherT)
 import           Control.Monad.Trans.Either (hoistEither)
 
-import           Test.Mafia.Corpus (muppets, viruses)
+import           Hedgehog.Corpus (muppets, viruses)
 import           Test.Mafia.IO (testIO)
 
 import           Data.Char (toUpper)
