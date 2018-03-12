@@ -4,8 +4,8 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
-import           BuildInfo_ambiata_mafia
-import           DependencyInfo_ambiata_mafia
+import           BuildInfo_mafia
+import           DependencyInfo_mafia
 
 import           Control.Concurrent (setNumCapabilities)
 
