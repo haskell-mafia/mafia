@@ -37,10 +37,6 @@ didn't use the `bootstrap.sh` script, then make sure you run `cabal
 --version` to double check the version of the Cabal library that you
 need.
 
-*GHC 8.0.1 ships with Cabal-1.24.0.2 out of the box, so you may already
-have it installed. In any case, there is no harm in performing this step
-redundantly.*
-
 ```sh
 # double-check that we're installing the right version of the Cabal library
 $ cabal --version
