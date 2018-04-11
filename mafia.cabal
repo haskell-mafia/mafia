@@ -47,11 +47,11 @@ library
                     , memory                          >= 0.12       && < 0.15
                     , optparse-applicative            >= 0.11       && < 0.15
                     , parallel                        == 3.2.*
-                    , process                         >= 1.4        && < 1.7
+                    , process                         >= 1.5        && < 1.7
                     , retry                           == 0.7.*
                     , SafeSemaphore                   == 0.10.*
                     , stm                             == 2.4.*
-                    , tar                             == 0.4.*
+                    , tar                             >= 0.4        && < 0.5.2
                     , temporary                       == 1.2.*
                     , text                            == 1.2.*
                     , time                            >= 1.4        && < 1.9
@@ -182,8 +182,8 @@ test-suite test
                       base                            >= 3          && < 5
                     , mafia
                     , directory                       >= 1.2        && < 1.4
-                    , process                         >= 1.2        && < 1.7
-                    , QuickCheck                      >= 2.8        && < 2.11
+                    , process                         >= 1.5        && < 1.7
+                    , QuickCheck                      >= 2.10       && < 2.11
                     , quickcheck-instances            == 0.3.*
                     , text
                     , transformers                    >= 0.4        && < 0.6
@@ -222,8 +222,8 @@ test-suite test-io
                     , containers                      == 0.5.*
                     , directory                       >= 1.2        && < 1.4
                     , exceptions                      == 0.8.*
-                    , process                         >= 1.2        && < 1.7
-                    , QuickCheck                      >= 2.8        && < 2.11
+                    , process                         >= 1.5        && < 1.7
+                    , QuickCheck                      >= 2.10       && < 2.11
                     , quickcheck-instances            == 0.3.*
                     , temporary                       == 1.2.*
                     , text                            == 1.2.*
@@ -255,6 +255,6 @@ test-suite test-cli
                       base                            >= 3          && < 5
                     , mafia
                     , directory                       >= 1.2        && < 1.4
-                    , process                         >= 1.2        && < 1.7
-                    , QuickCheck                      >= 2.8        && < 2.11
+                    , process                         >= 1.5        && < 1.7
+                    , QuickCheck                      >= 2.10       && < 2.11
                     , transformers

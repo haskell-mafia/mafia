@@ -1,6 +1,5 @@
 module Test.Mafia.IO (
     testIO
-  , testPropertyIO
   , withCPUTime
   ) where
 
@@ -12,10 +11,7 @@ import           Test.QuickCheck.Monadic
 import           System.CPUTime (getCPUTime)
 
 testIO :: Testable a => IO a -> Property
-testIO = testPropertyIO . run
-
-testPropertyIO :: Testable a => PropertyM IO a -> Property
-testPropertyIO = monadicIO . (=<<) stop
+testIO = monadicIO . run
 
 -- | Perform an action and return the CPU time it takes, in picoseconds
 -- (actual precision varies with implementation).
