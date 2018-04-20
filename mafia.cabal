@@ -30,7 +30,7 @@ library
   build-depends:
                       base                            >= 3          && < 5
                     , aeson                           >= 0.8        && < 0.12
-                    , async                           >= 2.0        && < 2.2
+                    , async                           >= 2.0        && < 2.3
                     , attoparsec                      >= 0.12       && < 0.14
                     , base16-bytestring               == 0.1.*
                     , bytestring                      == 0.10.*
@@ -47,11 +47,11 @@ library
                     , memory                          >= 0.12       && < 0.15
                     , optparse-applicative            >= 0.14       && < 0.15
                     , parallel                        == 3.2.*
-                    , process                         >= 1.4        && < 1.5
+                    , process                         >= 1.4        && < 1.7
                     , retry                           == 0.7.*
                     , SafeSemaphore                   == 0.10.*
                     , stm                             == 2.4.*
-                    , tar                             == 0.4.*
+                    , tar                             >= 0.4        && < 0.6
                     , temporary                       == 1.2.*
                     , text                            == 1.2.*
                     , time                            >= 1.4        && < 1.9
@@ -177,7 +177,7 @@ test-suite test
                       base                            >= 3          && < 5
                     , mafia
                     , directory                       >= 1.2        && < 1.4
-                    , process                         >= 1.2        && < 1.5
+                    , process                         >= 1.2        && < 1.7
                     , QuickCheck                      == 2.8.*
                     , quickcheck-instances            == 0.3.*
                     , text
@@ -209,11 +209,11 @@ test-suite test-io
   build-depends:
                       base                            >= 3          && < 5
                     , mafia
-                    , async                           >= 2.0        && < 2.2
+                    , async                           >= 2.0        && < 2.3
                     , containers                      == 0.5.*
                     , directory                       >= 1.2        && < 1.4
                     , exceptions                      == 0.8.*
-                    , process                         >= 1.2        && < 1.5
+                    , process                         >= 1.2        && < 1.7
                     , QuickCheck                      == 2.8.*
                     , quickcheck-instances            == 0.3.*
                     , temporary                       == 1.2.*
@@ -247,6 +247,6 @@ test-suite test-cli
                       base                            >= 3          && < 5
                     , mafia
                     , directory                       >= 1.2        && < 1.4
-                    , process                         >= 1.2        && < 1.5
+                    , process                         >= 1.2        && < 1.7
                     , QuickCheck                      == 2.8.*
                     , transformers
