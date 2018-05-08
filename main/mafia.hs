@@ -47,11 +47,12 @@ import           System.IO (IO, FilePath, stdout, stderr)
 import           Control.Monad.Trans.Either (EitherT, hoistEither, left)
 import           Control.Monad.Trans.Bifunctor (firstT, bimapT)
 
-import           Mafia.Options.Applicative (Parser, CommandFields, Mod, ReadM)
-import           Mafia.Options.Applicative (action, argument, textRead
-                                     , metavar, help, long, short)
-import           Mafia.Options.Applicative (option, flag, flag', eitherTextReader, eitherReader)
-import           Mafia.Options.Applicative (cli, subparser, command', orDie)
+import           Mafia.Options.Applicative ( Parser, CommandFields, Mod, ReadM
+                                           , action, argument, strArgument
+                                           , metavar, help, long, short
+                                           , option, strOption, flag, flag', str
+                                           , eitherTextReader, eitherReader
+                                           , cli, subparser, command', orDie)
 
 ------------------------------------------------------------------------
 
@@ -258,13 +259,13 @@ commands =
 
 pExportDirectory :: Parser Directory
 pExportDirectory =
-  argument textRead $
+  strArgument $
        metavar "EXPORT_DIRECTORY"
     <> help "The location to write binary substitute tarballs containing the current package's dependencies."
 
 pImportDirectory :: Parser Directory
 pImportDirectory =
-  argument textRead $
+  strArgument $
        metavar "IMPORT_DIRECTORY"
     <> help "The location to import binary substitute tarballs from."
 
@@ -309,19 +310,19 @@ pInstallPackage =
         (InstallPackageName $ mkPackageName txt)
         (fmap InstallPackageId $ parsePackageId txt)
   in
-    fmap parse . argument textRead $
+    fmap parse . strArgument $
          metavar "PACKAGE"
       <> help "Install this <package> or (<package>-<version>) from Hackage."
 
 pDependsPackageName :: Parser PackageName
 pDependsPackageName =
-  fmap mkPackageName . argument textRead $
+  fmap mkPackageName . strArgument $
        metavar "PACKAGE"
     <> help "Only include packages in the output which depend on this package."
 
 pGhciEntryPoint :: Parser File
 pGhciEntryPoint =
-  argument textRead $
+  strArgument $
        metavar "FILE"
     <> action "file"
     <> help "The entry point for GHCi."
@@ -350,7 +351,7 @@ pGhciIncludeAllLibraries =
 
 pGhciIncludeDirectory :: Parser GhciInclude
 pGhciIncludeDirectory =
-  fmap Directory . option textRead $
+  fmap Directory . strOption $
        long "include"
     <> short 'i'
     <> metavar "DIRECTORY"
@@ -358,7 +359,7 @@ pGhciIncludeDirectory =
 
 pFlag :: Parser Flag
 pFlag =
-  option (parseFlag =<< textRead) $
+  option (parseFlag =<< str) $
        long "flag"
     <> short 'f'
     <> metavar "FLAG"
@@ -366,13 +367,13 @@ pFlag =
 
 pCabalArgs :: Parser Argument
 pCabalArgs =
-  argument textRead $
+  strArgument $
        metavar "CABAL_ARGUMENTS"
     <> help "Extra arguments to pass on to cabal."
 
 pGhcidArgs :: Parser Argument
 pGhcidArgs =
-  argument textRead $
+  strArgument $
        metavar "GHCID_ARGUMENTS"
     <> help "Extra arguments to pass on to ghcid."
 
@@ -390,7 +391,7 @@ pScriptPath =
 
 pScriptArgs :: Parser File
 pScriptArgs =
-  argument textRead $
+  strArgument $
        metavar "SCRIPT_ARGUMENTS"
     <> help "Arguments to pass to the script."
 

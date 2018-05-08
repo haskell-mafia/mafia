@@ -4,14 +4,11 @@ module Mafia.Options.Applicative (
     module X
   , RunType (..)
   , SafeCommand (..)
-  , maybeTextReader
   , eitherTextReader
   , pOption
-  , textRead
   , command'
   , dispatch
   , cli
-  , daemon
   , safeCommand
   , versionFlag
   , dryRunFlag
@@ -31,7 +28,6 @@ import           Options.Applicative.Types as X
 
 import           Mafia.P
 
-import           System.Environment (getArgs)
 import           System.Exit (exitSuccess, ExitCode(..), exitWith)
 import           System.IO (IO, putStrLn, print, hPutStrLn, stderr)
 
@@ -47,27 +43,18 @@ data SafeCommand a =
   deriving (Eq, Show)
 
 -- | Turn a parser into a ReadM
-maybeTextReader :: (Text -> Maybe a) -> ReadM a
-maybeTextReader f =
-  eitherReader $ \s ->
-    maybe (Left $ "Failed to parse: " <> s) pure . f . T.pack $ s
-
--- | Turn a parser into a ReadM
 eitherTextReader :: (e -> Text) -> (Text -> Either e a) -> ReadM a
 eitherTextReader render f =
   eitherReader $
-    either (Left . T.unpack . render) Right . f . T.pack
+    first (T.unpack . render) . f . T.pack
 
 -- | Turn apn attoparsec parser into a ReadM
 pOption :: A.Parser a -> ReadM a
 pOption p =
   eitherReader (A.parseOnly p . T.pack)
 
-textRead :: ReadM Text
-textRead = fmap T.pack str
-
 -- | A 'command' combinator that adds helper and description in a
---   slightly cleaner way
+--   slightly cleaner way.
 command' :: String -> String -> Parser a -> Mod CommandFields a
 command' label description parser =
   command label (info (parser <**> helper) (progDesc description))
@@ -75,14 +62,7 @@ command' label description parser =
 -- | Dispatch multi-mode programs with appropriate helper to make the
 --   default behaviour a bit better.
 dispatch :: Parser a -> IO a
-dispatch p = getArgs >>= \x -> case x of
-  [] -> let -- We don't need to see the Missing error if we're getting the whole usage string.
-            removeError' (h, e, c) = (h { helpError = mempty }, e, c)
-            removeError (Failure (ParserFailure failure)) = Failure (ParserFailure ( removeError' <$> failure ))
-            removeError a = a
-        in  execParserPure (prefs showHelpOnError) (info (p <**> helper) idm) <$> getArgs
-            >>= handleParseResult . removeError
-  _  -> execParser (info (p <**> helper) idm)
+dispatch p = customExecParser (prefs showHelpOnEmpty) (info (p <**> helper) idm)
 
 -- | Simple interface over 'dispatch' and 'safeCommand'
 --
@@ -106,20 +86,6 @@ cli name v deps commandParser act = do
         print c >> exitSuccess
       RunCommand RealRun c ->
         act c
-
--- | Simple interface over 'dispatch' with default parsers for help,
--- 'VersionCommand', 'DependencyCommand' and 'RunCommand'.
---
--- @ name -> version -> dependencyInfo -> action @
---
---   Example usage:
---
--- > daemon "my-daemon" buildInfoVersion dependencyInfo $ do
--- >  loop my-loop
-daemon :: [Char] -> [Char] -> [[Char]] -> IO a -> IO a
-daemon name v deps act =
-  cli name v deps (pure ()) $ \() ->
-    act
 
 -- | Turn a Parser for a command of type a into a safe command
 --   with a dry-run mode and a version flag
