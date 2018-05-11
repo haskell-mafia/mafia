@@ -68,7 +68,7 @@ main = do
       -- bypass optparse until https://github.com/pcapriotti/optparse-applicative/pull/234 is merged
       runOrDie $ MafiaScript (T.pack path) (fmap T.pack args)
     _ ->
-      cli "mafia" buildInfoVersion dependencyInfo parser runOrDie
+      cli "mafia" buildInfoVersion cabalVersion dependencyInfo parser runOrDie
 
 runOrDie :: MafiaCommand -> IO ()
 runOrDie =

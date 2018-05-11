@@ -70,16 +70,17 @@ dispatch p = customExecParser (prefs showHelpOnEmpty) (info (p <**> helper) idm)
 --
 --   Example usage:
 --
--- > cli "my-cli" buildInfoVersion dependencyInfo myThingParser $ \c ->
+-- > cli "my-cli" buildInfoVersion cabalVersion dependencyInfo myThingParser $ \c ->
 -- >  case c of
 -- >      DoThingA -> ...
 -- >      DoThingB -> ...
-cli :: Show a => [Char] -> [Char] -> [[Char]] -> Parser a -> (a -> IO b) -> IO b
-cli name v deps commandParser act = do
+cli :: Show a => [Char] -> [Char] -> [Char] -> [[Char]] -> Parser a -> (a -> IO b) -> IO b
+cli name v cv deps commandParser act = do
   dispatch (safeCommand commandParser) >>= \a ->
     case a of
-      VersionCommand ->
-        putStrLn (name <> ": " <> v) >> exitSuccess
+      VersionCommand -> do
+        putStrLn (name <> ": " <> v)
+        putStrLn ("built with cabal version: " <> cv) >> exitSuccess
       DependencyCommand ->
         mapM putStrLn deps >> exitSuccess
       RunCommand DryRun c ->
