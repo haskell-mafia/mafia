@@ -21,6 +21,7 @@ library
                     , async                           >= 2.0        && < 2.2
                     , attoparsec                      >= 0.12       && < 0.14
                     , base16-bytestring               == 0.1.*
+                    , basement                         < 0.0.8
                     , bytestring                      == 0.10.*
                     , Cabal                           >= 1.22       && < 1.25
                     , case-insensitive                == 1.2.*
