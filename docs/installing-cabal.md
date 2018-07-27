@@ -21,7 +21,7 @@ $ EXTRA_CONFIGURE_OPTS="" ./bootstrap.sh --sandbox --no-doc
 $ cp .cabal-sandbox/bin/cabal $HOME/bin/cabal
 ```
 
-#### Install Cabal 1.24.0.2
+#### Install Cabal 1.24.2.0
 
 *If you followed the advanced instructions
 [here](https://github.com/haskell-mafia/mafia/blob/master/doc/ghc.md#advanced-multiple-ghc-versions)
@@ -44,7 +44,7 @@ cabal-install version 1.24.0.2
 using version 1.24.2.0 of the Cabal library
 # make sure we're not in a sandbox, jumping to $HOME is a safe bet
 $ cd
-$ cabal install Cabal-1.24.0.2
+$ cabal install Cabal-1.24.2.0
 ```
 
 If you need to install a newer Cabal library, you don't need to remove
