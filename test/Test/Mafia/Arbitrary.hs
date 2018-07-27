@@ -8,7 +8,7 @@ module Test.Mafia.Arbitrary where
 import qualified Data.List as DL
 import qualified Data.Text as T
 
-import           Test.Mafia.Corpus (muppets, cooking)
+import           Hedgehog.Corpus (muppets, cooking)
 
 import           Mafia.Cabal.Constraint
 import           Mafia.Cabal.Types

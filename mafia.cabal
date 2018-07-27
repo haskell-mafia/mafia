@@ -170,7 +170,6 @@ test-suite test
                     Test.Mafia.Hoogle
                     Test.Mafia.Package
                     Test.Mafia.Process
-                    Test.Mafia.Corpus
                     Test.Mafia.Main
                     Test.Mafia.Tripping
 
@@ -183,6 +182,7 @@ test-suite test
                     , quickcheck-instances            == 0.3.*
                     , text
                     , transformers                    >= 0.4        && < 0.6
+                    , hedgehog-corpus                 >= 0.1        && < 0.2
 
 test-suite test-io
   type:
