@@ -5,22 +5,22 @@ Cabal comes in two parts, the `cabal` executable (which is in the
 cabal-install package) and the Cabal library (which is in the Cabal
 package).
 
-#### Install cabal-install 1.24.0.0
+#### Install cabal-install 1.24.0.2
 
 These instructions copy the `cabal` executable to `$HOME/bin` which is
 assumed to be on your `$PATH`. If you have an alternative location where
 you prefer to put executables, then use that instead.
 
 ```sh
-$ wget http://hackage.haskell.org/package/cabal-install-1.24.0.0/cabal-install-1.24.0.0.tar.gz
-$ tar xf cabal-install-1.24.0.0.tar.gz
-$ cd cabal-install-1.24.0.0
+$ wget http://hackage.haskell.org/package/cabal-install-1.24.0.2/cabal-install-1.24.0.2.tar.gz
+$ tar xf cabal-install-1.24.0.2.tar.gz
+$ cd cabal-install-1.24.0.2
 $ EXTRA_CONFIGURE_OPTS="" ./bootstrap.sh --sandbox --no-doc
 # $HOME/bin is assumed to exist and be on your $PATH
 $ cp .cabal-sandbox/bin/cabal $HOME/bin/cabal
 ```
 
-#### Install Cabal 1.24.0.0
+#### Install Cabal 1.24.0.2
 
 *If you followed the advanced instructions
 [here](https://github.com/ambiata/mafia/blob/master/doc/ghc.md#advanced-multiple-ghc-versions)
@@ -43,11 +43,11 @@ redundantly.*
 ```sh
 # double-check that we're installing the right version of the Cabal library
 $ cabal --version
-cabal-install version 1.24.0.0
-using version 1.24.0.0 of the Cabal library
+cabal-install version 1.24.0.2
+using version 1.24.0.2 of the Cabal library
 # make sure we're not in a sandbox, jumping to $HOME is a safe bet
 $ cd
-$ cabal install Cabal-1.24.0.0
+$ cabal install Cabal-1.24.0.2
 ```
 
 If you need to install a newer Cabal library, you don't need to remove
