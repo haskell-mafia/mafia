@@ -21,8 +21,8 @@
   CACHE = "true"
 
 [build.dist-8-0]
-  GHC_VERSION="8.0.1"
-  CABAL_VERSION="1.24.0.0"
+  GHC_VERSION="8.0.2"
+  CABAL_VERSION="1.24.0.2"
   MAFIA_HAPPY = "true"
   CACHE = "true"
 
@@ -44,7 +44,7 @@
   CACHE = "true"
 
 [build.branches-8-0]
-  GHC_VERSION="8.0.1"
-  CABAL_VERSION="1.24.0.0"
+  GHC_VERSION="8.0.2"
+  CABAL_VERSION="1.24.0.2"
   MAFIA_HAPPY = "true"
   CACHE = "true"
