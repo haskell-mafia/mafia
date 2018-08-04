@@ -66,10 +66,6 @@ library
   ghc-options:
                     -Wall
 
-  if impl(ghc >= 8.0)
-    ghc-options:
-                    -fno-warn-redundant-constraints
-
   hs-source-dirs:
                     src
 
