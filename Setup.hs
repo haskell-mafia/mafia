@@ -13,12 +13,6 @@ import           Distribution.Simple.PackageIndex
 import           Distribution.Simple.Utils (createDirectoryIfMissingVerbose, rewriteFile, rawSystemStdout)
 import           Distribution.Verbosity
 
-#if __GLASGOW_HASKELL__ <= 710
--- GHC 7.10 and earlier do not support the MIN_VERSION_Cabal macro.
--- Set it to `1` here to match the Cabal dependency bounds in the cabal file.
-#define MIN_VERSION_Cabal(a,b,c) 1
-#endif
-
 #if MIN_VERSION_Cabal(2,0,0)
 import           Distribution.Types.PackageName (PackageName, unPackageName)
 import           Distribution.Simple.BuildPaths (autogenPackageModulesDir)
