@@ -2,9 +2,11 @@
 
 : ${MAFIA_HOME:=$HOME/.mafia}
 : ${MAFIA_VERSIONS:=$MAFIA_HOME/versions}
+: ${GIT_URL:=https://github.com/ambiata/mafia}
+#: ${GIT_URL:=https://github.com/haskell-mafia/mafia}
 
 latest_version () {
-    git ls-remote https://github.com/ambiata/mafia | grep refs/heads/master | cut -f 1
+    git ls-remote $GIT_URL | grep refs/heads/master | cut -f 1
 }
 
 build_version() {
@@ -14,7 +16,7 @@ build_version() {
     MAFIA_PATH=$MAFIA_VERSIONS/$MAFIA_FILE
     mkdir -p $MAFIA_VERSIONS
     echo "Building $MAFIA_FILE in $MAFIA_TEMP"
-    git clone https://github.com/ambiata/mafia $MAFIA_TEMP
+    git clone $GIT_URL $MAFIA_TEMP
     git --git-dir="$MAFIA_TEMP/.git" --work-tree="$MAFIA_TEMP" reset --hard $MAFIA_VERSION || {
         echo "mafia version ($MAFIA_VERSION) could not be found." >&2
         exit 1
@@ -60,4 +62,4 @@ case "${1:-}" in
 upgrade) shift; enable_version "$@" ;;
 *) exec_mafia "$@"
 esac
-# Version: 59b3c6aadb50447f8942b036f255325ded1b4649
+# Version: 3b964cfb72100db7f01e181da5489dd05e0626ea
