@@ -1,5 +1,3 @@
-# language: haskell
-
 sudo: required
 
 env:
@@ -7,6 +5,19 @@ env:
  - GHCVER=8.2.2 CABALVER=1.24
  - GHCVER=8.0.2 CABALVER=2.0
  - GHCVER=8.2.2 CABALVER=2.0
+
+cache:
+  directories:
+    - $HOME/.cabal/packages
+
+before_cache:
+  - rm -fv $HOME/.cabal/packages/hackage.haskell.org/build-reports.log
+  - rm -fv $HOME/.cabal/packages/hackage.haskell.org/00-index.*
+  - rm -fv $HOME/.cabal/packages/hackage.haskell.org/*.json
+  - rm -fv $HOME/.cabal/packages/hackage.haskell.org/01-index.cache
+  - rm -fv $HOME/.cabal/packages/hackage.haskell.org/01-index.tar
+  - rm -fv $HOME/.cabal/packages/hackage.haskell.org/01-index.tar.idx
+
 
 before_install:
  - sudo add-apt-repository -y ppa:hvr/ghc
