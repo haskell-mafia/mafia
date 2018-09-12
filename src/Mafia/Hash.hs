@@ -9,6 +9,7 @@ module Mafia.Hash
 
   , Hash(..)
   , renderHash
+  , renderShortHash
   , parseHash
 
   , hashHashes
@@ -59,6 +60,10 @@ newtype Hash =
 renderHash :: Hash -> Text
 renderHash =
   T.decodeUtf8 . takeBase16 . unHash
+
+renderShortHash :: Hash -> Text
+renderShortHash =
+  T.take 6 . renderHash
 
 parseHash :: Text -> Maybe Hash
 parseHash hex =

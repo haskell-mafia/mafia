@@ -11,6 +11,7 @@ module Mafia.Package
   , Version
   , packageId
   , renderPackageId
+  , renderShortPackageId
   , renderVersion
   , packageIdTuple
   , parsePackageId
@@ -67,6 +68,11 @@ packageId n v =
 renderPackageId :: PackageId -> Text
 renderPackageId (PackageId name version) =
   unPackageName name <> "-" <> renderVersion version
+
+renderShortPackageId :: PackageId -> Text
+renderShortPackageId (PackageId name version) =
+  let a = unPackageName name in
+  T.filter (not . flip elem ("aeiou" :: [Char])) a <> "-" <> renderVersion version
 
 renderVersion :: Version -> Text
 renderVersion =

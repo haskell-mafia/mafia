@@ -43,6 +43,7 @@ import           Mafia.P
 import           System.Environment (getArgs)
 import           System.IO (BufferMode(..), hSetBuffering)
 import           System.IO (IO, FilePath, stdout, stderr)
+import qualified System.Info as Info
 
 import           Control.Monad.Trans.Either (EitherT, hoistEither, left)
 import           Control.Monad.Trans.Bifunctor (firstT, bimapT)
@@ -513,7 +514,18 @@ mafiaBuild p w dumpc dumpa flags args = do
           ,"-ddump-to-file"
           ]
 
-  liftCabal . cabal_ "build" $ ["-j"] <> wargs <> dumpargs <> args
+    platformargs =
+      case Info.os of
+        "darwin" -> [
+            "--ghc-options=-optl-Wl,-dead_strip_dylibs"
+          , "--ghc-options=-optc-Wno-unused-command-line-argument"
+          , "--ghc-options=-optl-Wno-unused-command-line-argument"
+          ]
+        _ -> [
+          ]
+
+
+  liftCabal . cabal_ "build" $ ["-j"] <> wargs <> dumpargs <> platformargs <> args
 
 mafiaTest :: [Flag] -> [Argument] -> EitherT MafiaError IO ()
 mafiaTest flags args = do

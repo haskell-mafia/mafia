@@ -51,6 +51,7 @@ import           Mafia.Twine
 import           Numeric (showHex)
 
 import           System.IO (IO, stderr)
+import qualified System.Info as Info
 
 ------------------------------------------------------------------------
 
@@ -266,7 +267,18 @@ install w env flavour p@(Package (PackageRef pid _ _) deps _) = do
 
           liftIO . T.hPutStrLn stderr $ "Building " <> renderHashId p <> renderFlavourSuffix flavour
 
+          let platformargs =
+                case Info.os of
+                  "darwin" -> [
+                      "--ghc-options=-optl-Wl,-dead_strip_dylibs"
+                    , "--ghc-options=-optc-Wno-unused-command-line-argument"
+                    , "--ghc-options=-optl-Wno-unused-command-line-argument"
+                    ]
+                  _ -> [
+                    ]
+
           PassErr <- sbcabal "install" $
+            platformargs <>
             [ "--ghc-options=-j" <> T.pack (show w)
             , "--max-backjumps=0"
             , renderPackageId pid ] <>
