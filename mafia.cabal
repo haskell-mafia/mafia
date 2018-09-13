@@ -1,9 +1,9 @@
 name:                  mafia
 version:               0.0.1
-license:               Apache-2.0
+license:               BSD3
 license-file:          LICENSE
 author:                Ambiata <info@ambiata.com>
-maintainer:            Ambiata <info@ambiata.com>
+maintainer:            Tim McGilchrist <timmcgil@gmail.com>, Erik de Castro Lopo <erikd@mega-nerd.com>
 copyright:             (c) 2015 Ambiata.
 homepage:              https://github.com/haskell-mafia/mafia
 Bug-reports:           https://github.com/haskell-mafia/mafia/issues
