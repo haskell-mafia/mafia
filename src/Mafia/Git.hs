@@ -91,7 +91,7 @@ getSubmodules = do
   root    <- getProjectRoot
   Out out <- callFrom GitProcessError root "git" ["submodule"]
 
-  sequence . fmap parseSubmoduleLine . T.lines $ out
+  traverse parseSubmoduleLine . T.lines $ out
 
 parseSubmoduleLine :: Text -> EitherT GitError IO Submodule
 parseSubmoduleLine line = Submodule (parseSubmoduleState line) <$> parseSubmoduleName line
