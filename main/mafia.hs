@@ -750,7 +750,7 @@ appendStandardDirs dir =
 
 standardSourceDirs :: [Directory]
 standardSourceDirs =
-  ["src", "test", "gen", "dist/build", "dist/build/autogen"]
+  ["src", "test", "gen", "dist/build", "dist/build/autogen", "dist/build/global-autogen"]
 
 ensureDirectory :: MonadIO m => Directory -> m (Maybe Directory)
 ensureDirectory dir = do
