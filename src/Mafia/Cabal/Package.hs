@@ -3,6 +3,7 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE CPP #-}
 module Mafia.Cabal.Package (
     BuildTool(..)
   , getBuildTools
@@ -39,9 +40,13 @@ import           Distribution.PackageDescription (libBuildInfo)
 import qualified Distribution.PackageDescription as Cabal (GenericPackageDescription(..))
 import qualified Distribution.PackageDescription as Cabal (Library(..))
 import qualified Distribution.PackageDescription as Cabal (PackageDescription(..))
+#if MIN_VERSION_Cabal(2,2,0)
+import           Distribution.PackageDescription.Parsec (runParseResult, parseGenericPackageDescription)
+#else
 import           Distribution.PackageDescription.Parse (ParseResult(..))
-
 import           Distribution.PackageDescription.Parse (parseGenericPackageDescription)
+#endif
+
 import           Distribution.Types.CondTree (CondBranch (..))
 import           Distribution.Types.LegacyExeDependency (LegacyExeDependency(..))
 
@@ -115,16 +120,31 @@ data BuildTool =
 getBuildTools :: Directory -> EitherT CabalError IO (Set BuildTool)
 getBuildTools dir =
   withCabalFile dir $ \file -> do
+#if MIN_VERSION_Cabal(2,2,0)
+    msrc <- readBytes file
+    case msrc of
+      Nothing ->
+        left $ CabalCouldNotReadBuildTools file
+      Just src ->
+        case runParseResult (parseGenericPackageDescription src) of
+          (_warn, Right gpd) ->
+            pure $ takeTools gpd
+          (_warn, Left (_, errs)) ->
+            -- TODO We are ignoring warnings here, we should handle that properly
+            left $ CabalFileParseErrors file errs
+#else
     msrc <- fmap T.unpack <$> readUtf8 file
     case msrc of
       Nothing ->
         left $ CabalCouldNotReadBuildTools file
       Just src ->
+
         case parseGenericPackageDescription src of
           ParseFailed err ->
             left $ CabalFileParseError file err
           ParseOk _ gpd ->
             pure $ takeTools gpd
+#endif
 
 takeTools :: GenericPackageDescription -> Set BuildTool
 takeTools gpd =
@@ -241,6 +261,19 @@ getPackageId dir = do
 
 readPackageId :: MonadIO m => File -> EitherT CabalError m PackageId
 readPackageId file = do
+#if MIN_VERSION_Cabal(2,2,0)
+  msrc <- readBytes file
+  case msrc of
+    Nothing ->
+      left $ CabalCouldNotReadPackageId file
+    Just src ->
+        case runParseResult (parseGenericPackageDescription src) of
+          (_warn, Right gpd) ->
+            pure $ takePackageId gpd
+          (_warn, Left (_, errs)) ->
+            -- TODO We are ignoring warnings here, we should handle that properly
+            left $ CabalFileParseErrors file errs
+#else
   msrc <- liftM T.unpack `liftM` readUtf8 file
   case msrc of
     Nothing ->
@@ -251,6 +284,7 @@ readPackageId file = do
           left $ CabalFileParseError file err
         ParseOk _ gpd ->
           return $ takePackageId gpd
+#endif
 
 takePackageId :: GenericPackageDescription -> PackageId
 takePackageId gpd =
