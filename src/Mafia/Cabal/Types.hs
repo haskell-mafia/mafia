@@ -1,6 +1,7 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE CPP #-}
 {-# OPTIONS_GHC -funbox-strict-fields #-}
 module Mafia.Cabal.Types
   ( SandboxDir
@@ -36,8 +37,12 @@ import           Data.Set (Set)
 import qualified Data.Set as Set
 import qualified Data.Text as T
 
+#if MIN_VERSION_Cabal(2,2,0)
+import           Distribution.Parsec.Common (PError(..), showPError)
+#else
 import           Distribution.InstalledPackageInfo (PError(..))
 import           Distribution.ParseUtils (locatedErrorMsg)
+#endif
 
 import           Mafia.Ghc
 import           Mafia.Hash
@@ -209,6 +214,7 @@ data CabalError =
   | CabalHashError HashError
   | CabalInstallPlanParseError Text
   | CabalFileParseError File PError
+  | CabalFileParseErrors File [PError]
   | CabalIndexFileNotFound File
   | CabalCorruptIndexFile Tar.FormatError
   | CabalSandboxConfigFileNotFound SandboxConfigFile
@@ -248,11 +254,32 @@ renderCabalError = \case
     renderHashError e
 
   CabalFileParseError file err ->
+#if MIN_VERSION_Cabal(2,2,0)
+    let
+      msg = showPError (show file) err
+    in
+      "Parse error " <> file <> ":" <>  T.pack msg
+#else
     let
       (line, msg) =
         locatedErrorMsg err
     in
-      "Parse error " <> file <> ":" <> T.pack (show line) <> ": " <> T.pack msg
+      "Parse error " <> file <> ":" <>  T.pack (show line) <> ": " <> T.pack msg
+#endif
+
+  CabalFileParseErrors file errs ->
+#if MIN_VERSION_Cabal(2,2,0)
+    let
+      s = showPError (show file) <$> errs
+    in
+      "Parse error " <> file <> ":" <> mconcat (T.pack <$> s)
+#else
+    let
+      s = locatedErrorMsg <$> errs
+      r = fmap (\(line, msg) -> T.pack (show line) <> ": " <> T.pack msg) s
+    in
+      "Parse error " <> file <> ":" <> mconcat r
+#endif
 
   CabalInstallPlanParseError err ->
     "Install plan parse error: " <> err
