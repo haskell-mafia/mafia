@@ -1,4 +1,5 @@
 {-# LANGUAGE CPP #-}
+{-# OPTIONS_GHC -fno-warn-warnings-deprecations #-}
 
 import           Data.Char (isDigit)
 import           Data.List (intercalate)
