@@ -196,6 +196,7 @@ tryPosixPidOfProcessHandle ph =
    \case
     ProcessInternals.OpenHandle i   -> return $ Just i
     ProcessInternals.ClosedHandle _ -> return $ Nothing
+    ProcessInternals.OpenExtHandle i _ _ -> return $ Just i
 
 tryProcessGroupOfProcessHandle :: (MonadIO m, MonadCatch m) => Process.ProcessHandle -> m (Maybe Posix.ProcessGroupID)
 tryProcessGroupOfProcessHandle ph = do
@@ -477,6 +478,7 @@ fromProcess p = Process.CreateProcess
     , Process.new_session        = False
     , Process.child_group        = Nothing
     , Process.child_user         = Nothing
+    , Process.use_process_jobs   = False -- Ignored on POSIX systems so default it to false.
     }
   where
     (cmd, args, cwd, env) = fromProcess' p

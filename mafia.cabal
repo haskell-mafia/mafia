@@ -47,7 +47,7 @@ library
                     , memory                          >= 0.12       && < 0.15
                     , optparse-applicative            >= 0.14       && < 0.15
                     , parallel                        == 3.2.*
-                    , process                         >= 1.4        && < 1.7
+                    , process                         >= 1.5        && < 1.7
                     , retry                           == 0.7.*
                     , SafeSemaphore                   == 0.10.*
                     , stm                             == 2.4.*
@@ -177,7 +177,7 @@ test-suite test
                       base                            >= 3          && < 5
                     , mafia
                     , directory                       >= 1.2        && < 1.4
-                    , process                         >= 1.2        && < 1.7
+                    , process                         >= 1.5        && < 1.7
                     , QuickCheck                      == 2.8.*
                     , quickcheck-instances            == 0.3.*
                     , text
@@ -213,7 +213,7 @@ test-suite test-io
                     , containers                      == 0.5.*
                     , directory                       >= 1.2        && < 1.4
                     , exceptions                      == 0.8.*
-                    , process                         >= 1.2        && < 1.7
+                    , process                         >= 1.5        && < 1.7
                     , QuickCheck                      == 2.8.*
                     , quickcheck-instances            == 0.3.*
                     , temporary                       == 1.2.*
@@ -247,6 +247,6 @@ test-suite test-cli
                       base                            >= 3          && < 5
                     , mafia
                     , directory                       >= 1.2        && < 1.4
-                    , process                         >= 1.2        && < 1.7
+                    , process                         >= 1.5        && < 1.7
                     , QuickCheck                      == 2.8.*
                     , transformers
