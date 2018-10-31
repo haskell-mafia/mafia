@@ -14,6 +14,7 @@ build-type:            Custom
 description:           Mafia is a light weight but opinionated wrapper around Cabal that makes working
                        on Haskell projects fun and easy.
 
+tested-with: GHC == 8.0.2, GHC == 8.2.2, GHC == 8.4.4
 extra-source-files:
   README.md
 
@@ -30,7 +31,7 @@ library
   build-depends:
                       base                            >= 3          && < 5
                     , aeson                           >= 0.8        && < 0.12
-                    , async                           >= 2.0        && < 2.3
+                    , async                           == 2.2.*
                     , attoparsec                      >= 0.12       && < 0.14
                     , base16-bytestring               == 0.1.*
                     , bytestring                      == 0.10.*
@@ -40,6 +41,7 @@ library
                     , cryptonite                      == 0.15.*
                     , directory                       >= 1.2        && < 1.4
                     , exceptions                      == 0.8.*
+                    , entwine                         == 0.0.2
                     , filelock                        == 0.1.*
                     , filepath                        == 1.4.*
                     , ghc-prim                        >= 0.4.0      && <= 0.6
@@ -58,7 +60,7 @@ library
                     , time-locale-compat              == 0.1.*
                     , transformers                    >= 0.4        && < 0.6
                     , transformers-bifunctors         == 0.1.*
-                    , transformers-either             == 0.0.1
+                    , transformers-either             == 0.1.*
                     , unix                            == 2.7.*
 
   default-language:
@@ -103,11 +105,6 @@ library
                     Mafia.Script
                     Mafia.Submodule
                     Mafia.Tree
-                    Mafia.Twine
-                    Mafia.Twine.Async
-                    Mafia.Twine.Parallel
-                    Mafia.Twine.Queue
-                    Mafia.Twine.Snooze
                     Paths_mafia
 
 executable mafia
@@ -144,7 +141,7 @@ executable mafia
                     , time-locale-compat              == 0.1.*
                     , transformers                    >= 0.4        && < 0.6
                     , transformers-bifunctors         == 0.1.*
-                    , transformers-either             == 0.0.1
+                    , transformers-either             == 0.1.*
 
 test-suite test
   type:
@@ -209,7 +206,7 @@ test-suite test-io
   build-depends:
                       base                            >= 3          && < 5
                     , mafia
-                    , async                           >= 2.0        && < 2.3
+                    , async                           == 2.2.*
                     , containers                      == 0.5.*
                     , directory                       >= 1.2        && < 1.4
                     , exceptions                      == 0.8.*
@@ -249,4 +246,4 @@ test-suite test-cli
                     , directory                       >= 1.2        && < 1.4
                     , process                         >= 1.5        && < 1.7
                     , QuickCheck                      == 2.8.*
-                    , transformers
+                    , transformers                    >= 0.4        && < 0.6

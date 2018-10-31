@@ -31,6 +31,9 @@ import qualified Data.Text.Lazy as TL
 import qualified Data.Text.Read as T
 import           Data.Word (Word32)
 
+import           Entwine (writeQueue)
+import           Entwine.Parallel (RunError (..), consume_)
+
 import           GHC.Conc (getNumProcessors)
 
 import           Mafia.Cabal.Constraint
@@ -46,7 +49,6 @@ import           Mafia.Package
 import           Mafia.Path
 import           Mafia.Process
 import           Mafia.Tree
-import           Mafia.Twine
 
 import           Numeric (showHex)
 
