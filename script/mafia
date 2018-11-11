@@ -1,11 +1,12 @@
-#!/bin/sh -eu
+#!/bin/bash -eu
 
 : ${MAFIA_HOME:=$HOME/.mafia}
 : ${MAFIA_VERSIONS:=$MAFIA_HOME/versions}
 : ${MAFIA_GIT_URL:="https://github.com/ambiata/mafia"}
+: ${MAFIA_GIT_BRANCH:="ambiata"}
 
 latest_version () {
-    git ls-remote ${MAFIA_GIT_URL} | grep refs/heads/ambiata | cut -f 1
+    git ls-remote ${MAFIA_GIT_URL} | grep "refs/heads/$MAFIA_GIT_BRANCH" | cut -f 1
 }
 
 build_version() {
