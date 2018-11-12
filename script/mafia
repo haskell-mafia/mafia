@@ -5,7 +5,7 @@
 : ${MAFIA_GIT_URL:="https://github.com/ambiata/mafia"}
 
 latest_version () {
-    git ls-remote ${MAFIA_GIT_URL} | grep refs/heads/master | cut -f 1
+    git ls-remote ${MAFIA_GIT_URL} | grep refs/heads/ambiata | cut -f 1
 }
 
 build_version() {
