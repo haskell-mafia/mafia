@@ -21,16 +21,16 @@ module Mafia.Cabal.Package (
   , hashSourcePackage
   ) where
 
-import           Control.Monad.IO.Class (MonadIO(..))
+import           Control.Monad.Trans.Bifunctor (firstT)
+import           Control.Monad.Trans.Either (EitherT, left, runEitherT)
 
 import qualified Data.List as List
 import           Data.Set (Set)
 import qualified Data.Set as Set
 import qualified Data.Text as T
 
-import           Distribution.Package (Dependency(..))
 import qualified Distribution.Package as Cabal (PackageIdentifier(..))
-import qualified Distribution.Package as Cabal (PackageName(..))
+import qualified Distribution.Package as Cabal (unPackageName)
 import           Distribution.PackageDescription (BuildInfo(..))
 import           Distribution.PackageDescription (CondTree(..))
 import           Distribution.PackageDescription (Executable(..))
@@ -40,9 +40,13 @@ import qualified Distribution.PackageDescription as Cabal (GenericPackageDescrip
 import qualified Distribution.PackageDescription as Cabal (Library(..))
 import qualified Distribution.PackageDescription as Cabal (PackageDescription(..))
 import           Distribution.PackageDescription.Parse (ParseResult(..))
-import           Distribution.PackageDescription.Parse (parsePackageDescription)
+
+import           Distribution.PackageDescription.Parse (parseGenericPackageDescription)
+import           Distribution.Types.CondTree (CondBranch (..))
+import           Distribution.Types.LegacyExeDependency (LegacyExeDependency(..))
+
 import           Distribution.Version (VersionRange, anyVersion, asVersionIntervals)
-import qualified Distribution.Version as Cabal (LowerBound(..), UpperBound(..), Bound(..))
+import qualified Distribution.Version as Cabal (LowerBound(..), UpperBound(..), Bound(..), Version)
 
 import           Mafia.Cabal.Constraint
 import           Mafia.Cabal.Types
@@ -51,12 +55,9 @@ import           Mafia.IO
 import           Mafia.Package
 import           Mafia.Path
 import           Mafia.Process
-
-import           P
+import           Mafia.P
 
 import           System.IO (IO)
-
-import           X.Control.Monad.Trans.Either (EitherT, left, runEitherT)
 
 ------------------------------------------------------------------------
 
@@ -119,7 +120,7 @@ getBuildTools dir =
       Nothing ->
         left $ CabalCouldNotReadBuildTools file
       Just src ->
-        case parsePackageDescription src of
+        case parseGenericPackageDescription src of
           ParseFailed err ->
             left $ CabalFileParseError file err
           ParseOk _ gpd ->
@@ -139,9 +140,9 @@ takeTools gpd =
 toolsOfCondTree :: (a -> Set BuildTool) -> CondTree v c a -> Set BuildTool
 toolsOfCondTree f tree =
   let
-    loop (_, x, my) =
-      toolsOfCondTree f x <>
-      maybe Set.empty (toolsOfCondTree f) my
+    loop (CondBranch _ x my) =
+      toolsOfCondTree f x
+        <> maybe Set.empty (toolsOfCondTree f) my
   in
     Set.unions $
       f (condTreeData tree) : fmap loop (condTreeComponents tree)
@@ -158,9 +159,9 @@ toolsOfBuildInfo :: BuildInfo -> Set BuildTool
 toolsOfBuildInfo =
   Set.fromList . fmap toolOfDependency . buildTools
 
-toolOfDependency :: Dependency -> BuildTool
+toolOfDependency :: LegacyExeDependency -> BuildTool
 toolOfDependency = \case
-  Dependency (Cabal.PackageName name) v ->
+  LegacyExeDependency name v ->
     let
       pname =
         mkPackageName $ T.pack name
@@ -189,7 +190,7 @@ boundOfUpper = \case
   Cabal.UpperBound ver b ->
     Just $ boundOfBound ver b
 
-boundOfBound :: Version -> Cabal.Bound -> Bound
+boundOfBound :: Cabal.Version -> Cabal.Bound -> Bound
 boundOfBound ver = \case
   Cabal.InclusiveBound ->
     Inclusive ver
@@ -245,7 +246,7 @@ readPackageId file = do
     Nothing ->
       left $ CabalCouldNotReadPackageId file
     Just src ->
-      case parsePackageDescription src of
+      case parseGenericPackageDescription src of
         ParseFailed err ->
           left $ CabalFileParseError file err
         ParseOk _ gpd ->
@@ -254,10 +255,10 @@ readPackageId file = do
 takePackageId :: GenericPackageDescription -> PackageId
 takePackageId gpd =
   let
-    Cabal.PackageIdentifier (Cabal.PackageName name) version =
+    Cabal.PackageIdentifier name version =
       Cabal.package $ Cabal.packageDescription gpd
   in
-    PackageId (mkPackageName $ T.pack name) version
+    PackageId (mkPackageName . T.pack $ Cabal.unPackageName name) version
 
 ------------------------------------------------------------------------
 

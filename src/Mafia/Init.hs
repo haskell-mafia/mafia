@@ -17,7 +17,8 @@ module Mafia.Init (
   , renderInitError
   ) where
 
-import           Control.Monad.IO.Class (MonadIO(..))
+import           Control.Monad.Trans.Bifunctor (firstT)
+import           Control.Monad.Trans.Either (EitherT, runEitherT, hoistEither)
 
 import           Data.Aeson (Value(..), ToJSON(..), FromJSON(..), (.:), (.=))
 import qualified Data.Aeson as A
@@ -35,16 +36,12 @@ import           Mafia.Hash
 import           Mafia.IO
 import           Mafia.Install
 import           Mafia.Lock
+import           Mafia.P
 import           Mafia.Path
 import           Mafia.Process
 import           Mafia.Submodule
 
-import           P
-
 import           System.IO (IO, stderr)
-
-import           X.Control.Monad.Trans.Either (EitherT, runEitherT, hoistEither)
-
 
 data InitError =
     InitHashError HashError

@@ -1,5 +1,4 @@
-import           Disorder.Core.Main
-
+import           Test.Mafia.Main
 import qualified Test.Mafia.Cabal.Constraint
 import qualified Test.Mafia.Cabal.Dependencies
 import qualified Test.Mafia.Cabal.Types

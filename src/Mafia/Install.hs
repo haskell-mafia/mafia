@@ -2,6 +2,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE PatternSynonyms #-}
 module Mafia.Install
   ( Flavour(..)
   , installDependencies
@@ -13,7 +14,8 @@ module Mafia.Install
   ) where
 
 import           Control.Exception (SomeException)
-import           Control.Monad.IO.Class (MonadIO(..))
+import           Control.Monad.Trans.Bifunctor (firstT)
+import           Control.Monad.Trans.Either (EitherT, pattern EitherT, left, runEitherT)
 import           Control.Parallel.Strategies (rpar, parMap)
 import qualified Control.Retry as Retry
 
@@ -39,21 +41,17 @@ import           Mafia.Cabal.Sandbox
 import           Mafia.Cabal.Types
 import           Mafia.Cache
 import           Mafia.IO
+import           Mafia.P
 import           Mafia.Package
 import           Mafia.Path
 import           Mafia.Process
 import           Mafia.Tree
+import           Mafia.Twine
 
 import           Numeric (showHex)
 
-import           P
-
 import           System.IO (IO, stderr)
-
-import           Twine.Parallel (RunError(..), consume_)
-import           Twine.Data.Queue  (writeQueue)
-
-import           X.Control.Monad.Trans.Either
+import qualified System.Info as Info
 
 ------------------------------------------------------------------------
 
@@ -269,7 +267,18 @@ install w env flavour p@(Package (PackageRef pid _ _) deps _) = do
 
           liftIO . T.hPutStrLn stderr $ "Building " <> renderHashId p <> renderFlavourSuffix flavour
 
+          let platformargs =
+                case Info.os of
+                  "darwin" -> [
+                      "--ghc-options=-optl-Wl,-dead_strip_dylibs"
+                    , "--ghc-options=-optc-Wno-unused-command-line-argument"
+                    , "--ghc-options=-optl-Wno-unused-command-line-argument"
+                    ]
+                  _ -> [
+                    ]
+
           PassErr <- sbcabal "install" $
+            platformargs <>
             [ "--ghc-options=-j" <> T.pack (show w)
             , "--max-backjumps=0"
             , renderPackageId pid ] <>
@@ -382,12 +391,28 @@ installBuildTools :: CacheEnv -> Set BuildTool -> EitherT InstallError IO [Direc
 installBuildTools env tools = do
   pkgs <-
     for (Set.toList tools) $ \(BuildTool name constraints) ->
-      installPackage name constraints
+      tryInstall name constraints
 
   pure .
     fmap (</> "bin") .
     fmap (packageSandboxDir env) $
-    fmap pkgKey pkgs
+    fmap pkgKey $
+    catMaybes pkgs
+ where
+  -- Some packages refer to build-tools that are not cabal packages.
+  -- For example, "zip-archive" depends on "unzip", but this is talking about a binary, not a cabal package.
+  -- This is unfortunate, and perhaps the package shouldn't include this as it isn't a build tool, but we should probably provide some way to continue building regardless.
+  tryInstall name constraints = EitherT $ do
+    r <- runEitherT $ installPackage name constraints
+    case r of
+     Left e -> do
+      T.hPutStrLn stderr $
+        "Error while trying to install build tool '" <> unPackageName name <> "': "
+      T.hPutStrLn stderr $ renderInstallError e
+      T.hPutStrLn stderr "Trying to continue anyway, as some packages refer to non-existent build tools."
+      return $ Right Nothing
+     Right pkg -> do
+      return $ Right $ Just pkg
 
 -- | Detect the build tools required by a package.
 detectBuildTools :: Package -> EitherT InstallError IO (Set BuildTool)

@@ -4,11 +4,10 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
-import           BuildInfo_ambiata_mafia
-import           DependencyInfo_ambiata_mafia
+import           BuildInfo_mafia
+import           DependencyInfo_mafia
 
 import           Control.Concurrent (setNumCapabilities)
-import           Control.Monad.IO.Class (MonadIO(..))
 
 import           Data.ByteString (ByteString)
 import qualified Data.List as List
@@ -39,19 +38,22 @@ import           Mafia.Script
 import           Mafia.Submodule
 import           Mafia.Tree
 
-import           P hiding (Last)
+import           Mafia.P
 
 import           System.Environment (getArgs)
 import           System.IO (BufferMode(..), hSetBuffering)
 import           System.IO (IO, FilePath, stdout, stderr)
+import qualified System.Info as Info
 
-import           X.Control.Monad.Trans.Either (EitherT, hoistEither, left)
-import           X.Control.Monad.Trans.Either.Exit (orDie)
-import           X.Options.Applicative (Parser, CommandFields, Mod, ReadM)
-import           X.Options.Applicative (action, argument, textRead, metavar, help, long, short)
-import           X.Options.Applicative (option, flag, flag', eitherTextReader, eitherReader)
-import           X.Options.Applicative (cli, subparser, command')
+import           Control.Monad.Trans.Either (EitherT, hoistEither, left)
+import           Control.Monad.Trans.Bifunctor (firstT, bimapT)
 
+import           Mafia.Options.Applicative ( Parser, CommandFields, Mod, ReadM
+                                           , action, argument, strArgument
+                                           , metavar, help, long, short
+                                           , option, strOption, flag, flag', str
+                                           , eitherTextReader, eitherReader
+                                           , cli, subparser, command', orDie)
 
 ------------------------------------------------------------------------
 
@@ -67,7 +69,7 @@ main = do
       -- bypass optparse until https://github.com/pcapriotti/optparse-applicative/pull/234 is merged
       runOrDie $ MafiaScript (T.pack path) (fmap T.pack args)
     _ ->
-      cli "mafia" buildInfoVersion dependencyInfo parser runOrDie
+      cli "mafia" buildInfoVersion cabalVersion dependencyInfo parser runOrDie
 
 runOrDie :: MafiaCommand -> IO ()
 runOrDie =
@@ -258,13 +260,13 @@ commands =
 
 pExportDirectory :: Parser Directory
 pExportDirectory =
-  argument textRead $
+  strArgument $
        metavar "EXPORT_DIRECTORY"
     <> help "The location to write binary substitute tarballs containing the current package's dependencies."
 
 pImportDirectory :: Parser Directory
 pImportDirectory =
-  argument textRead $
+  strArgument $
        metavar "IMPORT_DIRECTORY"
     <> help "The location to import binary substitute tarballs from."
 
@@ -309,19 +311,19 @@ pInstallPackage =
         (InstallPackageName $ mkPackageName txt)
         (fmap InstallPackageId $ parsePackageId txt)
   in
-    fmap parse . argument textRead $
+    fmap parse . strArgument $
          metavar "PACKAGE"
       <> help "Install this <package> or (<package>-<version>) from Hackage."
 
 pDependsPackageName :: Parser PackageName
 pDependsPackageName =
-  fmap mkPackageName . argument textRead $
+  fmap mkPackageName . strArgument $
        metavar "PACKAGE"
     <> help "Only include packages in the output which depend on this package."
 
 pGhciEntryPoint :: Parser File
 pGhciEntryPoint =
-  argument textRead $
+  strArgument $
        metavar "FILE"
     <> action "file"
     <> help "The entry point for GHCi."
@@ -350,7 +352,7 @@ pGhciIncludeAllLibraries =
 
 pGhciIncludeDirectory :: Parser GhciInclude
 pGhciIncludeDirectory =
-  fmap Directory . option textRead $
+  fmap Directory . strOption $
        long "include"
     <> short 'i'
     <> metavar "DIRECTORY"
@@ -358,7 +360,7 @@ pGhciIncludeDirectory =
 
 pFlag :: Parser Flag
 pFlag =
-  option (parseFlag =<< textRead) $
+  option (parseFlag =<< str) $
        long "flag"
     <> short 'f'
     <> metavar "FLAG"
@@ -366,13 +368,13 @@ pFlag =
 
 pCabalArgs :: Parser Argument
 pCabalArgs =
-  argument textRead $
+  strArgument $
        metavar "CABAL_ARGUMENTS"
     <> help "Extra arguments to pass on to cabal."
 
 pGhcidArgs :: Parser Argument
 pGhcidArgs =
-  argument textRead $
+  strArgument $
        metavar "GHCID_ARGUMENTS"
     <> help "Extra arguments to pass on to ghcid."
 
@@ -390,7 +392,7 @@ pScriptPath =
 
 pScriptArgs :: Parser File
 pScriptArgs =
-  argument textRead $
+  strArgument $
        metavar "SCRIPT_ARGUMENTS"
     <> help "Arguments to pass to the script."
 
@@ -401,7 +403,7 @@ scriptRead =
       Left $
         "Something went wrong, '" <> path <> "' looks like a script, but script" <>
         " execution should have been handled in an earlier code path.\n" <>
-        "Please report this as a bug: https://github.com/ambiata/mafia/issues"
+        "Please report this as a bug: https://github.com/haskell-mafia/mafia/issues"
     else
       Left $
         "Invalid argument '" <> path <> "', not a valid command or a valid script path.\n" <>
@@ -512,7 +514,18 @@ mafiaBuild p w dumpc dumpa flags args = do
           ,"-ddump-to-file"
           ]
 
-  liftCabal . cabal_ "build" $ ["-j"] <> wargs <> dumpargs <> args
+    platformargs =
+      case Info.os of
+        "darwin" -> [
+            "--ghc-options=-optl-Wl,-dead_strip_dylibs"
+          , "--ghc-options=-optc-Wno-unused-command-line-argument"
+          , "--ghc-options=-optl-Wno-unused-command-line-argument"
+          ]
+        _ -> [
+          ]
+
+
+  liftCabal . cabal_ "build" $ ["-j"] <> wargs <> dumpargs <> platformargs <> args
 
 mafiaTest :: [Flag] -> [Argument] -> EitherT MafiaError IO ()
 mafiaTest flags args = do
@@ -737,7 +750,7 @@ appendStandardDirs dir =
 
 standardSourceDirs :: [Directory]
 standardSourceDirs =
-  ["src", "test", "gen", "dist/build", "dist/build/autogen"]
+  ["src", "test", "gen", "dist/build", "dist/build/autogen", "dist/build/global-autogen"]
 
 ensureDirectory :: MonadIO m => Directory -> m (Maybe Directory)
 ensureDirectory dir = do

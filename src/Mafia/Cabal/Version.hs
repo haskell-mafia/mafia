@@ -1,4 +1,3 @@
-{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
 module Mafia.Cabal.Version
@@ -6,7 +5,7 @@ module Mafia.Cabal.Version
   , checkCabalVersion
   ) where
 
-import           Control.Monad.IO.Class (liftIO)
+import           Control.Monad.Trans.Either (EitherT, left, runEitherT)
 
 import qualified Data.Text as T
 
@@ -15,12 +14,9 @@ import           Mafia.Cabal.Types
 import           Mafia.Package
 import           Mafia.Process
 
-import           P
+import           Mafia.P
 
 import           System.IO (IO)
-
-import           X.Control.Monad.Trans.Either (EitherT, left, runEitherT)
-
 
 getCabalVersion :: EitherT CabalError IO Version
 getCabalVersion = do
@@ -47,9 +43,8 @@ checkCabalVersion = do
   --
   -- It's this commit that we need:
   --   https://github.com/haskell/cabal/commit/c0b3c7f1b6ae7bb7663a2c18578ede95d6a40919
-
-  let vmin = Version [1,22,4] []
-      vmax = Version [1,26]   []
+  let vmin = makeVersion [1,22,4]
+      vmax = makeVersion [2, 1]
 
   version <- getCabalVersion
 

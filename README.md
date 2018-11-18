@@ -35,8 +35,8 @@ crucial that we don't need to think about curating blessed sets of
 packages that we can cache as a single snapshot.
 
 
-* [Using Mafia For Your Own Projects](doc/using-mafia.md).
-* [Mafia Command Reference](doc/command-reference.md).
+* [Using Mafia For Your Own Projects](docs/using-mafia.md).
+* [Mafia Command Reference](docs/command-reference.md).
 
 
 System configuration
@@ -46,5 +46,5 @@ Mafia expects both GHC and Cabal to be installed and on the `PATH`.
 
 Follow the guides below to configure your system correctly:
 
-- [Installing GHC](doc/installing-ghc.md)
-- [Installing Cabal](doc/installing-cabal.md)
+- [Installing GHC](docs/installing-ghc.md)
+- [Installing Cabal](docs/installing-cabal.md)

@@ -3,7 +3,6 @@
 : ${MAFIA_HOME:=$HOME/.mafia}
 : ${MAFIA_VERSIONS:=$MAFIA_HOME/versions}
 : ${GIT_URL:=https://github.com/ambiata/mafia}
-#: ${GIT_URL:=https://github.com/haskell-mafia/mafia}
 
 latest_version () {
     git ls-remote $GIT_URL | grep refs/heads/master | cut -f 1

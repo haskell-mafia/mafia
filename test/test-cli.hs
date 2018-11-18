@@ -1,4 +1,4 @@
-import           Disorder.Core.Main
+import           Test.Mafia.Main
 
 main :: IO ()
 main =
