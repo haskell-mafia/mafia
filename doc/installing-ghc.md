@@ -13,16 +13,16 @@ like.
 
 ### Simple (Single GHC Version)
 
-GHC 7.10.2 is the current stable/preferred version of GHC used by
+GHC 8.0.2 is the current stable/preferred version of GHC used by
 Ambiata projects.
 
-#### Install GHC 7.10.2
+#### Install GHC 8.0.2
 
 ```sh
-$ wget https://downloads.haskell.org/~ghc/7.10.2/ghc-7.10.2-x86_64-apple-darwin.tar.xz
-$ tar xf ghc-7.10.2-x86_64-apple-darwin.tar.xz
-$ cd ghc-7.10.2
-$ ./configure --prefix=$HOME/haskell/ghc-7.10.2
+$ wget https://downloads.haskell.org/~ghc/8.0.2/ghc-8.0.2-x86_64-apple-darwin.tar.xz
+$ tar xf ghc-8.0.2-x86_64-apple-darwin.tar.xz
+$ cd ghc-8.0.2
+$ ./configure --prefix=$HOME/haskell/ghc-8.0.2
 $ make install
 ```
 
@@ -40,16 +40,6 @@ Use these instructions if you want to run multiple versions of GHC side-by-side.
 
 This setup doesn't have GHC on the `PATH` by default, and uses `g` to cycle between available versions.
 
-#### Install GHC 7.8.4
-
-```sh
-$ wget https://www.haskell.org/ghc/dist/7.8.4/ghc-7.8.4-x86_64-apple-darwin.tar.xz
-$ tar xf ghc-7.8.4-x86_64-apple-darwin.tar.xz
-$ cd ghc-7.8.4
-$ ./configure --prefix=$HOME/haskell/ghc-7.8.4
-$ make install
-```
-
 #### Install GHC 7.10.2
 
 ```sh
@@ -60,13 +50,23 @@ $ ./configure --prefix=$HOME/haskell/ghc-7.10.2
 $ make install
 ```
 
-#### Install GHC 8.0.1
+#### Install GHC 8.0.2
 
 ```sh
-$ wget https://downloads.haskell.org/~ghc/8.0.1/ghc-8.0.1-x86_64-apple-darwin.tar.xz
-$ tar xf ghc-8.0.1-x86_64-apple-darwin.tar.xz
-$ cd ghc-8.0.1
-$ ./configure --prefix=$HOME/haskell/ghc-8.0.1
+$ wget https://downloads.haskell.org/~ghc/8.0.2/ghc-8.0.2-x86_64-apple-darwin.tar.xz
+$ tar xf ghc-8.0.2-x86_64-apple-darwin.tar.xz
+$ cd ghc-8.0.2
+$ ./configure --prefix=$HOME/haskell/ghc-8.0.2
+$ make install
+```
+
+#### Install GHC 8.2.2
+
+```sh
+$ wget https://downloads.haskell.org/~ghc/8.2.2/ghc-8.2.2-x86_64-apple-darwin.tar.xz
+$ tar xf ghc-8.2.2-x86_64-apple-darwin.tar.xz
+$ cd ghc-8.2.2
+$ ./configure --prefix=$HOME/haskell/ghc-8.2.2
 $ make install
 ```
 
