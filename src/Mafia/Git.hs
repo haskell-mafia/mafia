@@ -13,7 +13,7 @@ module Mafia.Git
     , getSubmodules
     ) where
 
-import           Control.Monad.IO.Class (liftIO)
+import           Control.Monad.Trans.Either (EitherT, left)
 
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
@@ -21,11 +21,10 @@ import qualified Data.Text.IO as T
 import           Mafia.Path
 import           Mafia.Process
 
-import           P
+import           Mafia.P
 
 import           System.IO (IO, stderr)
 
-import           X.Control.Monad.Trans.Either (EitherT, left)
 
 ------------------------------------------------------------------------
 
@@ -92,7 +91,7 @@ getSubmodules = do
   root    <- getProjectRoot
   Out out <- callFrom GitProcessError root "git" ["submodule"]
 
-  sequence . fmap parseSubmoduleLine . T.lines $ out
+  traverse parseSubmoduleLine . T.lines $ out
 
 parseSubmoduleLine :: Text -> EitherT GitError IO Submodule
 parseSubmoduleLine line = Submodule (parseSubmoduleState line) <$> parseSubmoduleName line

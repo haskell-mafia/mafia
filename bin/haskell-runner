@@ -1,0 +1,88 @@
+#!/bin/sh -exu
+
+[ ! -f /etc/ambiata/AWS_INSTANCE_ID ] || {
+  echo "Running on instance: $(cat /etc/ambiata/AWS_INSTANCE_ID)"
+}
+
+if [ ! $(which rpm) ]; then
+  # assume osx
+  X=${PUBLISH_ARCH:=osx/x86_64}
+else
+  CENTOS_VER=$(rpm -q --queryformat '%{VERSION}' centos-release)
+  if [ $CENTOS_VER == '6' ]; then
+    X=${LINUX_DISTRO:=centos-6.x}
+  elif [ $CENTOS_VER == '7' ]; then
+    X=${LINUX_DISTRO:=centos-7.x}
+  else
+    # TODO change to something like linux-other
+    X=${LINUX_DISTRO:=linux}
+  fi
+  X=${PUBLISH_ARCH:="${LINUX_DISTRO}/x86_64"}
+fi
+
+PROJECT_ROOT=$(git rev-parse --show-toplevel)
+GIT_COMMIT=$(git rev-parse HEAD)
+
+USE_CACHE="false"
+if [ "${CACHE:-}" = "true" ] && [ ! "${CABAL_VERSION:-}" = "1.22.4.0" ] ; then
+  USE_CACHE="true"
+fi
+
+if command -v ghc-path >/dev/null 2>&1; then
+  GHC_PATH=$(ghc-path)
+  export PATH=$GHC_PATH:$PATH
+else
+  echo "Warning: ghc-path not available, defaulting to ghc on path." >&2
+fi
+
+if command -v cabal-path >/dev/null 2>&1; then
+  CABAL_PATH=$(cabal-path)
+  export PATH=$CABAL_PATH:$PATH
+else
+  echo "Warning: cabal-path not available, defaulting to cabal on path." 1>&2
+fi
+
+MAFIA=$(command -v ./mafia || command -v ./cabal)
+
+if [ "${USE_CACHE:-}" = "true" ]; then
+  CACHE_VERSION="$LINUX_DISTRO"
+  #TODO write cache sync code that's mafia independent
+fi
+
+HOOGLE_PATH=$HOME/.mafia/bin/hoogle-4.2.43/bin
+if [ ! -f "$HOOGLE_PATH/hoogle" ]; then
+  mkdir -p ${HOOGLE_PATH}
+  aws s3 cp "s3://ambiata-dispensary-v2/third-party/hoogle/${PUBLISH_ARCH}/4.2.43/hoogle-4.2.43" "$HOOGLE_PATH/hoogle"
+  chmod +x "$HOOGLE_PATH/hoogle"
+fi
+export PATH=${HOOGLE_PATH}:${PATH}
+
+
+function upload_cache() {
+  rm -fv $HOME/.cabal/packages/hackage.haskell.org/build-reports.log
+  rm -fv $HOME/.cabal/packages/hackage.haskell.org/00-index.*
+  rm -fv $HOME/.cabal/packages/hackage.haskell.org/*.json
+  rm -fv $HOME/.cabal/packages/hackage.haskell.org/01-index.cache
+  rm -fv $HOME/.cabal/packages/hackage.haskell.org/01-index.tar
+  rm -fv $HOME/.cabal/packages/hackage.haskell.org/01-index.tar.idx
+  $MAFIA export $MAFIA_TMPDIR_PROJECT
+  find $MAFIA_TMPDIR_PROJECT -name '*'"$BORIS_PROJECT-"'*' -exec rm -f {} \;
+  aws s3 sync $MAFIA_TMPDIR_PROJECT $MAFIA_S3_PROJECT --sse
+}
+
+cabal update
+cabal install --dependencies-only --enable-tests
+cabal configure --enable-tests
+cabal build
+
+if [ "${USE_CACHE:-}" = "true" ]; then
+  upload_cache
+fi
+
+dist/build/test/test
+dist/build/test-io/test-io
+dist/build/test-cli/test-cli
+cabal haddock
+if [ ${CABAL_VERSION} = "2.0" ]; then
+  cabal sdist;
+fi

@@ -1,29 +1,41 @@
-name:                  ambiata-mafia
+name:                  mafia
 version:               0.0.1
-license:               Apache-2.0
+license:               BSD3
 license-file:          LICENSE
 author:                Ambiata <info@ambiata.com>
-maintainer:            Ambiata <info@ambiata.com>
+maintainer:            Tim McGilchrist <timmcgil@gmail.com>, Erik de Castro Lopo <erikd@mega-nerd.com>
 copyright:             (c) 2015 Ambiata.
+homepage:              https://github.com/haskell-mafia/mafia
+Bug-reports:           https://github.com/haskell-mafia/mafia/issues
 synopsis:              mafia
 category:              Development
-cabal-version:         >= 1.8
+cabal-version:         >= 1.24
 build-type:            Custom
-description:           mafia
+description:           Mafia is a light weight but opinionated wrapper around Cabal that makes working
+                       on Haskell projects fun and easy.
+
+extra-source-files:
+  README.md
+
+source-repository head
+  type: git
+  location: https://github.com/haskell-mafia/mafia.git
+
+custom-setup
+  setup-depends:
+                      base  >= 4.5 && < 5
+                    , Cabal >= 1.24 && < 2.1
 
 library
   build-depends:
                       base                            >= 3          && < 5
-                    , ambiata-p
-                    , ambiata-x-eithert
-                    , ambiata-twine
                     , aeson                           >= 0.8        && < 0.12
                     , async                           >= 2.0        && < 2.2
                     , attoparsec                      >= 0.12       && < 0.14
                     , base16-bytestring               == 0.1.*
                     , basement                         < 0.0.8
                     , bytestring                      == 0.10.*
-                    , Cabal                           >= 1.22       && < 1.25
+                    , Cabal                           >= 2.0        && < 2.1
                     , case-insensitive                == 1.2.*
                     , containers                      == 0.5.*
                     , cryptonite                      == 0.15.*
@@ -32,10 +44,14 @@ library
                     , filelock                        == 0.1.*
                     , filepath                        == 1.4.*
                     , foundation                       < 0.0.21
+                    , ghc-prim                        >= 0.4.0      && <= 0.6
+                    , monad-loops                     == 0.4.*
                     , memory                          >= 0.12       && < 0.15
+                    , optparse-applicative            >= 0.14       && < 0.15
                     , parallel                        == 3.2.*
                     , process                         >= 1.4        && < 1.5
                     , retry                           == 0.7.*
+                    , SafeSemaphore                   == 0.10.*
                     , stm                             == 2.4.*
                     , tar                             == 0.4.*
                     , temporary                       == 1.2.*
@@ -43,14 +59,19 @@ library
                     , time                            >= 1.4        && < 1.9
                     , time-locale-compat              == 0.1.*
                     , transformers                    >= 0.4        && < 0.6
+                    , transformers-bifunctors         == 0.1.*
+                    , transformers-either             == 0.0.1
                     , unix                            == 2.7.*
 
+  if impl(ghc < 8.0)
+      build-depends:
+                      semigroups                      >= 0.16.2.2
+
+
+  default-language:
+                    Haskell2010
   ghc-options:
                     -Wall
-
-  if impl(ghc >= 8.0)
-    ghc-options:
-                    -fno-warn-redundant-constraints
 
   hs-source-dirs:
                     src
@@ -67,6 +88,7 @@ library
                     Mafia.Cabal.Types
                     Mafia.Cabal.Version
                     Mafia.Cache
+                    Mafia.Catch
                     Mafia.Error
                     Mafia.Flock
                     Mafia.Ghc
@@ -80,17 +102,27 @@ library
                     Mafia.Install
                     Mafia.Lock
                     Mafia.Makefile
+                    Mafia.Options.Applicative
+                    Mafia.P
                     Mafia.Package
                     Mafia.Path
                     Mafia.Process
                     Mafia.Script
                     Mafia.Submodule
                     Mafia.Tree
-                    Paths_ambiata_mafia
+                    Mafia.Twine
+                    Mafia.Twine.Async
+                    Mafia.Twine.Parallel
+                    Mafia.Twine.Queue
+                    Mafia.Twine.Snooze
+                    Paths_mafia
 
 executable mafia
+  default-language:
+                    Haskell2010
+
   ghc-options:
-                    -Wall -threaded -O2
+                    -Wall
 
   hs-source-dirs:
                     gen
@@ -98,12 +130,17 @@ executable mafia
   main-is:
                     ../main/mafia.hs
 
+  other-modules:
+                    BuildInfo_mafia
+                    DependencyInfo_mafia
+
+  autogen-modules:
+                    BuildInfo_mafia
+                    DependencyInfo_mafia
+
   build-depends:
                       base
-                    , ambiata-mafia
-                    , ambiata-p
-                    , ambiata-x-eithert
-                    , ambiata-x-optparse
+                    , mafia
                     , bytestring                      == 0.10.*
                     , containers                      == 0.5.*
                     , directory                       >= 1.2        && < 1.4
@@ -113,7 +150,8 @@ executable mafia
                     , time                            >= 1.4        && < 1.9
                     , time-locale-compat              == 0.1.*
                     , transformers                    >= 0.4        && < 0.6
-
+                    , transformers-bifunctors         == 0.1.*
+                    , transformers-either             == 0.0.1
 
 test-suite test
   type:
@@ -122,23 +160,36 @@ test-suite test
   main-is:
                     test.hs
 
+  default-language:
+                    Haskell2010
+
   ghc-options:
-                    -Wall -threaded -O2
+                    -Wall
 
   hs-source-dirs:
                     test
 
+  other-modules:
+                    Test.Mafia.Arbitrary
+                    Test.Mafia.Cabal.Constraint
+                    Test.Mafia.Cabal.Dependencies
+                    Test.Mafia.Cabal.Types
+                    Test.Mafia.Hoogle
+                    Test.Mafia.Package
+                    Test.Mafia.Process
+                    Test.Mafia.Main
+                    Test.Mafia.Tripping
+
   build-depends:
                       base                            >= 3          && < 5
-                    , ambiata-disorder-core
-                    , ambiata-disorder-corpus
-                    , ambiata-mafia
-                    , ambiata-p
-                    , ambiata-x-eithert
+                    , mafia
+                    , directory                       >= 1.2        && < 1.4
+                    , process                         >= 1.2        && < 1.5
                     , QuickCheck                      == 2.8.*
                     , quickcheck-instances            == 0.3.*
                     , text
                     , transformers                    >= 0.4        && < 0.6
+                    , hedgehog-corpus                 >= 0.1        && < 0.2
 
 test-suite test-io
   type:
@@ -147,31 +198,37 @@ test-suite test-io
   main-is:
                     test-io.hs
 
-  ghc-options:
-                    -Wall -threaded -O2
+  default-language:
+                    Haskell2010
 
-  if impl(ghc >= 8.0)
-    ghc-options:
-                    -fno-warn-redundant-constraints
+  ghc-options:
+                    -Wall
 
   hs-source-dirs:
                     test
 
+  other-modules:
+                    Test.IO.Mafia.Chaos
+                    Test.IO.Mafia.Flock
+                    Test.Mafia.IO
+                    Test.Mafia.Main
+
   build-depends:
                       base                            >= 3          && < 5
-                    , ambiata-disorder-core
-                    , ambiata-disorder-corpus
-                    , ambiata-mafia
-                    , ambiata-p
-                    , ambiata-x-eithert
+                    , mafia
                     , async                           >= 2.0        && < 2.2
                     , containers                      == 0.5.*
+                    , directory                       >= 1.2        && < 1.4
                     , exceptions                      == 0.8.*
+                    , process                         >= 1.2        && < 1.5
                     , QuickCheck                      == 2.8.*
                     , quickcheck-instances            == 0.3.*
                     , temporary                       == 1.2.*
                     , text                            == 1.2.*
                     , transformers                    >= 0.4        && < 0.6
+                    , transformers-bifunctors
+                    , transformers-either
+                    , hedgehog-corpus                 >= 0.1        && < 0.2
 
 test-suite test-cli
   type:
@@ -180,13 +237,23 @@ test-suite test-cli
   main-is:
                     test-cli.hs
 
+  other-modules:
+                    Test.Mafia.IO
+                    Test.Mafia.Main
+
+  default-language:
+                    Haskell2010
+
   ghc-options:
-                    -Wall -threaded -O2
+                    -Wall
 
   hs-source-dirs:
                     test
 
   build-depends:
                       base                            >= 3          && < 5
-                    , ambiata-disorder-core
-                    , ambiata-mafia
+                    , mafia
+                    , directory                       >= 1.2        && < 1.4
+                    , process                         >= 1.2        && < 1.5
+                    , QuickCheck                      == 2.8.*
+                    , transformers

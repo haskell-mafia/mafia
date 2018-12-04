@@ -9,6 +9,7 @@ module Mafia.Hash
 
   , Hash(..)
   , renderHash
+  , renderShortHash
   , parseHash
 
   , hashHashes
@@ -17,6 +18,8 @@ module Mafia.Hash
   , hashFile
   , tryHashFile
   ) where
+
+import           Control.Monad.Trans.Either (EitherT, left)
 
 import           Crypto.Hash (Digest, SHA1)
 import qualified Crypto.Hash as Hash
@@ -31,13 +34,10 @@ import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 
 import           Mafia.IO
+import           Mafia.P
 import           Mafia.Path
 
-import           P
-
 import           System.IO (IO)
-
-import           X.Control.Monad.Trans.Either (EitherT, left)
 
 ------------------------------------------------------------------------
 
@@ -60,6 +60,10 @@ newtype Hash =
 renderHash :: Hash -> Text
 renderHash =
   T.decodeUtf8 . takeBase16 . unHash
+
+renderShortHash :: Hash -> Text
+renderShortHash =
+  T.take 6 . renderHash
 
 parseHash :: Text -> Maybe Hash
 parseHash hex =

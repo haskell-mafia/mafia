@@ -5,15 +5,16 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 module Test.Mafia.Arbitrary where
 
+import qualified Data.List as DL
 import qualified Data.Text as T
 
-import           Disorder.Corpus (muppets, cooking)
+import           Hedgehog.Corpus (muppets, cooking)
 
 import           Mafia.Cabal.Constraint
 import           Mafia.Cabal.Types
 import           Mafia.Package
 
-import           P
+import           Mafia.P
 
 import           Test.QuickCheck
 import           Test.QuickCheck.Instances ()
@@ -34,10 +35,17 @@ instance Arbitrary PackageName where
     pure (mkPackageName name)
 
 instance Arbitrary Version where
-  arbitrary =
-    Version <$>
-      listOf1 (choose (0, 100)) <*>
-      pure []
+  arbitrary = do
+    len <- choose (1, 4)
+    makeVersion <$> vectorOf len (choose (0, 100))
+  shrink ver =
+     let
+       xs = versionNumbers ver
+       len = DL.length xs
+     in
+      if len > 1
+        then [makeVersion $ DL.take (len - 1) xs]
+         else []
 
 instance Arbitrary PackageId where
   arbitrary =

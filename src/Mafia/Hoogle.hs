@@ -8,7 +8,8 @@ module Mafia.Hoogle
   , joinHooglePackages
   ) where
 
-import           Control.Monad.IO.Class (MonadIO(..))
+import           Control.Monad.Trans.Bifunctor (firstT)
+import           Control.Monad.Trans.Either (EitherT, hoistEither, runEitherT, left)
 
 import qualified Data.List as L
 import           Data.Map (Map)
@@ -16,7 +17,6 @@ import qualified Data.Map as M
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
 
-import           Mafia.Bin
 import           Mafia.Cabal
 import           Mafia.Error
 import           Mafia.Hash
@@ -26,17 +26,22 @@ import           Mafia.Init
 import           Mafia.Package
 import           Mafia.Path
 import           Mafia.Process
-
-import           P
+import           Mafia.P
 
 import           System.IO (IO, stderr)
-
-import           X.Control.Monad.Trans.Either (EitherT, hoistEither, runEitherT)
-
 
 newtype HooglePackagesSandbox = HooglePackagesSandbox [PackageId]
 newtype HooglePackagesCached = HooglePackagesCached [PackageId]
 
+data Hoogle =
+  Hoogle {
+      hooglePath :: File
+    , _hoogleVersion :: HoogleVersion
+    }
+
+data HoogleVersion =
+    Hoogle4x
+  | Hoogle5x
 
 hoogle :: Text -> [Argument] -> EitherT MafiaError IO ()
 hoogle hackageRoot args = do
@@ -44,18 +49,19 @@ hoogle hackageRoot args = do
   hpc <- hooglePackagesCached
   hoogleIndex args $ joinHooglePackages hpc hp
 
+-- | Download all packages installed in the local sandbox into a global location
 hooglePackages :: Text -> EitherT MafiaError IO HooglePackagesSandbox
 hooglePackages hackageRoot = do
   firstT MafiaInitError $ initialize LatestSources Nothing Nothing
   db <- hoogleCacheDir
-  hoogleExe <- findHoogleExe
+  hoogleExe <- findHoogle
   Out pkgStr <- liftCabal $ cabal "exec" ["--", "ghc-pkg", "list", "--simple-output"]
   let pkgs = T.splitOn " " . T.strip $ pkgStr
   fmap (HooglePackagesSandbox . catMaybes) . for pkgs $ \pkg -> do
     pkgId <- hoistEither . maybeToRight (MafiaParseError $ mconcat ["Invalid package: ", pkg]) . parsePackageId $ pkg
     let name = unPackageName . pkgName $ pkgId
     let txt = db </> pkg <> ".txt"
-    let hoo = hoogleDbFile db pkgId
+    let hoo = hoogleDbFile' hoogleExe db pkgId
     let skip = db </> pkg <> ".skip"
     ifM (doesFileExist skip) (pure Nothing) $
       ifM (doesFileExist hoo) (pure $ Just pkgId) $ do
@@ -68,7 +74,12 @@ hooglePackages hackageRoot = do
             liftIO $ T.writeFile (T.unpack skip) ""
             pure Nothing
           Right Hush -> do
-            call_ MafiaProcessError hoogleExe ["convert", txt]
+            case hoogleExe of
+              Hoogle hoogleExe' Hoogle4x ->
+                call_ MafiaProcessError hoogleExe' ["convert", txt]
+              Hoogle _ Hoogle5x ->
+                -- There isn't an associated hoogle 5.x command for this
+                pure ()
             pure $ Just pkgId
 
 hoogleIndex :: [Argument] -> [PackageId] -> EitherT MafiaError IO ()
@@ -80,13 +91,33 @@ hoogleIndex args pkgs = do
   --    Unfortunately hoogle doesn't like the "-$version" part :(
   let hash = renderHash .  hashText .  mconcat .  fmap renderPackageId $ pkgs
   db <- hoogleCacheDir
-  hoogleExe <- findHoogleExe
+  hoogleExe <- findHoogle
   db' <- (\d -> d </> "hoogle" </> hash) <$> liftCabal initSandbox
-  unlessM (doesFileExist $ db' </> "default.hoo") $ do
-    createDirectoryIfMissing True db'
-    -- We may also want to copy/symlink all the hoo files here to allow for partial module searching
-    call_ MafiaProcessError hoogleExe $ ["combine", "--outfile", db' </> "default.hoo"] <> fmap (hoogleDbFile db) pkgs
-  call_ MafiaProcessError hoogleExe $ ["-d", db'] <> args
+  case hoogleExe of
+    Hoogle hoogleExe' Hoogle4x -> do
+      unlessM (doesFileExist $ db' </> "default.hoo") $ do
+        createDirectoryIfMissing True db'
+        -- We may also want to copy/symlink all the hoo files here to allow for partial module searching
+        call_ MafiaProcessError hoogleExe' $
+          ["combine", "--outfile", db' </> "default.hoo"] <> fmap (hoogleDbFile db) pkgs
+      call_ MafiaProcessError (hooglePath hoogleExe) $ ["-d", db'] <> args
+
+    Hoogle hoogleExe' Hoogle5x -> do
+      unlessM (doesFileExist $ db' </> "default.hoo") $ do
+        createDirectoryIfMissing True db'
+
+        -- Link each hoogle file into `db'` directory
+        forM_ pkgs $ \pkg -> do
+          let src = db </> renderPackageId pkg <> ".txt"
+          let dst = db' </> takeFileName src
+          createSymbolicLink src dst
+
+        let a = mconcat $ [
+              ["generate", "--database", db' </> "default.hoo"
+              , "--local=" <> db']
+              ]
+        call_ MafiaProcessError hoogleExe' a
+      call_ MafiaProcessError (hooglePath hoogleExe) $ ["-d", db' </> "default.hoo"] <> args
 
 hooglePackagesCached :: (Functor m, MonadIO m) => m HooglePackagesCached
 hooglePackagesCached = do
@@ -106,24 +137,41 @@ hoogleCacheDir =
   ensureMafiaDir "hoogle"
 
 -- | Find the 'hoogle' executable on $PATH and it if isn't there, install it.
+findHoogle :: EitherT MafiaError IO Hoogle
+findHoogle = do
+  h <- findHoogleExe
+  v <- detectHoogleVersion h
+  pure $ Hoogle h v
+
 findHoogleExe :: EitherT MafiaError IO File
 findHoogleExe = do
   res <- runEitherT $ T.init . unOut <$> call MafiaProcessError "which" ["hoogle"]
   case res of
     Right path -> pure path
-    Left _ -> installHoogle
+    Left x ->
+      -- TODO More friendly error messages about expecting to find `hoogle` on $PATH
+      left . MafiaParseError $ ("Invalid hoogle version: " <> renderMafiaError x)
 
-installHoogle :: EitherT MafiaError IO File
-installHoogle =
-  bimapT MafiaBinError (</> "hoogle") $ do
-    installBinary (ipackageId "hoogle" [4, 2, 43]) [
-        -- Hoogle can't build with the shake >= 0.16
-        ConstraintBounded (mkPackageName "shake") (Exclusive (makeVersion [0])) (Just (Exclusive (makeVersion [0, 16])))
-      ]
+detectHoogleVersion :: File -> EitherT MafiaError IO HoogleVersion
+detectHoogleVersion hf = do
+  res <- T.init . unOut <$> call MafiaProcessError hf ["--version"]
+  if T.isPrefixOf "Hoogle v4." res then
+    pure Hoogle4x
+  else if T.isPrefixOf "Hoogle 5." res then
+    pure Hoogle5x
+  else
+    left . MafiaParseError $ "Invalid hoogle version: " <> res
 
 hoogleDbFile :: Directory -> PackageId -> File
 hoogleDbFile db pkg =
   db </> renderPackageId pkg <> ".hoo"
+
+hoogleDbFile' :: Hoogle -> Directory -> PackageId -> File
+hoogleDbFile' v db pkg = case v of
+  Hoogle _ Hoogle4x ->
+    db </> renderPackageId pkg <> ".hoo"
+  Hoogle _ Hoogle5x ->
+    db </> renderPackageId pkg <> ".txt"
 
 mapFromListGrouped :: Ord a => [(a, b)] -> Map a [b]
 mapFromListGrouped =

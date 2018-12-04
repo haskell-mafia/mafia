@@ -42,10 +42,12 @@ module Mafia.Cache (
   , listPackages
   ) where
 
-import           Control.Monad.IO.Class (MonadIO(..))
+import           Control.Monad.Trans.Bifunctor (firstT)
+import           Control.Monad.Trans.Either (EitherT, left, hoistEither)
 
 import qualified Data.Text as Text
 import qualified Data.Text.IO as Text
+import           Distribution.System (OS(OSX), buildOS)
 
 import           Mafia.Cabal.Types
 import           Mafia.Flock
@@ -53,16 +55,12 @@ import           Mafia.Ghc
 import           Mafia.Hash
 import           Mafia.Home
 import           Mafia.IO
+import           Mafia.P
 import           Mafia.Package
 import           Mafia.Path
 import           Mafia.Process
 
-import           P
-
 import           System.IO (IO, stderr)
-
-import           X.Control.Monad.Trans.Either (EitherT, left, hoistEither)
-
 
 data CacheEnv =
   CacheEnv {
@@ -117,8 +115,9 @@ renderCacheError = \case
     "Cannot import package, the tarball does not exist: " <> input
 
 renderPackageKey :: PackageKey -> Text
-renderPackageKey (PackageKey pid hash) =
-  renderPackageId pid <> "-" <> renderHash hash
+renderPackageKey (PackageKey pid hash)
+  | buildOS == OSX = renderShortPackageId pid <> "-" <> renderShortHash hash
+  | otherwise =renderPackageId pid <> "-" <> renderHash hash
 
 parsePackageKey :: Text -> Either CacheError PackageKey
 parsePackageKey txt = do
@@ -174,7 +173,7 @@ pkgKey p =
 -- layout of the cache changes in subsequent mafia versions.
 cacheVersion :: Int
 cacheVersion =
-  2
+  3
 
 userCacheDirectory :: CacheEnv -> Directory
 userCacheDirectory env =

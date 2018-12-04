@@ -3,11 +3,11 @@
 {-# LANGUAGE TemplateHaskell #-}
 module Test.Mafia.Cabal.Types where
 
-import           Disorder.Core.Tripping (tripping)
+import           Test.Mafia.Tripping (tripping)
 
 import           Mafia.Cabal.Types
 
-import           P
+import           Mafia.P
 
 import           System.IO (IO)
 

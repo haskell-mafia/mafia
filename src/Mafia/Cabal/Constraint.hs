@@ -15,11 +15,9 @@ module Mafia.Cabal.Constraint (
 import qualified Data.Text as T
 
 import           Mafia.Cabal.Types
+import           Mafia.P
 import           Mafia.Package
 import           Mafia.Process
-
-import           P
-
 
 data Constraint =
     ConstraintPackage !PackageName !Version

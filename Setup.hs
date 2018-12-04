@@ -1,20 +1,38 @@
-#!/usr/bin/env runhaskell
+{-# LANGUAGE CPP #-}
 
-import           Data.Char (isDigit, toLower)
-import           Data.Function (on)
-import           Data.List (intercalate, sortBy)
+import           Data.Char (isDigit)
+import           Data.List (intercalate)
 import           Data.Monoid ((<>))
-import           Data.Version (showVersion)
 
 import           Distribution.InstalledPackageInfo
 import           Distribution.PackageDescription
-import           Distribution.Simple
+import           Distribution.Simple (buildHook, defaultMainWithHooks, pkgName, pkgVersion, preConf, replHook, sDistHook, simpleUserHooks, testHook)
 import           Distribution.Simple.Setup (BuildFlags(..), ReplFlags(..), TestFlags(..), fromFlag)
 import           Distribution.Simple.LocalBuildInfo
 import           Distribution.Simple.PackageIndex
-import           Distribution.Simple.BuildPaths (autogenModulesDir)
 import           Distribution.Simple.Utils (createDirectoryIfMissingVerbose, rewriteFile, rawSystemStdout)
 import           Distribution.Verbosity
+
+#if MIN_VERSION_Cabal(2,0,0)
+import           Distribution.Types.PackageName (PackageName, unPackageName)
+import           Distribution.Simple.BuildPaths (autogenPackageModulesDir)
+import           Distribution.Version (Version, versionNumbers)
+
+showVersion :: Version -> String
+showVersion = intercalate "." . fmap show . versionNumbers
+
+autogenModulesDirCompat :: LocalBuildInfo -> String
+autogenModulesDirCompat = autogenPackageModulesDir
+
+#else
+import           Distribution.Simple (PackageName, unPackageName)
+import           Distribution.Simple.BuildPaths (autogenModulesDir)
+import           Data.Version (showVersion)
+
+autogenModulesDirCompat :: LocalBuildInfo -> String
+autogenModulesDirCompat = autogenModulesDir
+#endif
+
 
 main :: IO ()
 main =
@@ -43,7 +61,7 @@ main =
 genBuildInfo :: Verbosity -> PackageDescription -> IO ()
 genBuildInfo verbosity pkg = do
   createDirectoryIfMissingVerbose verbosity True "gen"
-  let (PackageName pname) = pkgName . package $ pkg
+  let pname = unPackageName . pkgName . package $ pkg
       version = pkgVersion . package $ pkg
       name = "BuildInfo_" ++ (map (\c -> if c == '-' then '_' else c) pname)
       targetHs = "gen/" ++ name ++ ".hs"
@@ -60,26 +78,27 @@ genBuildInfo verbosity pkg = do
     , "buildInfo = RuntimeBuildInfo \"" ++ v ++ "\" \"" ++ t ++ "\" \"" ++ gv ++ "\""
     , "buildInfoVersion :: String"
     , "buildInfoVersion = \"" ++ buildVersion ++ "\""
+    , "cabalVersion :: String"
+    , "cabalVersion = \"" ++ VERSION_Cabal ++ "\""
     ]
   rewriteFile targetText buildVersion
 
 genDependencyInfo :: Verbosity -> PackageDescription -> LocalBuildInfo -> IO ()
 genDependencyInfo verbosity pkg info = do
   let
-    (PackageName pname) = pkgName . package $ pkg
+    pname = unPackageName . pkgName . package $ pkg
     name = "DependencyInfo_" ++ (map (\c -> if c == '-' then '_' else c) pname)
-    targetHs = autogenModulesDir info ++ "/" ++ name ++ ".hs"
+    targetHs = autogenModulesDirCompat info ++ "/" ++ name ++ ".hs"
     render p =
       let
         n = unPackageName $ pkgName p
-        v = intercalate "." . fmap show . versionBranch $ pkgVersion p
+        v = showVersion $ pkgVersion p
       in
        n ++ "-" ++ v
     deps = fmap (render . sourcePackageId) . allPackages $ installedPkgs info
-    sdeps = sortBy (compare `on` fmap toLower) deps
-    strs = flip fmap sdeps $ \d -> "\"" ++ d ++ "\""
+    strs = flip fmap deps $ \d -> "\"" ++ d ++ "\""
 
-  createDirectoryIfMissingVerbose verbosity True (autogenModulesDir info)
+  createDirectoryIfMissingVerbose verbosity True (autogenModulesDirCompat info)
 
   rewriteFile targetHs $ unlines [
       "module " ++ name ++ " where"

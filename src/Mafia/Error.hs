@@ -7,6 +7,9 @@ module Mafia.Error
   , liftCabal
   ) where
 
+import           Control.Monad.Trans.Either (EitherT)
+import           Control.Monad.Trans.Bifunctor (firstT)
+
 import           Mafia.Bin
 import           Mafia.Cabal.Types
 import           Mafia.Cache
@@ -16,14 +19,10 @@ import           Mafia.Hash
 import           Mafia.Init
 import           Mafia.Install
 import           Mafia.Lock
+import           Mafia.P
 import           Mafia.Process
 import           Mafia.Script
 import           Mafia.Submodule
-
-import           P
-
-import           X.Control.Monad.Trans.Either (EitherT)
-
 
 -- FIX Leaving this to make code cleanup easier, but ideally is a union of
 -- sub-exceptions rather than this module being the root of most dependencies
@@ -45,7 +44,6 @@ data MafiaError =
   | MafiaParseError Text
   | MafiaEntryPointNotFound File
   deriving (Show)
-
 
 renderMafiaError :: MafiaError -> Text
 renderMafiaError = \case

@@ -12,7 +12,8 @@ module Mafia.Cabal.Sandbox
   , readPackageDB
   ) where
 
-import           Control.Monad.IO.Class (MonadIO(..))
+import           Control.Monad.Trans.Bifunctor (firstT)
+import           Control.Monad.Trans.Either (EitherT, runEitherT, left)
 
 import qualified Data.List as List
 import qualified Data.Text as T
@@ -23,13 +24,9 @@ import           Mafia.Ghc
 import           Mafia.IO
 import           Mafia.Path
 import           Mafia.Process
-
-import           P
+import           Mafia.P
 
 import           System.IO (IO)
-
-import           X.Control.Monad.Trans.Either (EitherT, runEitherT, left)
-
 
 sandbox :: ProcessResult a => Argument -> [Argument] -> EitherT CabalError IO a
 sandbox cmd args = do
