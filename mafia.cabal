@@ -122,7 +122,8 @@ executable mafia
                     Haskell2010
 
   ghc-options:
-                    -Wall
+                    -Wall -threaded
+                    -rtsopts
 
   hs-source-dirs:
                     gen
