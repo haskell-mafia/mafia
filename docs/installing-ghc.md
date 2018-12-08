@@ -4,7 +4,7 @@ Installing GHC
 These instructions are for OS/X, but should work equally well on Linux
 if you replace `apple-darwin` with the relevant target platform for your
 operating system. Use the GHC
-[download](https://www.haskell.org/ghc/download) page to locate the
+[download](https://www.haskell.org/ghc/download.html) page to locate the
 relevant tarball for your system.
 
 In the examples below, we use `$HOME/haskell/ghc-<version>` as the
@@ -49,24 +49,41 @@ $ cd ghc-7.10.2
 $ ./configure --prefix=$HOME/haskell/ghc-7.10.2
 $ make install
 ```
+_Note: 7.10.3 is currently the latest for 7.10.*_
+
 
 #### Install GHC 8.0.2
 
 ```sh
-$ wget https://downloads.haskell.org/~ghc/8.0.2/ghc-8.0.2-x86_64-apple-darwin.tar.xz
-$ tar xf ghc-8.0.2-x86_64-apple-darwin.tar.xz
-$ cd ghc-8.0.2
-$ ./configure --prefix=$HOME/haskell/ghc-8.0.2
+$ GHC_VER=8.0.2
+$ wget https://downloads.haskell.org/~ghc/${GHC_VER}/ghc-${GHC_VER}-x86_64-apple-darwin.tar.xz
+$ tar xf ghc-${GHC_VER}-x86_64-apple-darwin.tar.xz
+$ cd ghc-${GHC_VER}
+$ ./configure --prefix=$HOME/haskell/ghc-${GHC_VER}
 $ make install
 ```
+
 
 #### Install GHC 8.2.2
 
 ```sh
-$ wget https://downloads.haskell.org/~ghc/8.2.2/ghc-8.2.2-x86_64-apple-darwin.tar.xz
-$ tar xf ghc-8.2.2-x86_64-apple-darwin.tar.xz
-$ cd ghc-8.2.2
-$ ./configure --prefix=$HOME/haskell/ghc-8.2.2
+$ GHC_VER=8.2.2
+$ wget https://downloads.haskell.org/~ghc/${GHC_VER}/ghc-${GHC_VER}-x86_64-apple-darwin.tar.xz
+$ tar xf ghc-${GHC_VER}-x86_64-apple-darwin.tar.xz
+$ cd ghc-${GHC_VER}
+$ ./configure --prefix=$HOME/haskell/ghc-${GHC_VER}
+$ make install
+```
+
+
+#### Install GHC 8.4.4
+
+```sh
+$ GHC_VER=8.4.4
+$ wget https://downloads.haskell.org/~ghc/${GHC_VER}/ghc-${GHC_VER}-x86_64-apple-darwin.tar.xz
+$ tar xf ghc-${GHC_VER}-x86_64-apple-darwin.tar.xz
+$ cd ghc-${GHC_VER}
+$ ./configure --prefix=$HOME/haskell/ghc-${GHC_VER}
 $ make install
 ```
 
@@ -106,15 +123,19 @@ ghc-switch() {
 # Cycle GHC versions
 g() {
   case $GHC_VERSION in
-    7.8.4)
-      ghc-switch 7.10.2
-      ;;
-    7.10.2)
-      ghc-switch 8.0.1
-      ;;
+    8.4.4)
+        ghc-switch 7.10.2
+        ;;
+    8.2.2)
+        ghc-switch 8.4.4
+        ;;
+    8.0.2)
+        ghc-switch 8.2.2
+        ;;
     *)
-      ghc-switch 7.8.4
-      ;;
+        # the default version
+        ghc-switch 8.0.2
+        ;;
   esac
 }
 ```
@@ -162,16 +183,20 @@ function ghc-switch() {
 
 # Cycle GHC versions
 function g() {
-    case $GHC_VERSION in
-        7.8.4)
-            ghc-switch 7.10.2
-            ;;
-        7.10.2)
-            ghc-switch 8.0.1
-            ;;
-        *)
-            ghc-switch 7.8.4
-            ;;
-    esac
+  case $GHC_VERSION in
+    8.4.4)
+        ghc-switch 7.10.2
+        ;;
+    8.2.2)
+        ghc-switch 8.4.4
+        ;;
+    8.0.2)
+        ghc-switch 8.2.2
+        ;;
+    *)
+        # the default version
+        ghc-switch 8.0.2
+        ;;
+  esac
 }
 ```
