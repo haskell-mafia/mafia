@@ -12,4 +12,3 @@
 [build.branches-8-2]
 
 [build.all-rebased]
-  command = [["rebased"]]

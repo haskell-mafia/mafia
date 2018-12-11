@@ -44,3 +44,8 @@
   CABAL_VERSION="2.0.0.1"
   MAFIA_VERSION = "39ec1dff2fbc9a0dad49e26f203f696d929ad316"
 #  CACHE = "true"
+
+[build.all-rebased]
+  [build.all-rebased.master]
+    runner = "/usr/local/bin/rebased"
+  BASE_BRANCH = "ambiata"
