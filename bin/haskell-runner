@@ -6,7 +6,8 @@
 
 if [ ! $(which rpm) ]; then
   # assume osx
-  X=${PUBLISH_ARCH:=osx/x86_64}
+  X=${LINUX_DISTRO:=osx}
+  X=${PUBLISH_ARCH:="${LINUX_DISTRO}/x86_64"}
 else
   CENTOS_VER=$(rpm -q --queryformat '%{VERSION}' centos-release)
   if [ $CENTOS_VER == '6' ]; then
