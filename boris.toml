@@ -12,3 +12,4 @@
 [build.branches-8-2]
 
 [build.all-rebased]
+  command = [["env", "BASE_BRANCH=ambiata", "rebased"]]
