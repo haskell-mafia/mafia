@@ -5,7 +5,6 @@
 [global]
   CACHE = "false"
   INSTALL_HOOGLE = "true"
-  MAFIA_VERSION = "39ec1dff2fbc9a0dad49e26f203f696d929ad316"
 
 [build.dist-7-10]
   GHC_VERSION="7.10.2"
@@ -14,17 +13,15 @@
 [build.dist-8-0]
   GHC_VERSION="8.0.2"
   CABAL_VERSION="1.24.0.2"
+
+[build.dist-8-2]
+  GHC_VERSION="8.2.2"
+  CABAL_VERSION="2.0.0.1"
   HADDOCK = "true"
   HADDOCK_S3 = "$AMBIATA_HADDOCK_MASTER"
   PUBLISH = "true"
   PUBLISH_S3 = "$AMBIATA_ARTEFACTS_MASTER"
   PUBLISH_EXECUTABLES = "mafia"
-
-[build.dist-8-2]
-  GHC_VERSION="8.2.2"
-  CABAL_VERSION="2.0.0.1"
-  MAFIA_VERSION = "39ec1dff2fbc9a0dad49e26f203f696d929ad316"
-#  CACHE = "true"
 
 [build.branches-7-10]
   GHC_VERSION = "7.10.2"
@@ -33,14 +30,12 @@
 [build.branches-8-0]
   GHC_VERSION="8.0.2"
   CABAL_VERSION="1.24.0.2"
+
+[build.branches-8-2]
+  GHC_VERSION="8.2.2"
+  CABAL_VERSION="2.0.0.1"
   HADDOCK = "true"
   HADDOCK_S3 = "$AMBIATA_HADDOCK_BRANCHES"
   PUBLISH = "true"
   PUBLISH_S3 = "$AMBIATA_ARTEFACTS_BRANCHES"
   PUBLISH_EXECUTABLES = "mafia"
-
-[build.branches-8-2]
-  GHC_VERSION="8.2.2"
-  CABAL_VERSION="2.0.0.1"
-  MAFIA_VERSION = "39ec1dff2fbc9a0dad49e26f203f696d929ad316"
-#  CACHE = "true"

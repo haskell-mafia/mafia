@@ -71,19 +71,22 @@ function upload_cache() {
   aws s3 sync $MAFIA_TMPDIR_PROJECT $MAFIA_S3_PROJECT --sse
 }
 
-cabal update
-cabal install --dependencies-only --enable-tests
-cabal configure --enable-tests
-cabal build
+. bin/ci-build.sh
 
-if [ "${USE_CACHE:-}" = "true" ]; then
-  upload_cache
+if [ -e gen/version.txt ]; then
+    VERSION="$(cat gen/version.txt)"
+elif [ -e dist/build/autogen/version.txt ]; then
+    VERSION="$(cat dist/build/autogen/version.txt)"
+else
+    COMMISH=$(git log --pretty=format:%h -n 1)
+    TIME=$(date '+%Y%m%d%H%M%S')
+    VERSION=$TIME-$COMMISH
 fi
 
-dist/build/test/test
-dist/build/test-io/test-io
-dist/build/test-cli/test-cli
-cabal haddock
-if [ ${CABAL_VERSION} = "2.0" ]; then
-  cabal sdist;
+if [ "${PUBLISH:-}" = "true" ]; then
+    [ ! -z "${PUBLISH_S3:-}" ] || fail "\$PUBLISH_S3 must be set to upload prefix,"
+    PUBLISH_S3_RESOLVED=$(eval echo "$PUBLISH_S3")
+    for EXECUTABLE in ${PUBLISH_EXECUTABLES:-}; do
+        aws s3 --region=ap-southeast-2 cp "dist/build/$EXECUTABLE/$EXECUTABLE" "$PUBLISH_S3_RESOLVED/$EXECUTABLE/${PUBLISH_ARCH}/${VERSION}/$EXECUTABLE-${VERSION}"
+    done
 fi
