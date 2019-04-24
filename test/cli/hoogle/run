@@ -14,4 +14,4 @@ git clone https://github.com/haskell-mafia/mafia-test-one.git
 cd mafia-test-one
 
 MAFIA_HOME=${MAFIA_TEMP} ${MAFIA} hoogle "fst" | grep -F "Prelude fst :: (a, b) -> a"
-MAFIA_HOME=${MAFIA_TEMP} ${MAFIA} hoogle "(Int -> Int) -> [Int] -> [Int]" | grep -F "Prelude fmap :: Functor f => (a -> b) -> f a -> f b"
+MAFIA_HOME=${MAFIA_TEMP} ${MAFIA} hoogle "(Int -> Int) -> [Int] -> [Int]" | grep -F "Prelude map :: (a -> b) -> [a] -> [b]"

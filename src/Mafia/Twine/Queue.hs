@@ -24,7 +24,7 @@ newtype Queue a =
 
 newQueue :: Int -> IO (Queue a)
 newQueue i =
-  atomically $ Queue <$> newTBQueue i
+  atomically $ Queue <$> newTBQueue (fromIntegral i)
 
 readQueue :: Queue a -> IO a
 readQueue =

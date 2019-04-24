@@ -38,12 +38,14 @@ parseCabalVersion out =
 -- TODO maybe mafia should just install its own cabal?
 checkCabalVersion :: EitherT CabalError IO ()
 checkCabalVersion = do
-  -- We need at least cabal-install-1.22.4 for the "cabal install --dry-run -v2" in
-  -- Mafia.Cabal.Dependencies to get the right output.
   --
-  -- It's this commit that we need:
-  --   https://github.com/haskell/cabal/commit/c0b3c7f1b6ae7bb7663a2c18578ede95d6a40919
-  let vmin = makeVersion [1,22,4]
+  -- We need at least cabal-install-2.4.0.0 for v1- prefixes:
+  --
+  -- 2.4.0.0 Mikhail Glushenkov <mikhail.glushenkov@gmail.com> September 2018
+  --   * Add 'v1-' prefixes for the commands that will be replaced in the
+  --     new-build universe, in preparation for it becoming the default.  (#5358)
+  --
+  let vmin = makeVersion [2, 4]
       vmax = makeVersion [2, 5]
 
   version <- getCabalVersion

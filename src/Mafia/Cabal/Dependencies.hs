@@ -178,14 +178,14 @@ makeInstallPlan mdir sourcePkgs installArgs = do
       dir = fromMaybe tmp mdir
       cabal = cabalFrom dir (tmp </> "sandbox.config") []
 
-    Hush <- cabal "sandbox" ["init", "--sandbox", tmp]
+    Hush <- cabal "v1-sandbox" ["init", "--sandbox", tmp]
 
     -- this is a fast 'cabal sandbox add-source'
     createIndexFile sourcePkgs tmp
 
     let
       installDryRun args =
-        cabal "install" $
+        cabal "v1-install" $
           [ "--reorder-goals"
           , "--max-backjumps=-1"
           , "--avoid-reinstalls"

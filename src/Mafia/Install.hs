@@ -143,7 +143,7 @@ installDependencies flavour flags spkgs constraints = do
   -- package-db, then call recache so that ghc is aware of them.
   env <- firstT InstallCacheError getCacheEnv
   mapM_ (link packageDB env) tdeps
-  Hush <- firstT InstallCabalError $ cabal "sandbox" ["hc-pkg", "recache"]
+  Hush <- firstT InstallCabalError $ cabal "v1-sandbox" ["hc-pkg", "recache"]
 
   return tdeps
 
@@ -277,7 +277,7 @@ install w env flavour p@(Package (PackageRef pid _ _) deps _) = do
                   _ -> [
                     ]
 
-          PassErr <- sbcabal "install" $
+          PassErr <- sbcabal "v1-install" $
             platformargs <>
             [ "--ghc-options=-j" <> T.pack (show w)
             , "--max-backjumps=0"
@@ -289,7 +289,7 @@ install w env flavour p@(Package (PackageRef pid _ _) deps _) = do
             case ptype of
               -- only library packages can be described
               Just Library -> do
-                Out out <- sbcabal "sandbox" ["hc-pkg", "--", "describe", renderPackageId pid]
+                Out out <- sbcabal "v1-sandbox" ["hc-pkg", "--", "describe", renderPackageId pid]
                 writeUtf8 (packageConfig env $ pkgKey p) out
               -- for executable only packages we just leave an empty marker
               Just ExecutablesOnly ->
@@ -331,7 +331,7 @@ createPackageSandbox env p@(Package (PackageRef pid _ msrc) deps _) = do
   ignoreIO (removeDirectoryRecursive sbdir)
   createDirectoryIfMissing True sbdir
 
-  Hush <- sbcabal "sandbox" ["init", "--sandbox", sbdir]
+  Hush <- sbcabal "v1-sandbox" ["init", "--sandbox", sbdir]
 
   srcdir <- case msrc of
     -- hackage package
@@ -349,7 +349,7 @@ createPackageSandbox env p@(Package (PackageRef pid _ msrc) deps _) = do
       retryOnLeft (unpackRetryMessage pid) . capture (InstallUnpackFailed pid sbsrc) $
         sbcabal "unpack" ["--destdir=" <> sbsrc, renderPackageId pid]
 
-      Hush <- sbcabal "sandbox" ["add-source", srcdir]
+      Hush <- sbcabal "v1-sandbox" ["add-source", srcdir]
 
       -- We need to shuffle anything which was unpacked to 'dist' in to
       -- 'dist-sandbox-XXX' in order to be able to install packages like
@@ -373,7 +373,7 @@ createPackageSandbox env p@(Package (PackageRef pid _ msrc) deps _) = do
 
     -- source package
     Just src -> do
-      Hush <- sbcabal "sandbox" ["add-source", spDirectory src]
+      Hush <- sbcabal "v1-sandbox" ["add-source", spDirectory src]
       return (spDirectory src)
 
   ty <- firstT InstallCabalError $ getPackageType srcdir
@@ -382,7 +382,7 @@ createPackageSandbox env p@(Package (PackageRef pid _ msrc) deps _) = do
   -- create symlinks to the relevant package .conf files in the
   -- package-db, then call recache so that ghc is aware of them.
   mapM_ (link db env) (transitiveOfPackages deps)
-  Hush <- sbcabal "sandbox" ["hc-pkg", "recache"]
+  Hush <- sbcabal "v1-sandbox" ["hc-pkg", "recache"]
 
   return ty
 

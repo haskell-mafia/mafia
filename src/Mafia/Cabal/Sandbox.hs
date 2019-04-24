@@ -31,7 +31,7 @@ import           System.IO (IO)
 sandbox :: ProcessResult a => Argument -> [Argument] -> EitherT CabalError IO a
 sandbox cmd args = do
   _ <- initSandbox
-  cabal "sandbox" (cmd:args)
+  cabal "v1-sandbox" (cmd:args)
 
 sandbox_ :: Argument -> [Argument] -> EitherT CabalError IO ()
 sandbox_ cmd args = do
@@ -49,7 +49,7 @@ initSandbox = do
   dirOk <- doesDirectoryExist sandboxDir
 
   unless (cfgOk && dirOk) $ do
-    PassErr <- call CabalProcessError "cabal" ["sandbox", "--sandbox", sandboxDir, "init"]
+    PassErr <- call CabalProcessError "cabal" ["v1-sandbox", "--sandbox", sandboxDir, "init"]
     return ()
 
   return sandboxDir

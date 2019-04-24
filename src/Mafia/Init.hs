@@ -157,7 +157,7 @@ initialize dfilter mprofiling mflags = do
   let needConfigure = needInstall || not hasSetupConfig
 
   when needConfigure $ do
-    firstT InitCabalError . cabal_ "configure" $
+    firstT InitCabalError . cabal_ "v1-configure" $
       profilingArgs (msProfiling current) <>
       fmap flagArg (msFlags current) <>
       [ "--enable-tests"
@@ -206,7 +206,7 @@ data SandboxStatus =
 
 checkSandbox :: IO SandboxStatus
 checkSandbox = do
-  e <- runEitherT $ cabal "sandbox" ["hc-pkg", "list"]
+  e <- runEitherT $ cabal "v1-sandbox" ["hc-pkg", "list"]
   case e of
     Left _ ->
       pure SandboxKO

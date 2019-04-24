@@ -55,7 +55,7 @@ hooglePackages hackageRoot = do
   firstT MafiaInitError $ initialize LatestSources Nothing Nothing
   db <- hoogleCacheDir
   hoogleExe <- findHoogle
-  Out pkgStr <- liftCabal $ cabal "exec" ["--", "ghc-pkg", "list", "--simple-output"]
+  Out pkgStr <- liftCabal $ cabal "v1-exec" ["--", "ghc-pkg", "list", "--simple-output"]
   let pkgs = T.splitOn " " . T.strip $ pkgStr
   fmap (HooglePackagesSandbox . catMaybes) . for pkgs $ \pkg -> do
     pkgId <- hoistEither . maybeToRight (MafiaParseError $ mconcat ["Invalid package: ", pkg]) . parsePackageId $ pkg

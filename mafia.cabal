@@ -24,7 +24,7 @@ source-repository head
 custom-setup
   setup-depends:
                       base  >= 4.5 && < 5
-                    , Cabal >= 1.24 && < 2.5
+                    , Cabal >= 2.4.1 && < 2.5
 
 library
   build-depends:
@@ -39,7 +39,7 @@ library
                     , containers                      == 0.5.*
                     , cryptonite                      == 0.15.*
                     , directory                       >= 1.2        && < 1.4
-                    , exceptions                      == 0.8.*
+                    , exceptions                      >= 0.8        && < 0.11
                     , filelock                        == 0.1.*
                     , filepath                        == 1.4.*
                     , ghc-prim                        >= 0.4.0      && <= 0.6
@@ -50,7 +50,7 @@ library
                     , process                         >= 1.5        && < 1.7
                     , retry                           == 0.7.*
                     , SafeSemaphore                   == 0.10.*
-                    , stm                             == 2.4.*
+                    , stm                             >= 2.4        && < 2.6
                     , tar                             >= 0.4        && < 0.6
                     , temporary                       == 1.2.*
                     , text                            == 1.2.*
@@ -212,7 +212,7 @@ test-suite test-io
                     , async                           >= 2.0        && < 2.3
                     , containers                      == 0.5.*
                     , directory                       >= 1.2        && < 1.4
-                    , exceptions                      == 0.8.*
+                    , exceptions                      >= 0.8        && < 0.11
                     , process                         >= 1.5        && < 1.7
                     , QuickCheck                      == 2.8.*
                     , quickcheck-instances            == 0.3.*

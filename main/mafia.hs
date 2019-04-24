@@ -437,7 +437,7 @@ mafiaUpdate = do
 
   case mindexTime of
     Nothing ->
-      liftCabal $ cabal_ "update" []
+      liftCabal $ cabal_ "v1-update" []
 
     Just indexTime -> do
       currentTime <- liftIO getCurrentTime
@@ -447,7 +447,7 @@ mafiaUpdate = do
         oneDay = 24 * 60 * 60
 
       when (age > oneDay) $
-        liftCabal $ cabal_ "update" []
+        liftCabal $ cabal_ "v1-update" []
 
 mafiaHash :: EitherT MafiaError IO ()
 mafiaHash = do
@@ -472,7 +472,7 @@ mafiaDepends ui mpkg flags = do
 mafiaClean :: EitherT MafiaError IO ()
 mafiaClean = do
   -- "Out _" ignores the spurious "cleaning..." message that cabal emits on success
-  Out (_ :: ByteString) <- liftCabal $ cabal "clean" []
+  Out (_ :: ByteString) <- liftCabal $ cabal "v1-clean" []
   liftCabal removeSandbox
 
 mafiaBuild :: Profiling -> Warnings -> CoreDump -> AsmDump -> [Flag] -> [Argument] -> EitherT MafiaError IO ()
@@ -525,28 +525,28 @@ mafiaBuild p w dumpc dumpa flags args = do
           ]
 
 
-  liftCabal . cabal_ "build" $ ["-j"] <> wargs <> dumpargs <> platformargs <> args
+  liftCabal . cabal_ "v1-build" $ ["-j"] <> wargs <> dumpargs <> platformargs <> args
 
 mafiaTest :: [Flag] -> [Argument] -> EitherT MafiaError IO ()
 mafiaTest flags args = do
   initMafia LatestSources DisableProfiling flags
-  liftCabal . cabalAnnihilate "test" $ ["-j", "--show-details=streaming"] <> args
+  liftCabal . cabalAnnihilate "v1-test" $ ["-j", "--show-details=streaming"] <> args
 
 mafiaTestCI :: [Flag] -> [Argument] -> EitherT MafiaError IO ()
 mafiaTestCI flags args = do
   initMafia LatestSources DisableProfiling flags
-  Clean <- liftCabal . cabal "test" $ ["-j", "--show-details=streaming"] <> args
+  Clean <- liftCabal . cabal "v1-test" $ ["-j", "--show-details=streaming"] <> args
   return ()
 
 mafiaRepl :: [Flag] -> [Argument] -> EitherT MafiaError IO ()
 mafiaRepl flags args = do
   initMafia LatestSources DisableProfiling flags
-  liftCabal $ cabal_ "repl" args
+  liftCabal $ cabal_ "v1-repl" args
 
 mafiaBench :: [Flag] -> [Argument] -> EitherT MafiaError IO ()
 mafiaBench flags args = do
   initMafia LatestSources DisableProfiling flags
-  liftCabal $ cabalAnnihilate "bench" args
+  liftCabal $ cabalAnnihilate "v1-bench" args
 
 mafiaLock :: [Flag] -> EitherT MafiaError IO ()
 mafiaLock flags = do

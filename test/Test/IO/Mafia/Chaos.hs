@@ -13,6 +13,7 @@ import           Control.Monad.Catch (MonadCatch(..), MonadMask(..), bracket, ha
 import           Control.Monad.Trans.Bifunctor (firstT)
 import           Control.Monad.Trans.Either (EitherT, runEitherT)
 import           Control.Monad.Trans.Either (hoistEither)
+import           Control.Monad.Fail (MonadFail)
 
 import           Hedgehog.Corpus (muppets, viruses)
 import           Test.Mafia.IO (testIO)
@@ -355,12 +356,12 @@ cabalText name deps = T.unlines [
 
 ------------------------------------------------------------------------
 
-git :: (MonadCatch m, MonadIO m, Functor m, ProcessResult a)
+git :: (MonadCatch m, MonadIO m, MonadFail m, Functor m, ProcessResult a)
     => Directory -> Argument -> [Argument] -> EitherT ChaosError m a
 git dir cmd args =
   callFrom ProcessError dir "git" ([cmd] <> args)
 
-createGitHub :: (MonadCatch m, MonadIO m, Functor m) => Path -> EitherT ChaosError m ()
+createGitHub :: (MonadCatch m, MonadIO m, MonadFail m, Functor m) => Path -> EitherT ChaosError m ()
 createGitHub dir =
   forM_ submoduleNames $ \name -> do
     let subDir = dir </> name

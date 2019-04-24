@@ -50,6 +50,7 @@ import           Control.Concurrent.Async (Async, async, waitCatch)
 import           Control.Exception (SomeException, IOException, toException)
 import           Control.Monad.Catch (MonadCatch(..), handle, bracket_)
 import           Control.Monad.Trans.Either (EitherT, firstEitherT, left, hoistEither, newEitherT)
+import           Control.Monad.Fail (MonadFail)
 
 import           Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as B
@@ -216,7 +217,7 @@ installInterruptHandler pgid = do
 
 
 class ProcessResult a where
-  callProcess :: (Functor m, MonadIO m, MonadCatch m)
+  callProcess :: (Functor m, MonadIO m, MonadCatch m, MonadFail m)
               => Process -> EitherT ProcessError m a
 
 instance ProcessResult Pass where
@@ -337,7 +338,7 @@ instance ProcessResult (OutErrCode Text) where
 
 -- | Call a command with arguments.
 --
-call :: (ProcessResult a, Functor m, MonadIO m, MonadCatch m)
+call :: (ProcessResult a, Functor m, MonadIO m, MonadCatch m, MonadFail m)
      => (ProcessError -> e)
      -> File
      -> [Argument]
@@ -352,7 +353,7 @@ call up cmd args = firstEitherT up (callProcess process)
 
 -- | Call a command with arguments, passing the output through to stdout/stderr.
 --
-call_ :: (Functor m, MonadIO m, MonadCatch m)
+call_ :: (Functor m, MonadIO m, MonadCatch m, MonadFail m)
       => (ProcessError -> e)
       -> File
       -> [Argument]
@@ -364,7 +365,7 @@ call_ up cmd args = do
 
 -- | Call a command with arguments from inside a working directory.
 --
-callFrom :: (ProcessResult a, Functor m, MonadIO m, MonadCatch m)
+callFrom :: (ProcessResult a, Functor m, MonadIO m, MonadCatch m, MonadFail m)
          => (ProcessError -> e)
          -> Directory
          -> File
@@ -380,7 +381,7 @@ callFrom up dir cmd args = firstEitherT up (callProcess process)
 
 -- | Call a command with arguments from inside a working directory.
 --
-callFrom_ :: (Functor m, MonadIO m, MonadCatch m)
+callFrom_ :: (Functor m, MonadIO m, MonadCatch m, MonadFail m)
           => (ProcessError -> e)
           -> Directory
           -> File
