@@ -52,7 +52,7 @@ library
                     , process                         >= 1.5        && < 1.7
                     , retry                           == 0.7.*
                     , SafeSemaphore                   == 0.10.*
-                    , stm                             == 2.4.*
+                    , stm                             >= 2.4        && < 2.6
                     , tar                             >= 0.4        && < 0.6
                     , temporary                       == 1.2.*
                     , text                            == 1.2.*
