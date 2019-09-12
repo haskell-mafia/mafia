@@ -35,6 +35,7 @@ import           Entwine (writeQueue)
 import           Entwine.Parallel (RunError (..), consume_)
 
 import           GHC.Conc (getNumProcessors)
+import           GHC.Real (toInteger)
 
 import           Mafia.Cabal.Constraint
 import           Mafia.Cabal.Dependencies
@@ -162,7 +163,7 @@ installGlobalPackages flavour deps = do
   mw  <- getMafiaWorkers
   gw  <- getGhcWorkers
   env <- firstT InstallCacheError getCacheEnv
-  firstT (squashRunError deps) $ consume_ producer mw (install gw env flavour)
+  firstT (squashRunError deps) $ consume_ producer (fromInteger . toInteger $ mw) (install gw env flavour)
 
 ------------------------------------------------------------------------
 
