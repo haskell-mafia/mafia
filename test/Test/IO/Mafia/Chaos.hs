@@ -403,7 +403,7 @@ gitRemoveSubmodule repoDir dep = do
 
 ------------------------------------------------------------------------
 
-prop_chaos (Actions actions) =
+disable_prop_chaos (Actions actions) =
   withTempDirectory $ \temp -> do
     liftIO (print actions)
 
