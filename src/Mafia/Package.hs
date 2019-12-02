@@ -1,6 +1,7 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE CPP #-}
 {-# OPTIONS_GHC -funbox-strict-fields #-}
 module Mafia.Package
   ( PackageName
@@ -28,6 +29,10 @@ import qualified Data.Text as T
 
 import           Distribution.Version (Version, versionNumbers)
 import qualified Distribution.Version as DistVersion
+
+#if MIN_VERSION_Cabal(2,2,0)
+import qualified Distribution.Pretty
+#endif
 
 import           Mafia.P
 
@@ -76,7 +81,11 @@ renderShortPackageId (PackageId name version) =
 
 renderVersion :: Version -> Text
 renderVersion =
+#if MIN_VERSION_Cabal(2,2,0)
+  T.pack . Distribution.Pretty.prettyShow
+#else
   T.pack . DistVersion.showVersion
+#endif
 
 packageIdTuple :: PackageId -> (PackageName, Version)
 packageIdTuple (PackageId n v) =
